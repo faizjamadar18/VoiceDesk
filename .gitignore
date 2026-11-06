@@ -1,0 +1,25 @@
+node_modules/
+out/
+dist/
+logs/
+*.log
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Build caches
+.turbo/
+coverage/
+*.tsbuildinfo

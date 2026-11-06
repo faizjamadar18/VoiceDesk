@@ -1,0 +1,20 @@
+{
+  "name": "kestrel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kestrel — Point. Speak. Done.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @kestrel/desktop",
+    "build": "npm run build --workspace @kestrel/desktop",
+    "start": "npm run start --workspace @kestrel/desktop",
+    "typecheck": "npm run typecheck --workspace @kestrel/desktop",
+    "test": "npm run test --workspace @kestrel/desktop",
+    "smoke:day1": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/day1-smoke.ps1"
+  }
+}
