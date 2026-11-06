@@ -25,7 +25,7 @@ export class HotkeyGesture {
     return this.currentState
   }
 
-  press(): HotkeyGestureEvent[] {
+  pressed(): HotkeyGestureEvent[] {
     if (this.currentState === 'recording') return []
 
     const at = this.now()
@@ -34,7 +34,7 @@ export class HotkeyGesture {
     return [{ type: 'start', at }]
   }
 
-  release(): HotkeyGestureEvent[] {
+  released(): HotkeyGestureEvent[] {
     if (this.currentState !== 'recording' || this.pressedAt === null) return []
 
     const at = this.now()

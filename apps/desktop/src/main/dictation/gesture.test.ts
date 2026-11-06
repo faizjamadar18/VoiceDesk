@@ -6,11 +6,11 @@ describe('HotkeyGesture', () => {
     let now = 0
     const gesture = new HotkeyGesture({ now: () => now })
 
-    expect(gesture.press().map((event) => event.type)).toEqual(['start'])
+    expect(gesture.pressed().map((event) => event.type)).toEqual(['start'])
     expect(gesture.state).toBe('recording')
 
     now = 200
-    expect(gesture.release().map((event) => event.type)).toEqual(['cancel', 'summon'])
+    expect(gesture.released().map((event) => event.type)).toEqual(['cancel', 'summon'])
     expect(gesture.state).toBe('idle')
   })
 
@@ -18,10 +18,10 @@ describe('HotkeyGesture', () => {
     let now = 0
     const gesture = new HotkeyGesture({ now: () => now })
 
-    gesture.press()
+    gesture.pressed()
     now = 250
 
-    expect(gesture.release().map((event) => event.type)).toEqual(['stop'])
+    expect(gesture.released().map((event) => event.type)).toEqual(['stop'])
     expect(gesture.state).toBe('idle')
   })
 
@@ -31,11 +31,11 @@ describe('HotkeyGesture', () => {
 
     expect(gesture.holdElapsed()).toBeNull()
 
-    gesture.press()
+    gesture.pressed()
     now = 1_750
 
     expect(gesture.holdElapsed()).toBe(750)
-    expect(gesture.release()).toEqual([{ type: 'stop', at: 1_750, holdMs: 750 }])
+    expect(gesture.released()).toEqual([{ type: 'stop', at: 1_750, holdMs: 750 }])
     expect(gesture.holdElapsed()).toBeNull()
   })
 
@@ -43,24 +43,24 @@ describe('HotkeyGesture', () => {
     let now = 0
     const gesture = new HotkeyGesture({ now: () => now })
 
-    expect(gesture.press().map((event) => event.type)).toEqual(['start'])
+    expect(gesture.pressed().map((event) => event.type)).toEqual(['start'])
     now = 100
-    expect(gesture.press()).toEqual([])
+    expect(gesture.pressed()).toEqual([])
     now = 500
 
-    expect(gesture.release().map((event) => event.type)).toEqual(['stop'])
+    expect(gesture.released().map((event) => event.type)).toEqual(['stop'])
     expect(gesture.state).toBe('idle')
   })
 
   it('ignores release without a press and repeated releases', () => {
     const gesture = new HotkeyGesture({ now: () => 0 })
 
-    expect(gesture.release()).toEqual([])
+    expect(gesture.released()).toEqual([])
     expect(gesture.state).toBe('idle')
 
-    gesture.press()
-    expect(gesture.release().map((event) => event.type)).toEqual(['cancel', 'summon'])
-    expect(gesture.release()).toEqual([])
+    gesture.pressed()
+    expect(gesture.released().map((event) => event.type)).toEqual(['cancel', 'summon'])
+    expect(gesture.released()).toEqual([])
     expect(gesture.state).toBe('idle')
   })
 })
