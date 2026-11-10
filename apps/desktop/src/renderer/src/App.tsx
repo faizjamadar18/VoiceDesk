@@ -8,6 +8,14 @@ import {
   HistoryPage
 } from './features/history/HistoryPage'
 import type { HistorySession } from './features/history/HistoryPage'
+import { DictationPage } from './features/dictation/DictationPage'
+import { AgentPage } from './features/agent/AgentPage'
+import { AppsPage } from './features/apps/AppsPage'
+import { ProfileDrawer } from './features/profile/ProfileDrawer'
+import { SettingsModal } from './features/profile/SettingsModal'
+import { HelpCenterModal } from './features/profile/HelpCenterModal'
+import { ChevronUpIcon } from './features/profile/icons'
+import type { SettingsTabId } from './features/profile/types'
 import {
   AISparkleIcon,
   AvatarIcon,
@@ -115,6 +123,11 @@ export default function App(): JSX.Element {
     )
   }
 
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTabId>('general')
+  const [isHelpCenterOpen, setIsHelpCenterOpen] = useState(false)
+
   return (
     <div className="dashboard-root">
       <div className="top-drag-strip" aria-hidden="true" />
@@ -179,14 +192,37 @@ export default function App(): JSX.Element {
           </span>
         </button>
 
-        <button type="button" className="sidebar-account">
-          <span className="avatar" aria-hidden="true">
-            <AvatarIcon className="avatar-icon" />
-            <img src={lensOverlay} alt="" className="avatar-lens" />
-          </span>
-          <span className="account-name">Faiz</span>
-          <ChevronDownIcon className="account-chevron" />
-        </button>
+        <div className="sidebar-account-container">
+          <ProfileDrawer
+            isOpen={isProfileMenuOpen}
+            onClose={() => setIsProfileMenuOpen(false)}
+            onOpenSettings={() => {
+              setSettingsDefaultTab('general')
+              setIsSettingsOpen(true)
+            }}
+            onOpenHelpCenter={() => {
+              setIsHelpCenterOpen(true)
+            }}
+            userName="Faiz"
+          />
+          <button
+            type="button"
+            className="sidebar-account"
+            onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+            aria-expanded={isProfileMenuOpen}
+          >
+            <span className="avatar" aria-hidden="true">
+              <AvatarIcon className="avatar-icon" />
+              <img src={lensOverlay} alt="" className="avatar-lens" />
+            </span>
+            <span className="account-name">Faiz</span>
+            {isProfileMenuOpen ? (
+              <ChevronUpIcon className="account-chevron" />
+            ) : (
+              <ChevronDownIcon className="account-chevron" />
+            )}
+          </button>
+        </div>
       </aside>
 
       <main className="dashboard-main">
@@ -290,7 +326,38 @@ export default function App(): JSX.Element {
             />
           </div>
         )}
+
+        {activeTab === 'dictation' && (
+          <div className="dashboard-content">
+            <DictationPage />
+          </div>
+        )}
+
+        {activeTab === 'agent' && (
+          <div className="dashboard-content">
+            <AgentPage />
+          </div>
+        )}
+
+        {activeTab === 'apps' && (
+          <div className="dashboard-content">
+            <AppsPage />
+          </div>
+        )}
       </main>
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        defaultTab={settingsDefaultTab}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Help Center Modal */}
+      <HelpCenterModal
+        isOpen={isHelpCenterOpen}
+        onClose={() => setIsHelpCenterOpen(false)}
+      />
     </div>
   )
 }
