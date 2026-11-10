@@ -52,7 +52,10 @@ export function AgentVoiceSection({
   }, [dropdownOpen])
 
   return (
-    <section className="agent-card" aria-labelledby="agent-voice-heading">
+    <section
+      className={`agent-card agent-voice-card${dropdownOpen ? ' agent-voice-card--open' : ''}`}
+      aria-labelledby="agent-voice-heading"
+    >
       <div className="agent-card-header">
         <div className="agent-section-info">
           <SparklesIcon className="agent-section-icon" />

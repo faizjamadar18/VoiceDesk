@@ -2,6 +2,8 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AboutYouSection } from './AboutYouSection'
+import { ActionsSection } from './ActionsSection'
+import { AgentVoiceSection } from './AgentVoiceSection'
 import {
   AGENT_SPEED_OPTIONS,
   AGENT_VOICE_OPTIONS,
@@ -314,5 +316,50 @@ describe('Memory Drawer & PreferencesFileEditor UI Components', () => {
     expect(html).toContain('Memories')
     expect(html).toContain('agent-memories-badge')
     expect(html).toContain('1')
+  })
+})
+
+describe('Agent Card Stacking Context & Section Classes', () => {
+  it('renders AgentVoiceSection with agent-voice-card class to ensure dropdown floats over subsequent cards', () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentVoiceSection, {
+        selectedVoiceId: DEFAULT_AGENT_SETTINGS.voiceId,
+        selectedSpeed: DEFAULT_AGENT_SETTINGS.voiceSpeed,
+        confirmationEnabled: DEFAULT_AGENT_SETTINGS.voiceConfirmationEnabled,
+        onSelectVoice: () => {},
+        onSelectSpeed: () => {},
+        onToggleConfirmation: () => {}
+      })
+    )
+
+    expect(html).toContain('agent-card')
+    expect(html).toContain('agent-voice-card')
+    expect(html).toContain('agent-voice-dropdown-wrapper')
+  })
+
+  it('renders AboutYouSection with about-you-card class', () => {
+    const html = renderToStaticMarkup(
+      createElement(AboutYouSection, {
+        profile: DEFAULT_AGENT_SETTINGS.userProfile,
+        memories: [],
+        preferencesMd: '',
+        onUpdateProfile: () => {}
+      })
+    )
+
+    expect(html).toContain('agent-card')
+    expect(html).toContain('about-you-card')
+  })
+
+  it('renders ActionsSection with agent-actions-card class', () => {
+    const html = renderToStaticMarkup(
+      createElement(ActionsSection, {
+        actions: INITIAL_ACTIONS,
+        onToggleAction: () => {}
+      })
+    )
+
+    expect(html).toContain('agent-card')
+    expect(html).toContain('agent-actions-card')
   })
 })

@@ -38,7 +38,7 @@ export function ActionsSection({
   onToggleAction
 }: ActionsSectionProps): JSX.Element {
   return (
-    <section className="agent-card" aria-labelledby="actions-heading">
+    <section className="agent-card agent-actions-card" aria-labelledby="actions-heading">
       <div className="agent-card-header">
         <div className="agent-section-info">
           <ZapIcon className="agent-section-icon" />

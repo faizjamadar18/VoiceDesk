@@ -2335,6 +2335,7 @@ kbd {
 }
 
 .agent-card {
+  position: relative;
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -2345,6 +2346,22 @@ kbd {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   margin-bottom: 16px;
+}
+
+.agent-voice-card {
+  z-index: 30;
+}
+
+.agent-voice-card.agent-voice-card--open {
+  z-index: 60;
+}
+
+.about-you-card {
+  z-index: 20;
+}
+
+.agent-actions-card {
+  z-index: 10;
 }
 
 .agent-card-header {
@@ -2486,6 +2503,7 @@ kbd {
 .agent-voice-dropdown-wrapper {
   position: relative;
   margin-top: 16px;
+  z-index: 10;
 }
 
 .agent-voice-selector-btn {

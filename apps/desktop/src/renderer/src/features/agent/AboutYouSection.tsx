@@ -54,7 +54,7 @@ export function AboutYouSection({
   }
 
   return (
-    <section className="agent-card" aria-labelledby="about-you-heading">
+    <section className="agent-card about-you-card" aria-labelledby="about-you-heading">
       <div className="agent-card-header">
         <div className="agent-section-info">
           <UserRoundIcon
