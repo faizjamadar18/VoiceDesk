@@ -5,6 +5,7 @@ import type { AppItem } from './types'
 export interface AppRowProps {
   app: AppItem
   onToggle: (id: string, connected: boolean) => void
+  onSelect?: (app: AppItem) => void
   disabled?: boolean
   showSeparator?: boolean
 }
@@ -12,11 +13,23 @@ export interface AppRowProps {
 export function AppRow({
   app,
   onToggle,
+  onSelect,
   disabled = false,
   showSeparator = true
 }: AppRowProps): JSX.Element {
   return (
-    <div className="app-row-item">
+    <div
+      className="app-row-item cursor-pointer"
+      onClick={() => onSelect?.(app)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect?.(app)
+        }
+      }}
+    >
       <div className="app-row-left">
         <div className="app-icon-squircle" aria-hidden="true">
           <img src={app.iconUrl} alt="" className="app-icon-img" />
@@ -33,16 +46,17 @@ export function AppRow({
         </div>
       </div>
 
-      <AppleSwitch
-        checked={app.connected}
-        disabled={disabled}
-        label={app.name}
-        variant="green"
-        onToggle={() => onToggle(app.id, !app.connected)}
-      />
+      <div onClick={(event) => event.stopPropagation()}>
+        <AppleSwitch
+          checked={app.connected}
+          disabled={disabled}
+          label={app.name}
+          variant="green"
+          onToggle={() => onToggle(app.id, !app.connected)}
+        />
+      </div>
 
       {showSeparator && <span className="app-row-separator" aria-hidden="true" />}
     </div>
   )
 }
-

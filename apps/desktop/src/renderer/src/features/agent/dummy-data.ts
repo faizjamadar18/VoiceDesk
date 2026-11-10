@@ -113,8 +113,13 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   voiceConfirmationEnabled: true,
   userProfile: {
     firstName: 'Faiz',
-    lastName: ''
+    lastName: '',
+    preferencesMd: '',
+    hasPreviousPreferences: false
   },
+  preferencesMd: '',
+  previousPreferencesMd: null,
+  isSavingPreferences: false,
   memories: [],
   actions: INITIAL_ACTIONS
 }

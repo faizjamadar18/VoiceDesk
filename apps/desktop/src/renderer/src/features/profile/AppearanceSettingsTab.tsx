@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { JSX, ReactNode } from 'react'
+import { useSystemTheme } from '../../context/ThemeContext'
 import { Card } from './Card'
 import { SideNotchIcon, TopNotchIcon } from './icons'
 
@@ -221,8 +222,13 @@ function PreviewTile({
   )
 }
 
-export function AppearanceSettingsTab({ isDarkMode = true }: { isDarkMode?: boolean }): JSX.Element {
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('dark')
+export function AppearanceSettingsTab({
+  isDarkMode: propIsDarkMode
+}: {
+  isDarkMode?: boolean
+}): JSX.Element {
+  const { theme, setTheme, isDarkMode: contextIsDarkMode } = useSystemTheme()
+  const isDarkMode = propIsDarkMode ?? contextIsDarkMode
   const [topNotch, setTopNotch] = useState<'liquidGlass' | 'solidBlack'>('liquidGlass')
   const [sideNotch, setSideNotch] = useState<'liquidGlass' | 'solidBlack'>('liquidGlass')
 
@@ -263,7 +269,7 @@ export function AppearanceSettingsTab({ isDarkMode = true }: { isDarkMode?: bool
       <Card isDarkMode={isDarkMode} className="p-5 mt-4">
         <div className="voiceos-setting-row">
           <div className="voiceos-setting-copy flex items-center gap-2">
-            <TopNotchIcon size={20} className="text-gray-300" />
+            <TopNotchIcon size={20} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
             <div>
               <h3 className="voiceos-row-title">Top notch</h3>
               <p className="voiceos-row-desc">Expands from the menu-bar notch.</p>
@@ -298,7 +304,7 @@ export function AppearanceSettingsTab({ isDarkMode = true }: { isDarkMode?: bool
       <Card isDarkMode={isDarkMode} className="p-5 mt-4">
         <div className="voiceos-setting-row">
           <div className="voiceos-setting-copy flex items-center gap-2">
-            <SideNotchIcon size={20} className="text-gray-300" />
+            <SideNotchIcon size={20} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
             <div>
               <h3 className="voiceos-row-title">Side notch</h3>
               <p className="voiceos-row-desc">Docks to the left edge of the screen.</p>

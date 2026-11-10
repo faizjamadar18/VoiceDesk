@@ -20,6 +20,13 @@ export interface AppItem {
   official?: boolean
 }
 
+export interface AppActionItem {
+  id: string
+  name: string
+  description: string
+  asksFirst: boolean
+}
+
 export type AppsTabMode = 'official' | 'custom'
 
 export interface AppsPageProps {

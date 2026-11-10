@@ -1,4 +1,5 @@
 import type { JSX, MouseEvent, ReactNode } from 'react'
+import { useSystemTheme } from '../../context/ThemeContext'
 
 export interface CardProps {
   children: ReactNode
@@ -13,10 +14,13 @@ export function Card({
   children,
   className = '',
   borderRadius = '2xl',
-  isDarkMode = true,
+  isDarkMode: propIsDarkMode,
   onClick,
   style = {}
 }: CardProps): JSX.Element {
+  const { isDarkMode: contextIsDarkMode } = useSystemTheme()
+  const isDarkMode = propIsDarkMode ?? contextIsDarkMode
+
   const borderRadiusStyles: Record<'lg' | 'xl' | '2xl', string> = {
     lg: '12px',
     xl: '16px',
@@ -46,4 +50,3 @@ export function Card({
     </div>
   )
 }
-

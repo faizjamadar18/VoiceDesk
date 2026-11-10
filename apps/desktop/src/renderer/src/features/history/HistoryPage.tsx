@@ -13,6 +13,7 @@ import {
   TrashIcon,
   XIcon
 } from '../../components/dashboard-icons'
+import { useSystemTheme } from '../../context/ThemeContext'
 
 /**
  * Matches the numeric mode values used by the voice-session backend so this
@@ -184,6 +185,7 @@ export function HistoryPage({
   onRetranscribe,
   onReportIssue
 }: HistoryPageProps): JSX.Element {
+  const { isDarkMode } = useSystemTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedApp, setSelectedApp] = useState<string | null>(null)
   const [selectedMode, setSelectedMode] = useState<VoiceOSMode | null>(
@@ -272,17 +274,40 @@ export function HistoryPage({
 
   return (
     <div className="history-page">
-      <h1 className="history-title">History</h1>
+      <h1
+        className="history-title"
+        style={{
+          color: isDarkMode ? 'rgba(255, 255, 255, 0.95)' : '#000',
+          letterSpacing: '-0.02em'
+        }}
+      >
+        History
+      </h1>
 
       <div className="history-toolbar">
         <div className="history-search">
-          <SearchIcon className="history-search-icon" />
+          <SearchIcon
+            className="history-search-icon"
+            style={{
+              color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : '#999'
+            }}
+          />
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search history"
             aria-label="Search history"
+            className={`history-search-input ${
+              isDarkMode
+                ? 'bg-[var(--dark-card-background)] border border-[var(--dark-modal-control-border)] text-gray-100 placeholder-gray-500 focus:border-[var(--dark-modal-control-hover-border)] focus:ring-[var(--dark-modal-divider)]'
+                : 'bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:ring-gray-400/20'
+            }`}
+            style={{
+              boxShadow: isDarkMode
+                ? '0 1px 4px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--dark-surface-highlight)'
+                : 'inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 0 rgba(255, 255, 255, 0.8)'
+            }}
           />
           {searchQuery && (
             <button
@@ -290,6 +315,9 @@ export function HistoryPage({
               className="history-search-clear"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
+              style={{
+                color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : '#999'
+              }}
             >
               <XIcon />
             </button>
@@ -305,6 +333,11 @@ export function HistoryPage({
               )
             }
             aria-label="Filter by app"
+            className={`history-filter-select ${
+              isDarkMode
+                ? 'text-gray-200 border border-white/[0.04] bg-clip-padding bg-gradient-to-b from-white/[0.08] to-white/[0.01] hover:text-white hover:border-white/[0.08]'
+                : 'text-gray-700 border border-black/[0.04] bg-clip-padding bg-gradient-to-b from-white to-black/[0.02] hover:text-gray-900 hover:border-black/[0.08]'
+            }`}
           >
             <option value="all">All Apps</option>
             {appNames.map((appName) => (
@@ -313,7 +346,10 @@ export function HistoryPage({
               </option>
             ))}
           </select>
-          <ChevronsUpDownIcon className="history-filter-chevron" />
+          <ChevronsUpDownIcon
+            className="history-filter-chevron"
+            style={{ color: isDarkMode ? '#e5e7eb' : '#4b5563' }}
+          />
         </div>
 
         <div className="history-filter">
@@ -327,17 +363,30 @@ export function HistoryPage({
               )
             }
             aria-label="Filter by mode"
+            className={`history-filter-select ${
+              isDarkMode
+                ? 'text-gray-200 border border-white/[0.04] bg-clip-padding bg-gradient-to-b from-white/[0.08] to-white/[0.01] hover:text-white hover:border-white/[0.08]'
+                : 'text-gray-700 border border-black/[0.04] bg-clip-padding bg-gradient-to-b from-white to-black/[0.02] hover:text-gray-900 hover:border-black/[0.08]'
+            }`}
           >
             <option value="all">All Modes</option>
             <option value={String(VoiceOSMode.DICTATE)}>Dictate Mode</option>
             <option value={String(VoiceOSMode.AGENT)}>Agent Mode</option>
           </select>
-          <ChevronsUpDownIcon className="history-filter-chevron" />
+          <ChevronsUpDownIcon
+            className="history-filter-chevron"
+            style={{ color: isDarkMode ? '#e5e7eb' : '#4b5563' }}
+          />
         </div>
       </div>
 
       {hasActiveFilter && (
-        <div className="history-status">
+        <div
+          className="history-status"
+          style={{
+            color: isDarkMode ? 'rgba(255, 255, 255, 0.6)' : '#666'
+          }}
+        >
           Showing {filteredSessions.length} of {sessions.length} sessions
           {selectedApp ? ` in ${selectedApp}` : ''}
           {selectedMode !== null
@@ -348,7 +397,12 @@ export function HistoryPage({
       )}
 
       {filteredSessions.length === 0 ? (
-        <div className="history-empty">
+        <div
+          className="history-empty"
+          style={{
+            color: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : '#888'
+          }}
+        >
           {sessions.length === 0
             ? 'No voice sessions yet. Start using VoiceOS to see your history here.'
             : 'No sessions found matching your filters.'}
@@ -362,9 +416,28 @@ export function HistoryPage({
             const isCopied = copiedItems.has(transcriptCopyKey)
 
             return (
-              <article className="history-card" key={session.id}>
+              <article
+                className="history-card"
+                key={session.id}
+                style={{
+                  background: isDarkMode
+                    ? 'var(--dark-dashboard-card-background, #222327)'
+                    : 'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))',
+                  border: isDarkMode
+                    ? '1px solid var(--dark-border-subtle, rgba(223, 226, 232, 0.06))'
+                    : '1px solid #ffffff',
+                  boxShadow: isDarkMode
+                    ? '0 1px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--dark-surface-highlight, rgba(239, 241, 245, 0.02))'
+                    : 'none'
+                }}
+              >
                 <header className="history-card-header">
-                  <div className="history-app">
+                  <div
+                    className="history-app"
+                    style={{
+                      color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#333'
+                    }}
+                  >
                     {appIcon && (
                       <img
                         src={appIcon}
@@ -376,7 +449,17 @@ export function HistoryPage({
                   </div>
 
                   <div className="history-actions">
-                    <span className="history-time">
+                    <span
+                      className="history-time"
+                      style={{
+                        backgroundColor: isDarkMode
+                          ? 'rgba(255, 255, 255, 0.1)'
+                          : 'rgba(0, 0, 0, 0.03)',
+                        color: isDarkMode
+                          ? 'rgba(255, 255, 255, 0.7)'
+                          : '#666'
+                      }}
+                    >
                       {formatRelativeTime(session.created_at)}
                     </span>
 
@@ -388,6 +471,9 @@ export function HistoryPage({
                           onClick={() => onRetranscribe?.(session.id)}
                           title="Re-transcribe"
                           aria-label="Re-transcribe"
+                          style={{
+                            color: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : '#888'
+                          }}
                         >
                           <RefreshIcon />
                         </button>
@@ -399,6 +485,9 @@ export function HistoryPage({
                       onClick={() => onReportIssue?.(session)}
                       title="Report issue"
                       aria-label="Report issue"
+                      style={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : '#888'
+                      }}
                     >
                       <FlagIcon />
                     </button>
@@ -421,6 +510,14 @@ export function HistoryPage({
                           ? 'Click again to confirm delete'
                           : 'Delete'
                       }
+                      style={{
+                        color:
+                          confirmDeleteId === session.id
+                            ? '#ef4444'
+                            : isDarkMode
+                              ? 'rgba(255, 255, 255, 0.5)'
+                              : '#888'
+                      }}
                     >
                       {confirmDeleteId === session.id ? (
                         <CheckIcon />
@@ -431,22 +528,60 @@ export function HistoryPage({
                   </div>
                 </header>
 
-                <h3 className="history-mode">
-                  {getModeIcon(session.mode)}
+                <h3
+                  className="history-mode"
+                  style={{
+                    color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#000'
+                  }}
+                >
+                  <span
+                    style={{
+                      color: isDarkMode ? '#D1D5DB' : '#9ca3af',
+                      display: 'inline-flex'
+                    }}
+                  >
+                    {getModeIcon(session.mode)}
+                  </span>
                   {getModeLabel(session.mode)}
                 </h3>
 
                 {isRecoverableFailure ? (
-                  <div className="history-recoverable">
-                    <h4>Audio saved for retranscription</h4>
-                    <p>
+                  <div
+                    className="history-recoverable"
+                    style={{
+                      backgroundColor: isDarkMode
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'rgba(0, 0, 0, 0.03)',
+                      border: isDarkMode
+                        ? '1px solid rgba(255, 255, 255, 0.1)'
+                        : '1px solid rgba(0, 0, 0, 0.06)'
+                    }}
+                  >
+                    <h4
+                      style={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : '#222'
+                      }}
+                    >
+                      Audio saved for retranscription
+                    </h4>
+                    <p
+                      style={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.62)' : '#666'
+                      }}
+                    >
                       This is not a transcript yet. Use the retry button to
                       transcribe the saved audio.
                     </p>
                   </div>
                 ) : (
                   <div className="history-transcript">
-                    <p>{stripMarkdownLinks(session.transcript)}</p>
+                    <p
+                      style={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : '#666'
+                      }}
+                    >
+                      {stripMarkdownLinks(session.transcript)}
+                    </p>
                     <button
                       type="button"
                       className="history-copy-button"
@@ -455,6 +590,9 @@ export function HistoryPage({
                       }
                       title={isCopied ? 'Copied!' : 'Copy'}
                       aria-label={isCopied ? 'Copied' : 'Copy transcript'}
+                      style={{
+                        color: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : '#888'
+                      }}
                     >
                       {isCopied ? <CheckIcon /> : <CopyIcon />}
                     </button>

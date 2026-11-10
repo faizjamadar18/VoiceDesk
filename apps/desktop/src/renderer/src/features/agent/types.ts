@@ -30,6 +30,8 @@ export interface AgentVoiceOption {
 export interface UserProfile {
   firstName: string
   lastName: string
+  preferencesMd?: string | null
+  hasPreviousPreferences?: boolean
 }
 
 export interface AgentMemory {
@@ -55,6 +57,9 @@ export interface AgentSettings {
   userProfile: UserProfile
   memories: AgentMemory[]
   actions: AgentActionItem[]
+  preferencesMd?: string | null
+  previousPreferencesMd?: string | null
+  isSavingPreferences?: boolean
 }
 
 export interface AgentPageProps {
@@ -65,6 +70,8 @@ export interface AgentPageProps {
   onDeleteMemory?: (id: string) => void
   onToggleMemoryCore?: (id: string, isCore: boolean) => void
   onUpdateUserProfile?: (profile: UserProfile) => void
+  onSavePreferences?: (preferencesMd: string) => void | Promise<void>
+  onUndoPreferences?: () => void | Promise<void>
   onSelectVoice?: (voiceId: string) => void
   onSelectSpeed?: (speed: AgentSpeedPreset) => void
   onToggleVoiceConfirmation?: (enabled: boolean) => void

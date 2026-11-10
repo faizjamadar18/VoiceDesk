@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
 import { BlocksIcon } from '../../components/dashboard-icons'
+import { AppDetailModal } from './AppDetailModal'
 import { AppRow } from './AppRow'
 import { INITIAL_APPS } from './dummy-data'
 import type { AppItem, AppsPageProps, AppsTabMode } from './types'
@@ -13,11 +14,13 @@ export function AppsPage({
 }: AppsPageProps): JSX.Element {
   const [tab, setTab] = useState<AppsTabMode>('official')
   const [apps, setApps] = useState<AppItem[]>(initialApps ?? INITIAL_APPS)
+  const [selectedApp, setSelectedApp] = useState<AppItem | null>(null)
 
   const handleToggle = (id: string, connected: boolean): void => {
     setApps((prev) =>
       prev.map((app) => (app.id === id ? { ...app, connected } : app))
     )
+    setSelectedApp((prev) => (prev && prev.id === id ? { ...prev, connected } : prev))
     onToggleApp?.(id, connected)
   }
 
@@ -102,6 +105,7 @@ export function AppsPage({
                       key={app.id}
                       app={app}
                       onToggle={handleToggle}
+                      onSelect={(selected) => setSelectedApp(selected)}
                     />
                   ))}
                 </div>
@@ -119,6 +123,7 @@ export function AppsPage({
                       key={app.id}
                       app={app}
                       onToggle={handleToggle}
+                      onSelect={(selected) => setSelectedApp(selected)}
                       showSeparator={index < availableApps.length - 2}
                     />
                   ))}
@@ -138,9 +143,16 @@ export function AppsPage({
           </div>
         )}
       </div>
+
+      {selectedApp && (
+        <AppDetailModal
+          app={selectedApp}
+          onClose={() => setSelectedApp(null)}
+          onToggleConnect={(id, connected) => handleToggle(id, connected)}
+        />
+      )}
     </div>
   )
 }
 
 export default AppsPage
-

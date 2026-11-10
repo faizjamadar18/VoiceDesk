@@ -20,6 +20,8 @@ export function AgentPage({
   onDeleteMemory,
   onToggleMemoryCore,
   onUpdateUserProfile,
+  onSavePreferences,
+  onUndoPreferences,
   onSelectVoice,
   onSelectSpeed,
   onToggleVoiceConfirmation
@@ -31,6 +33,15 @@ export function AgentPage({
       ...DEFAULT_AGENT_SETTINGS.userProfile,
       ...initialSettings?.userProfile
     },
+    preferencesMd:
+      initialSettings?.preferencesMd !== undefined
+        ? initialSettings.preferencesMd
+        : (initialSettings?.userProfile?.preferencesMd ??
+          DEFAULT_AGENT_SETTINGS.preferencesMd),
+    previousPreferencesMd:
+      initialSettings?.previousPreferencesMd !== undefined
+        ? initialSettings.previousPreferencesMd
+        : DEFAULT_AGENT_SETTINGS.previousPreferencesMd,
     memories: initialSettings?.memories ?? DEFAULT_AGENT_SETTINGS.memories,
     actions: initialSettings?.actions ?? DEFAULT_AGENT_SETTINGS.actions
   })
@@ -41,6 +52,37 @@ export function AgentPage({
       onSaveSettings?.(next)
       return next
     })
+  }
+
+  const handleSavePreferences = async (preferencesMd: string): Promise<void> => {
+    updateSettings((prev) => ({
+      ...prev,
+      previousPreferencesMd: prev.preferencesMd ?? '',
+      preferencesMd,
+      userProfile: {
+        ...prev.userProfile,
+        preferencesMd,
+        hasPreviousPreferences: true
+      }
+    }))
+    await onSavePreferences?.(preferencesMd)
+  }
+
+  const handleUndoPreferences = async (): Promise<void> => {
+    updateSettings((prev) => {
+      const restored = prev.previousPreferencesMd ?? ''
+      return {
+        ...prev,
+        preferencesMd: restored,
+        previousPreferencesMd: null,
+        userProfile: {
+          ...prev.userProfile,
+          preferencesMd: restored,
+          hasPreviousPreferences: false
+        }
+      }
+    })
+    await onUndoPreferences?.()
   }
 
   const handleSelectVoice = (voiceId: string): void => {
@@ -134,7 +176,12 @@ export function AgentPage({
       <AboutYouSection
         profile={settings.userProfile}
         memories={settings.memories}
+        preferencesMd={settings.preferencesMd}
+        previousPreferencesMd={settings.previousPreferencesMd}
+        isSavingPreferences={settings.isSavingPreferences}
         onUpdateProfile={handleUpdateProfile}
+        onSavePreferences={handleSavePreferences}
+        onUndoPreferences={handleUndoPreferences}
         onAddMemory={handleAddMemory}
         onDeleteMemory={handleDeleteMemory}
         onToggleMemoryCore={handleToggleMemoryCore}

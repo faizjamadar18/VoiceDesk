@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { useSystemTheme } from '../../context/ThemeContext'
 
 export interface AppleSwitchProps {
   checked: boolean
@@ -7,6 +8,7 @@ export interface AppleSwitchProps {
   label: string
   id?: string
   variant?: 'green' | 'monochrome'
+  isDarkMode?: boolean
 }
 
 export function AppleSwitch({
@@ -15,19 +17,28 @@ export function AppleSwitch({
   disabled = false,
   label,
   id,
-  variant = 'green'
+  variant = 'green',
+  isDarkMode: propIsDarkMode
 }: AppleSwitchProps): JSX.Element {
+  const { isDarkMode: contextIsDarkMode } = useSystemTheme()
+  const isDarkMode = propIsDarkMode ?? contextIsDarkMode
   const isMonochrome = variant === 'monochrome'
 
-  // Exact matching for Image 2:
+  // Exact matching for Voice OS:
   // Card 1 (monochrome): Dark track with clean white border, white knob on right when active.
   // Card 3 (green): Apple #30d158 background, white knob on right when active.
   const backgroundColor = isMonochrome
-    ? (checked ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)')
-    : (checked ? '#30d158' : 'rgba(255, 255, 255, 0.16)')
+    ? (checked
+        ? (isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)')
+        : (isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'))
+    : (checked
+        ? '#30d158'
+        : (isDarkMode ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)'))
 
   const border = isMonochrome
-    ? (checked ? '1.5px solid rgba(255, 255, 255, 0.55)' : '1px solid rgba(255, 255, 255, 0.25)')
+    ? (checked
+        ? (isDarkMode ? '1.5px solid rgba(255, 255, 255, 0.55)' : '1.5px solid rgba(0, 0, 0, 0.45)')
+        : (isDarkMode ? '1px solid rgba(255, 255, 255, 0.25)' : '1px solid rgba(0, 0, 0, 0.18)'))
     : 'none'
 
   return (

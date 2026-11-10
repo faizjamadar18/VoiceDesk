@@ -22,13 +22,13 @@ import {
   BlocksIcon,
   ChevronDownIcon,
   CircleDollarSignIcon,
-  DiscordIcon,
   ExternalLinkIcon,
   GiftIcon,
   HistoryIcon,
   HomeIcon,
   MicIcon
 } from './components/dashboard-icons'
+import { ThemeProvider, useSystemTheme } from './context/ThemeContext'
 
 type WindowAction = 'minimize' | 'maximize' | 'close'
 type TabId = 'dashboard' | 'history' | 'dictation' | 'agent' | 'apps'
@@ -108,7 +108,8 @@ function StoplightGlyph({ action }: { action: WindowAction }): JSX.Element {
   )
 }
 
-export default function App(): JSX.Element {
+function DashboardApp(): JSX.Element {
+  const { isDarkMode, systemTheme } = useSystemTheme()
   const greeting = getGreeting(new Date().getHours())
   const [activeTab, setActiveTab] = useState<TabId>('dashboard')
   const [historySessions, setHistorySessions] = useState<HistorySession[]>(
@@ -125,6 +126,10 @@ export default function App(): JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsDefaultTab, setSettingsDefaultTab] = useState<SettingsTabId>('general')
   const [isHelpCenterOpen, setIsHelpCenterOpen] = useState(false)
+
+  const glassThemeClass = isDarkMode
+    ? 'liquid-glass-sidebar-tab--dark liquid-glass-sidebar-tab--cursor-shine--dark'
+    : 'liquid-glass-sidebar-tab--light liquid-glass-sidebar-tab--cursor-shine--light'
 
   return (
     <div className="dashboard-root">
@@ -145,7 +150,7 @@ export default function App(): JSX.Element {
         ))}
       </div>
 
-      <aside className="sidebar">
+      <aside className={`sidebar ${isDarkMode ? 'sidebar-vibrancy-dark' : 'sidebar-vibrancy-light'}`}>
         <div className="sidebar-logo">
           <div className="sidebar-logo-row">
             <img src={wordmark} alt="VoiceOS" className="sidebar-wordmark" />
@@ -163,7 +168,7 @@ export default function App(): JSX.Element {
                 type="button"
                 className={`nav-item${
                   isActive
-                    ? ' liquid-glass-sidebar-tab liquid-glass-sidebar-tab--no-shimmer liquid-glass-sidebar-tab--cursor-shine liquid-glass-sidebar-tab--dark liquid-glass-sidebar-tab--cursor-shine--dark'
+                    ? ` liquid-glass-sidebar-tab liquid-glass-sidebar-tab--no-shimmer liquid-glass-sidebar-tab--cursor-shine ${glassThemeClass}`
                     : ''
                 }`}
                 aria-current={isActive ? 'page' : undefined}
@@ -178,17 +183,6 @@ export default function App(): JSX.Element {
             )
           })}
         </nav>
-
-        <button
-          type="button"
-          className="sidebar-discord liquid-glass-sidebar-tab liquid-glass-sidebar-tab--no-shimmer liquid-glass-sidebar-tab--cursor-shine liquid-glass-sidebar-tab--dark liquid-glass-sidebar-tab--cursor-shine--dark"
-          onMouseMove={trackShine}
-        >
-          <span className="sidebar-discord-inner">
-            <DiscordIcon className="discord-icon" />
-            <span>Join our Discord community</span>
-          </span>
-        </button>
 
         <div className="sidebar-account-container">
           <ProfileDrawer
@@ -208,23 +202,66 @@ export default function App(): JSX.Element {
             className="sidebar-account"
             onClick={() => setIsProfileMenuOpen((prev) => !prev)}
             aria-expanded={isProfileMenuOpen}
+            style={{
+              backgroundColor: isProfileMenuOpen
+                ? isDarkMode
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : 'rgba(0, 0, 0, 0.06)'
+                : undefined
+            }}
           >
             <span className="avatar" aria-hidden="true">
               <AvatarIcon className="avatar-icon" />
               <img src={lensOverlay} alt="" className="avatar-lens" />
             </span>
-            <span className="account-name">Faiz</span>
+            <span
+              className="account-name"
+              style={{
+                color: isDarkMode
+                  ? isProfileMenuOpen
+                    ? 'rgba(255, 255, 255, 0.95)'
+                    : 'rgba(255, 255, 255, 0.7)'
+                  : isProfileMenuOpen
+                    ? 'rgba(0, 0, 0, 0.9)'
+                    : 'rgba(0, 0, 0, 0.6)'
+              }}
+            >
+              Faiz
+            </span>
             {isProfileMenuOpen ? (
-              <ChevronUpIcon className="account-chevron" />
+              <ChevronUpIcon
+                className="account-chevron"
+                style={{
+                  color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+                }}
+              />
             ) : (
-              <ChevronDownIcon className="account-chevron" />
+              <ChevronDownIcon
+                className="account-chevron"
+                style={{
+                  color: isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.4)'
+                }}
+              />
             )}
           </button>
         </div>
       </aside>
 
-      <main className="dashboard-main-pane">
-        <div className="dashboard-content-frame">
+      <main
+        className="dashboard-main-pane"
+        style={{
+          backgroundColor:
+            systemTheme === 'light' ? 'rgba(243, 247, 254, 0.15)' : 'rgba(36, 36, 36, 0.15)'
+        }}
+      >
+        <div
+          className="dashboard-content-frame"
+          style={{
+            background: 'var(--content-background-gradient)',
+            border: systemTheme === 'light' ? '1px solid rgba(255, 255, 255, 0.8)' : 'none',
+            boxShadow: systemTheme === 'dark' ? '0 0 0 1px var(--dark-modal-border)' : 'none'
+          }}
+        >
           <div className="dashboard-scroll-area">
             <div className="dashboard-window-drag" />
             <div className="dashboard-bottom-fade" />
@@ -245,12 +282,29 @@ export default function App(): JSX.Element {
                     </div>
 
                     <div className="quick-start-grid">
-                      <section className="card quick-card">
-                        <h4 className="quick-title">
-                          <MicIcon className="quick-title-icon" width={20} height={20} />
+                      <section
+                        className="card quick-card"
+                        style={{
+                          background: isDarkMode
+                            ? 'var(--dark-dashboard-card-background, #222327)'
+                            : 'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))',
+                          border: isDarkMode
+                            ? '1px solid var(--dark-border-subtle, rgba(223, 226, 232, 0.06))'
+                            : '1px solid #ffffff',
+                          boxShadow: isDarkMode
+                            ? '0 1px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--dark-surface-highlight, rgba(239, 241, 245, 0.02))'
+                            : 'none'
+                        }}
+                      >
+                        <h4 className={`quick-title ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                          <MicIcon
+                            className={`quick-title-icon ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                            width={20}
+                            height={20}
+                          />
                           Dictation Mode
                         </h4>
-                        <div className="quick-meta">
+                        <div className={`quick-meta ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <span>Hold</span>
                           <span className="key-group">
                             <kbd className="keycap">control (left)</kbd>
@@ -261,12 +315,29 @@ export default function App(): JSX.Element {
                         </div>
                       </section>
 
-                      <section className="card quick-card">
-                        <h4 className="quick-title">
-                          <AISparkleIcon className="quick-title-icon" width={20} height={20} />
+                      <section
+                        className="card quick-card"
+                        style={{
+                          background: isDarkMode
+                            ? 'var(--dark-dashboard-card-background, #222327)'
+                            : 'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))',
+                          border: isDarkMode
+                            ? '1px solid var(--dark-border-subtle, rgba(223, 226, 232, 0.06))'
+                            : '1px solid #ffffff',
+                          boxShadow: isDarkMode
+                            ? '0 1px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--dark-surface-highlight, rgba(239, 241, 245, 0.02))'
+                            : 'none'
+                        }}
+                      >
+                        <h4 className={`quick-title ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                          <AISparkleIcon
+                            className={`quick-title-icon ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                            width={20}
+                            height={20}
+                          />
                           Agent Mode
                         </h4>
-                        <div className="quick-meta">
+                        <div className={`quick-meta ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <span>Hold</span>
                           <span className="key-group">
                             <kbd className="keycap">alt</kbd>
@@ -278,18 +349,45 @@ export default function App(): JSX.Element {
                     </div>
 
                     <section className="share-section">
-                      <h3 className="share-heading">Share the love</h3>
-                      <div className="card share-card">
+                      <h3 className={`share-heading ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                        Share the love
+                      </h3>
+                      <div
+                        className="card share-card"
+                        style={{
+                          background: isDarkMode
+                            ? 'var(--dark-dashboard-card-background, #222327)'
+                            : 'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))',
+                          border: isDarkMode
+                            ? '1px solid var(--dark-border-subtle, rgba(223, 226, 232, 0.06))'
+                            : '1px solid #ffffff',
+                          boxShadow: isDarkMode
+                            ? '0 1px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--dark-surface-highlight, rgba(239, 241, 245, 0.02))'
+                            : 'none'
+                        }}
+                      >
                         <div className="share-row">
                           <div className="share-left">
-                            <div className="liquid-glass-badge liquid-glass-badge--dark">
+                            <div
+                              className={`liquid-glass-badge ${
+                                isDarkMode ? 'liquid-glass-badge--dark' : 'liquid-glass-badge--light'
+                              }`}
+                            >
                               <span className="liquid-glass-badge__icon">
-                                <GiftIcon className="badge-icon" width={20} height={20} />
+                                <GiftIcon
+                                  className={`badge-icon ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                                  width={20}
+                                  height={20}
+                                />
                               </span>
                             </div>
                             <div className="share-copy">
-                              <h4>Refer a friend</h4>
-                              <p>Give a free month, get one when they subscribe.</p>
+                              <h4 className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                Refer a friend
+                              </h4>
+                              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
+                                Give a free month, get one when they subscribe.
+                              </p>
                             </div>
                           </div>
                           <button type="button" className="ghost-button">
@@ -297,18 +395,30 @@ export default function App(): JSX.Element {
                           </button>
                         </div>
 
-                        <div className="share-divider" />
+                        <div className={`share-divider ${isDarkMode ? 'bg-white/[0.06]' : 'bg-black/[0.06]'}`} />
 
                         <div className="share-row">
                           <div className="share-left">
-                            <div className="liquid-glass-badge liquid-glass-badge--dark">
+                            <div
+                              className={`liquid-glass-badge ${
+                                isDarkMode ? 'liquid-glass-badge--dark' : 'liquid-glass-badge--light'
+                              }`}
+                            >
                               <span className="liquid-glass-badge__icon">
-                                <CircleDollarSignIcon className="badge-icon" width={20} height={20} />
+                                <CircleDollarSignIcon
+                                  className={`badge-icon ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                                  width={20}
+                                  height={20}
+                                />
                               </span>
                             </div>
                             <div className="share-copy">
-                              <h4>Affiliate Program</h4>
-                              <p>Earn 25% commission for a full year on everyone you refer.</p>
+                              <h4 className={isDarkMode ? 'text-gray-100' : 'text-gray-900'}>
+                                Affiliate Program
+                              </h4>
+                              <p className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>
+                                Earn 25% commission for a full year on everyone you refer.
+                              </p>
                             </div>
                           </div>
                           <button type="button" className="ghost-button">
@@ -352,5 +462,13 @@ export default function App(): JSX.Element {
         onClose={() => setIsHelpCenterOpen(false)}
       />
     </div>
+  )
+}
+
+export default function App(): JSX.Element {
+  return (
+    <ThemeProvider>
+      <DashboardApp />
+    </ThemeProvider>
   )
 }
