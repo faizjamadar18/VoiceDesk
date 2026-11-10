@@ -11,7 +11,6 @@ import type { HistorySession } from './features/history/HistoryPage'
 import { DictationPage } from './features/dictation/DictationPage'
 import { AgentPage } from './features/agent/AgentPage'
 import { AppsPage } from './features/apps/AppsPage'
-import { TutorialsSection } from './components/TutorialsSection'
 import { ProfileDrawer } from './features/profile/ProfileDrawer'
 import { SettingsModal } from './features/profile/SettingsModal'
 import { HelpCenterModal } from './features/profile/HelpCenterModal'
@@ -28,12 +27,11 @@ import {
   GiftIcon,
   HistoryIcon,
   HomeIcon,
-  InsightsIcon,
   MicIcon
 } from './components/dashboard-icons'
 
 type WindowAction = 'minimize' | 'maximize' | 'close'
-type TabId = 'dashboard' | 'insights' | 'history' | 'dictation' | 'agent' | 'apps'
+type TabId = 'dashboard' | 'history' | 'dictation' | 'agent' | 'apps'
 
 interface NavItem {
   id: TabId
@@ -43,7 +41,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
-  { id: 'insights', label: 'Insights', icon: <InsightsIcon /> },
   { id: 'history', label: 'History', icon: <HistoryIcon /> },
   { id: 'dictation', label: 'Dictation', icon: <MicIcon /> },
   { id: 'agent', label: 'Agent', icon: <AISparkleIcon /> },
@@ -321,8 +318,6 @@ export default function App(): JSX.Element {
                         </div>
                       </div>
                     </section>
-
-                    <TutorialsSection />
                   </div>
                 )}
 
