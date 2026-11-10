@@ -7,13 +7,31 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          overlay: resolve('src/preload/overlay.ts')
+        }
+      }
+    }
   },
   renderer: {
     resolve: {
       alias: {
+        '@': resolve('src/renderer/src'),
         '@renderer': resolve('src/renderer/src'),
         '@shared': resolve('src/shared')
+      }
+    },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          notch: resolve('src/renderer/notch.html'),
+          overlay: resolve('src/renderer/overlay.html')
+        }
       }
     },
     plugins: [react()]

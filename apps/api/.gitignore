@@ -2,3 +2,7 @@
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Local MCP server config may reference tokens via ${VAR}; only the
+# template is committed. The real values live in .env.
+mcp_servers.json

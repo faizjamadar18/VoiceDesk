@@ -11,6 +11,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+# Local MCP server config (tokens are referenced, never committed)
+mcp_servers.json
+
 # Python
 .venv/
 __pycache__/

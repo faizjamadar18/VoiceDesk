@@ -15,6 +15,9 @@
     "start": "npm run start --workspace @kestrel/desktop",
     "typecheck": "npm run typecheck --workspace @kestrel/desktop",
     "test": "npm run test --workspace @kestrel/desktop",
-    "smoke:day1": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/day1-smoke.ps1"
+    "test:all": "npm run test:api && npm run test",
+    "test:api": ".\\apps\\api\\.venv\\Scripts\\python.exe -m pytest apps/api -q",
+    "api": ".\\apps\\api\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --app-dir apps/api --host 127.0.0.1 --port 8765",
+    "smoke:notch": "npm run build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/notch-smoke.ps1"
   }
 }

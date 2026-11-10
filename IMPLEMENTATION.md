@@ -123,7 +123,7 @@ voice → ASR → intent
 | Database | Supabase Postgres (pooled connection) |
 | Jobs | APScheduler + Postgres job store |
 | AI | Gemini 3.8 Flash (free → paid); Gemini 3.5 Flash-Lite fallback |
-| ASR | Gemini 3.5 Transcribe free / Groq Whisper free |
+| ASR | NVIDIA Nemotron streaming via NeMo-Speech.cpp (local, free) |
 | TTS | Web Speech API first; Kokoro later |
 | Storage | None for screenshots/audio; R2 optional later with short TTL |
 | Hosting | Render (MVP) → Oracle Always Free ARM + Docker + Cloudflare Tunnel |
@@ -378,7 +378,7 @@ Do not build a “cheap model extracts, second model answers” pipeline at laun
 - **Oracle Always Free ARM + Docker + Cloudflare Tunnel** before reminders and public beta.
 - Supabase pooled connection; Alembic migrations on deploy.
 - GitHub Actions: lint, test, build, deploy, electron-builder, release.
-- Env vars: `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `SENTRY_DSN`, `POSTHOG_KEY`.
+- Env vars: `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GROQ_API_KEY`, `SENTRY_DSN`, `POSTHOG_KEY`.
 - `electron-updater` + GitHub Releases.
 - Code signing: SignPath free for open source; otherwise accept SmartScreen warning at first.
 

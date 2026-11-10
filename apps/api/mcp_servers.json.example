@@ -1,0 +1,39 @@
+{
+  "servers": {
+    "notion": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "NOTION_TOKEN": "${NOTION_TOKEN}"
+      },
+      "tools": [
+        "API-post-search",
+        "API-retrieve-a-page",
+        "API-retrieve-page-markdown",
+        "API-get-block-children",
+        "API-retrieve-a-block",
+        "API-retrieve-a-comment",
+        "API-query-data-source",
+        "API-retrieve-a-database",
+        "API-post-page",
+        "API-patch-page",
+        "API-update-page-markdown",
+        "API-patch-block-children",
+        "API-create-a-comment"
+      ],
+      "write_tools": [
+        "API-post-page",
+        "API-patch-page",
+        "API-patch-block-children",
+        "API-update-a-block",
+        "API-delete-a-block",
+        "API-create-a-comment",
+        "API-create-a-data-source",
+        "API-update-a-data-source",
+        "API-move-page",
+        "API-update-page-markdown"
+      ]
+    }
+  }
+}
