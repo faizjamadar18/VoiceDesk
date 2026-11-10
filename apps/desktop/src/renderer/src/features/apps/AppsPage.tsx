@@ -114,11 +114,12 @@ export function AppsPage({
                   Available
                 </h3>
                 <div className="apps-grid">
-                  {availableApps.map((app) => (
+                  {availableApps.map((app, index) => (
                     <AppRow
                       key={app.id}
                       app={app}
                       onToggle={handleToggle}
+                      showSeparator={index < availableApps.length - 2}
                     />
                   ))}
                 </div>

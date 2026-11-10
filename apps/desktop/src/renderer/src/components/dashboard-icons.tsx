@@ -2,11 +2,20 @@ import type { JSX } from 'react'
 
 export interface DashboardIconProps {
   className?: string
+  width?: number | string
+  height?: number | string
+  size?: number | string
+  style?: React.CSSProperties
 }
 
-export function AISparkleIcon({ className }: DashboardIconProps): JSX.Element {
+export function AISparkleIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -28,9 +37,14 @@ export function AISparkleIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function MicIcon({ className }: DashboardIconProps): JSX.Element {
+export function MicIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -48,9 +62,14 @@ export function MicIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function HomeIcon({ className }: DashboardIconProps): JSX.Element {
+export function HomeIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -70,9 +89,14 @@ export function HomeIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function HistoryIcon({ className }: DashboardIconProps): JSX.Element {
+export function HistoryIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -104,9 +128,14 @@ export function HistoryIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function InsightsIcon({ className }: DashboardIconProps): JSX.Element {
+export function InsightsIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -138,9 +167,14 @@ export function InsightsIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function BlocksIcon({ className }: DashboardIconProps): JSX.Element {
+export function BlocksIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -157,9 +191,14 @@ export function BlocksIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function ChevronDownIcon({ className }: DashboardIconProps): JSX.Element {
+export function ChevronDownIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -175,9 +214,14 @@ export function ChevronDownIcon({ className }: DashboardIconProps): JSX.Element 
   )
 }
 
-export function CircleDollarSignIcon({ className }: DashboardIconProps): JSX.Element {
+export function CircleDollarSignIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -195,9 +239,14 @@ export function CircleDollarSignIcon({ className }: DashboardIconProps): JSX.Ele
   )
 }
 
-export function ExternalLinkIcon({ className }: DashboardIconProps): JSX.Element {
+export function ExternalLinkIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -215,9 +264,14 @@ export function ExternalLinkIcon({ className }: DashboardIconProps): JSX.Element
   )
 }
 
-export function GiftIcon({ className }: DashboardIconProps): JSX.Element {
+export function GiftIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -236,9 +290,14 @@ export function GiftIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function DiscordIcon({ className }: DashboardIconProps): JSX.Element {
+export function DiscordIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 -28.5 256 256"
       fill="currentColor"
@@ -254,9 +313,14 @@ export function DiscordIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function SearchIcon({ className }: DashboardIconProps): JSX.Element {
+export function SearchIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -273,9 +337,14 @@ export function SearchIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function ChevronsUpDownIcon({ className }: DashboardIconProps): JSX.Element {
+export function ChevronsUpDownIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -292,9 +361,14 @@ export function ChevronsUpDownIcon({ className }: DashboardIconProps): JSX.Eleme
   )
 }
 
-export function RefreshIcon({ className }: DashboardIconProps): JSX.Element {
+export function RefreshIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -313,9 +387,14 @@ export function RefreshIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function FlagIcon({ className }: DashboardIconProps): JSX.Element {
+export function FlagIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -332,9 +411,14 @@ export function FlagIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function TrashIcon({ className }: DashboardIconProps): JSX.Element {
+export function TrashIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -354,9 +438,14 @@ export function TrashIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function CopyIcon({ className }: DashboardIconProps): JSX.Element {
+export function CopyIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -373,9 +462,14 @@ export function CopyIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function CheckIcon({ className }: DashboardIconProps): JSX.Element {
+export function CheckIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -391,9 +485,14 @@ export function CheckIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function XIcon({ className }: DashboardIconProps): JSX.Element {
+export function XIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -410,9 +509,14 @@ export function XIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function SparklesIcon({ className }: DashboardIconProps): JSX.Element {
+export function SparklesIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -432,9 +536,14 @@ export function SparklesIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function PenLineIcon({ className }: DashboardIconProps): JSX.Element {
+export function PenLineIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -451,9 +560,14 @@ export function PenLineIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function MessageCircleIcon({ className }: DashboardIconProps): JSX.Element {
+export function MessageCircleIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -469,9 +583,14 @@ export function MessageCircleIcon({ className }: DashboardIconProps): JSX.Elemen
   )
 }
 
-export function BriefcaseIcon({ className }: DashboardIconProps): JSX.Element {
+export function BriefcaseIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -488,9 +607,14 @@ export function BriefcaseIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function MailIcon({ className }: DashboardIconProps): JSX.Element {
+export function MailIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -507,9 +631,14 @@ export function MailIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function GlobeIcon({ className }: DashboardIconProps): JSX.Element {
+export function GlobeIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -527,9 +656,14 @@ export function GlobeIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function BookOpenIcon({ className }: DashboardIconProps): JSX.Element {
+export function BookOpenIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -545,9 +679,14 @@ export function BookOpenIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function ReplaceIcon({ className }: DashboardIconProps): JSX.Element {
+export function ReplaceIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -567,9 +706,14 @@ export function ReplaceIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function PlusIcon({ className }: DashboardIconProps): JSX.Element {
+export function PlusIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -586,9 +730,14 @@ export function PlusIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function ZapIcon({ className }: DashboardIconProps): JSX.Element {
+export function ZapIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -604,9 +753,14 @@ export function ZapIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function TimerIcon({ className }: DashboardIconProps): JSX.Element {
+export function TimerIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -624,9 +778,14 @@ export function TimerIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function BrainIcon({ className }: DashboardIconProps): JSX.Element {
+export function BrainIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -650,9 +809,14 @@ export function BrainIcon({ className }: DashboardIconProps): JSX.Element {
   )
 }
 
-export function CheckCircleIcon({ className }: DashboardIconProps): JSX.Element {
+export function CheckCircleIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
       fill="none"
@@ -671,9 +835,14 @@ export function CheckCircleIcon({ className }: DashboardIconProps): JSX.Element 
   )
 }
 
-export function AvatarIcon({ className }: DashboardIconProps): JSX.Element {
+export function AvatarIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size;
+  const h = height ?? size;
   return (
     <svg
+      width={w}
+      height={h}
+      style={style}
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 128 128"
       fill="none"
@@ -683,6 +852,71 @@ export function AvatarIcon({ className }: DashboardIconProps): JSX.Element {
       <circle cx="64" cy="64" r="64" fill="#93c5fd" />
       <circle cx="64" cy="50" r="20" fill="#4e94f8" />
       <ellipse cx="64" cy="92" rx="38" ry="16" fill="#4e94f8" />
+    </svg>
+  )
+}
+
+export function ChevronLeftIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size
+  const h = height ?? size
+  return (
+    <svg
+      width={w}
+      height={h}
+      style={style}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  )
+}
+
+export function ChevronRightIcon({ className, width, height, size = 16, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size
+  const h = height ?? size
+  return (
+    <svg
+      width={w}
+      height={h}
+      style={style}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  )
+}
+
+export function PlayIcon({ className, width, height, size = 20, style }: DashboardIconProps): JSX.Element {
+  const w = width ?? size
+  const h = height ?? size
+  return (
+    <svg
+      width={w}
+      height={h}
+      style={style}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <polygon points="6 3 20 12 6 21 6 3" />
     </svg>
   )
 }

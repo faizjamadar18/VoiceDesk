@@ -11,6 +11,7 @@ import type { HistorySession } from './features/history/HistoryPage'
 import { DictationPage } from './features/dictation/DictationPage'
 import { AgentPage } from './features/agent/AgentPage'
 import { AppsPage } from './features/apps/AppsPage'
+import { TutorialsSection } from './components/TutorialsSection'
 import { ProfileDrawer } from './features/profile/ProfileDrawer'
 import { SettingsModal } from './features/profile/SettingsModal'
 import { HelpCenterModal } from './features/profile/HelpCenterModal'
@@ -225,125 +226,122 @@ export default function App(): JSX.Element {
         </div>
       </aside>
 
-      <main className="dashboard-main">
-        {activeTab === 'dashboard' && (
-          <div className="dashboard-content">
-            <div className="greeting">
-            <div className="orb" role="img" aria-label="VoiceOS orb">
-              <div
-                className="cloud-viewport orb-cloud"
-                style={{ backgroundImage: `url(${cloudsBlue})` }}
-              />
-              <img src={lensOverlay} alt="" className="orb-lens" />
+      <main className="dashboard-main-pane">
+        <div className="dashboard-content-frame">
+          <div className="dashboard-scroll-area">
+            <div className="dashboard-window-drag" />
+            <div className="dashboard-bottom-fade" />
+
+            <div className="dashboard-content-centering">
+              <div className="dashboard-content">
+                {activeTab === 'dashboard' && (
+                  <div className="dashboard-home-view">
+                    <div className="greeting">
+                      <div className="orb" role="img" aria-label="VoiceOS orb">
+                        <div
+                          className="cloud-viewport orb-cloud"
+                          style={{ backgroundImage: `url(${cloudsBlue})` }}
+                        />
+                        <img src={lensOverlay} alt="" className="orb-lens" />
+                      </div>
+                      <h1>{greeting}, Faiz</h1>
+                    </div>
+
+                    <div className="quick-start-grid">
+                      <section className="card quick-card">
+                        <h4 className="quick-title">
+                          <MicIcon className="quick-title-icon" width={20} height={20} />
+                          Dictation Mode
+                        </h4>
+                        <div className="quick-meta">
+                          <span>Hold</span>
+                          <span className="key-group">
+                            <kbd className="keycap">control (left)</kbd>
+                            <span className="key-plus">+</span>
+                            <kbd className="keycap">shift (left)</kbd>
+                          </span>
+                          <span>in any text field</span>
+                        </div>
+                      </section>
+
+                      <section className="card quick-card">
+                        <h4 className="quick-title">
+                          <AISparkleIcon className="quick-title-icon" width={20} height={20} />
+                          Agent Mode
+                        </h4>
+                        <div className="quick-meta">
+                          <span>Hold</span>
+                          <span className="key-group">
+                            <kbd className="keycap">alt</kbd>
+                            <kbd className="keycap">control</kbd>
+                          </span>
+                          <span>to ask</span>
+                        </div>
+                      </section>
+                    </div>
+
+                    <section className="share-section">
+                      <h3 className="share-heading">Share the love</h3>
+                      <div className="card share-card">
+                        <div className="share-row">
+                          <div className="share-left">
+                            <div className="liquid-glass-badge liquid-glass-badge--dark">
+                              <span className="liquid-glass-badge__icon">
+                                <GiftIcon className="badge-icon" width={20} height={20} />
+                              </span>
+                            </div>
+                            <div className="share-copy">
+                              <h4>Refer a friend</h4>
+                              <p>Give a free month, get one when they subscribe.</p>
+                            </div>
+                          </div>
+                          <button type="button" className="ghost-button">
+                            Invite friends
+                          </button>
+                        </div>
+
+                        <div className="share-divider" />
+
+                        <div className="share-row">
+                          <div className="share-left">
+                            <div className="liquid-glass-badge liquid-glass-badge--dark">
+                              <span className="liquid-glass-badge__icon">
+                                <CircleDollarSignIcon className="badge-icon" width={20} height={20} />
+                              </span>
+                            </div>
+                            <div className="share-copy">
+                              <h4>Affiliate Program</h4>
+                              <p>Earn 25% commission for a full year on everyone you refer.</p>
+                            </div>
+                          </div>
+                          <button type="button" className="ghost-button">
+                            Learn more
+                            <ExternalLinkIcon className="ghost-button-icon" width={14} height={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <TutorialsSection />
+                  </div>
+                )}
+
+                {activeTab === 'history' && (
+                  <HistoryPage
+                    sessions={historySessions}
+                    onDeleteSession={handleDeleteHistorySession}
+                  />
+                )}
+
+                {activeTab === 'dictation' && <DictationPage />}
+
+                {activeTab === 'agent' && <AgentPage />}
+
+                {activeTab === 'apps' && <AppsPage />}
+              </div>
             </div>
-            <h1>
-              {greeting}, Faiz
-            </h1>
           </div>
-
-          <div className="quick-start-grid">
-            <section className="card quick-card">
-              <h4 className="quick-title">
-                <MicIcon className="quick-title-icon" />
-                Dictation Mode
-              </h4>
-              <div className="quick-meta">
-                <span>Hold</span>
-                <span className="key-group">
-                  <kbd className="keycap">control (left)</kbd>
-                  <span className="key-plus">+</span>
-                  <kbd className="keycap">shift (left)</kbd>
-                </span>
-                <span>in any text field</span>
-              </div>
-            </section>
-
-            <section className="card quick-card">
-              <h4 className="quick-title">
-                <AISparkleIcon className="quick-title-icon" />
-                Agent Mode
-              </h4>
-              <div className="quick-meta">
-                <span>Hold</span>
-                <span className="key-group">
-                  <kbd className="keycap">alt</kbd>
-                  <kbd className="keycap">control</kbd>
-                </span>
-                <span>to ask</span>
-              </div>
-            </section>
-          </div>
-
-          <section className="share-section">
-            <h3 className="share-heading">Share the love</h3>
-            <div className="card share-card">
-              <div className="share-row">
-                <div className="share-left">
-                  <div className="liquid-glass-badge liquid-glass-badge--dark">
-                    <span className="liquid-glass-badge__icon">
-                      <GiftIcon className="badge-icon" />
-                    </span>
-                  </div>
-                  <div className="share-copy">
-                    <h4>Refer a friend</h4>
-                    <p>Give a free month, get one when they subscribe.</p>
-                  </div>
-                </div>
-                <button type="button" className="ghost-button">
-                  Invite friends
-                </button>
-              </div>
-
-              <div className="share-divider" />
-
-              <div className="share-row">
-                <div className="share-left">
-                  <div className="liquid-glass-badge liquid-glass-badge--dark">
-                    <span className="liquid-glass-badge__icon">
-                      <CircleDollarSignIcon className="badge-icon" />
-                    </span>
-                  </div>
-                  <div className="share-copy">
-                    <h4>Affiliate Program</h4>
-                    <p>Earn 25% commission for a full year on everyone you refer.</p>
-                  </div>
-                </div>
-                <button type="button" className="ghost-button">
-                  Learn more
-                  <ExternalLinkIcon className="ghost-button-icon" />
-                </button>
-              </div>
-            </div>
-          </section>
-          </div>
-        )}
-
-        {activeTab === 'history' && (
-          <div className="dashboard-content">
-            <HistoryPage
-              sessions={historySessions}
-              onDeleteSession={handleDeleteHistorySession}
-            />
-          </div>
-        )}
-
-        {activeTab === 'dictation' && (
-          <div className="dashboard-content">
-            <DictationPage />
-          </div>
-        )}
-
-        {activeTab === 'agent' && (
-          <div className="dashboard-content">
-            <AgentPage />
-          </div>
-        )}
-
-        {activeTab === 'apps' && (
-          <div className="dashboard-content">
-            <AppsPage />
-          </div>
-        )}
+        </div>
       </main>
 
       {/* Settings Modal */}

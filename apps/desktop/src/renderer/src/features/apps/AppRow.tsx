@@ -6,12 +6,14 @@ export interface AppRowProps {
   app: AppItem
   onToggle: (id: string, connected: boolean) => void
   disabled?: boolean
+  showSeparator?: boolean
 }
 
 export function AppRow({
   app,
   onToggle,
-  disabled = false
+  disabled = false,
+  showSeparator = true
 }: AppRowProps): JSX.Element {
   return (
     <div className="app-row-item">
@@ -38,6 +40,8 @@ export function AppRow({
         variant="green"
         onToggle={() => onToggle(app.id, !app.connected)}
       />
+
+      {showSeparator && <span className="app-row-separator" aria-hidden="true" />}
     </div>
   )
 }
