@@ -1,349 +1,296 @@
-import { useCallback, useEffect, useState, type FormEvent, type JSX } from 'react'
-import type {
-  AsrMode,
-  KestrelRuntimeState,
-  KestrelSettings,
-  NotchActivity,
-  NotchPhase
-} from '../../shared/types'
+import { useState } from 'react'
+import type { JSX, MouseEvent } from 'react'
+import wordmark from './assets/voiceos-wordmark.png'
+import cloudsBlue from './voiceos-notch/assets/cloudsBlue.png'
+import lensOverlay from './voiceos-notch/assets/lens.png'
+import {
+  DUMMY_HISTORY_SESSIONS,
+  HistoryPage
+} from './features/history/HistoryPage'
+import type { HistorySession } from './features/history/HistoryPage'
+import {
+  AISparkleIcon,
+  AvatarIcon,
+  BlocksIcon,
+  ChevronDownIcon,
+  CircleDollarSignIcon,
+  DiscordIcon,
+  ExternalLinkIcon,
+  GiftIcon,
+  HistoryIcon,
+  HomeIcon,
+  InsightsIcon,
+  MicIcon
+} from './components/dashboard-icons'
 
-type LogTone = 'info' | 'success' | 'error'
+type WindowAction = 'minimize' | 'maximize' | 'close'
+type TabId = 'dashboard' | 'insights' | 'history' | 'dictation' | 'agent' | 'apps'
 
-interface LogEntry {
-  id: number
-  at: number
-  tone: LogTone
-  title: string
-  text: string
+interface NavItem {
+  id: TabId
+  label: string
+  icon: JSX.Element
 }
 
-const MAX_LOG_ENTRIES = 8
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
+  { id: 'insights', label: 'Insights', icon: <InsightsIcon /> },
+  { id: 'history', label: 'History', icon: <HistoryIcon /> },
+  { id: 'dictation', label: 'Dictation', icon: <MicIcon /> },
+  { id: 'agent', label: 'Agent', icon: <AISparkleIcon /> },
+  { id: 'apps', label: 'Apps', icon: <BlocksIcon /> }
+]
 
-const PHASE_TITLE: Record<NotchPhase, string> = {
-  listening: 'Listening',
-  processing: 'Transcribing',
-  acting: 'Working',
-  result: 'Done',
-  error: 'Error'
+const STOPLIGHTS: Array<{ action: WindowAction; ariaLabel: string; color: string }> = [
+  { action: 'minimize', ariaLabel: 'Minimize window', color: '#a0a0a0' },
+  { action: 'maximize', ariaLabel: 'Maximize window', color: '#28c840' },
+  { action: 'close', ariaLabel: 'Close window', color: '#ff5f57' }
+]
+
+function getGreeting(hour: number): string {
+  if (hour < 5) return 'Good evening'
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
 }
 
-function formatTime(at: number): string {
-  const date = new Date(at)
-  return [date.getHours(), date.getMinutes(), date.getSeconds()]
-    .map((part) => part.toString().padStart(2, '0'))
-    .join(':')
+function runWindowAction(action: WindowAction): void {
+  if (action === 'minimize') {
+    window.kestrel?.minimizeWindow()
+  } else if (action === 'maximize') {
+    window.kestrel?.toggleMaximizeWindow()
+  } else {
+    window.kestrel?.closeWindow()
+  }
 }
 
-function displayHotkey(hotkey: string): string {
-  return hotkey.replaceAll('+', ' + ')
+function trackShine(event: MouseEvent<HTMLElement>): void {
+  const target = event.currentTarget
+  const rect = target.getBoundingClientRect()
+  target.style.setProperty('--mouse-x', `${((event.clientX - rect.left) / rect.width) * 100}%`)
+  target.style.setProperty('--mouse-y', `${((event.clientY - rect.top) / rect.height) * 100}%`)
 }
 
-function truncate(text: string, limit = 110): string {
-  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
-}
-
-function toneForPhase(phase: NotchPhase): LogTone {
-  if (phase === 'result') return 'success'
-  if (phase === 'error') return 'error'
-  return 'info'
-}
-
-function activityText(activity: NotchActivity): string {
-  if (activity.phase === 'error') return activity.message ?? 'The turn failed.'
-  if (activity.message) return activity.message
-  if (activity.transcript) return truncate(activity.transcript)
-  return 'Listening for your command…'
+function StoplightGlyph({ action }: { action: WindowAction }): JSX.Element {
+  return (
+    <svg
+      className="stoplight-icon"
+      width="8"
+      height="8"
+      viewBox="0 0 8 8"
+      aria-hidden="true"
+    >
+      {action === 'close' && (
+        <path
+          stroke="rgba(0,0,0,0.5)"
+          strokeWidth="1.2"
+          d="M1.5 1.5L6.5 6.5M6.5 1.5L1.5 6.5"
+        />
+      )}
+      {action === 'minimize' && (
+        <line x1="1" y1="4" x2="7" y2="4" stroke="rgba(0,0,0,0.5)" strokeWidth="1.2" />
+      )}
+      {action === 'maximize' && (
+        <path
+          stroke="rgba(0,0,0,0.5)"
+          strokeWidth="1.2"
+          fill="none"
+          d="M1.5 2.5L4 0.5L6.5 2.5M1.5 5.5L4 7.5L6.5 5.5"
+        />
+      )}
+    </svg>
+  )
 }
 
 export default function App(): JSX.Element {
-  const [runtime, setRuntime] = useState<KestrelRuntimeState | null>(null)
-  const [hotkeyDraft, setHotkeyDraft] = useState('Control+Space')
-  const [asrDraft, setAsrDraft] = useState<AsrMode>('nemo')
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [formNotice, setFormNotice] = useState<string | null>(null)
-  const [entries, setEntries] = useState<LogEntry[]>([])
-  const [bridgeError, setBridgeError] = useState<string | null>(null)
-
-  const applySettings = useCallback((next: KestrelSettings): void => {
-    setHotkeyDraft(next.hotkey)
-    setAsrDraft(next.asrMode)
-  }, [])
-
-  const pushActivity = useCallback((activity: NotchActivity): void => {
-    setEntries((current) =>
-      [
-        {
-          id: activity.at + Math.random(),
-          at: activity.at,
-          tone: toneForPhase(activity.phase),
-          title: PHASE_TITLE[activity.phase],
-          text: activityText(activity)
-        },
-        ...current
-      ].slice(0, MAX_LOG_ENTRIES)
-    )
-  }, [])
-
-  useEffect(() => {
-    const api = window.kestrel
-    if (!api) {
-      setBridgeError('The preload bridge is missing. Restart Kestrel from the desktop app.')
-      return
-    }
-
-    let cancelled = false
-    const offState = api.onState((state) => setRuntime(state))
-    const offSettings = api.onSettingsChanged(applySettings)
-    const offActivity = api.onNotchActivity(pushActivity)
-
-    void api
-      .getState()
-      .then((state) => {
-        if (cancelled) return
-        setRuntime(state)
-        applySettings(state.settings)
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setFormError(error instanceof Error ? error.message : 'Could not read app state.')
-        }
-      })
-
-    return () => {
-      cancelled = true
-      offState()
-      offSettings()
-      offActivity()
-    }
-  }, [applySettings, pushActivity])
-
-  const handleSave = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    setSaving(true)
-    setFormError(null)
-    setFormNotice(null)
-
-    try {
-      const result = await window.kestrel.saveSettings({
-        hotkey: hotkeyDraft.trim(),
-        asrMode: asrDraft
-      })
-      setRuntime(result.state)
-      applySettings(result.settings)
-      setFormNotice(
-        result.state.hotkeyRegistered && result.state.hookRunning
-          ? `Saved. ${displayHotkey(result.settings.hotkey)} is ready.`
-          : 'Saved, but the shortcut still needs attention.'
-      )
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Could not save settings.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleRetry = async (): Promise<void> => {
-    setFormError(null)
-    setFormNotice(null)
-    try {
-      const next = await window.kestrel.retryHotkey()
-      setRuntime(next)
-      const problem = next.hotkeyError ?? next.hookError
-      if (problem) {
-        setFormError(problem)
-      } else {
-        setFormNotice('Shortcut re-armed.')
-      }
-    } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Could not retry the shortcut.')
-    }
-  }
-
-  const ready = Boolean(
-    runtime?.hotkeyRegistered && runtime.hookRunning && runtime.asrReady
+  const greeting = getGreeting(new Date().getHours())
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard')
+  const [historySessions, setHistorySessions] = useState<HistorySession[]>(
+    DUMMY_HISTORY_SESSIONS
   )
-  const partial = Boolean(runtime?.hotkeyRegistered && runtime.hookRunning && !runtime.asrReady)
-  const broken = Boolean(runtime && (!runtime.hotkeyRegistered || !runtime.hookRunning))
-  const keys = runtime?.hotkeyLabel ?? ['Ctrl', 'Space']
-  const cardClass = ready ? 'is-armed' : broken ? 'is-error' : partial ? 'is-warning' : ''
-  const statusLabel = broken
-    ? 'Shortcut needs attention'
-    : partial
-      ? 'Speech engine unavailable'
-      : ready
-        ? 'Ready for push-to-talk'
-        : 'Starting…'
 
-  const problemText = [runtime?.hotkeyError, runtime?.hookError, runtime?.asrError]
-    .filter((value): value is string => Boolean(value && value.trim()))
-    .join(' ')
+  const handleDeleteHistorySession = (id: string): void => {
+    setHistorySessions((sessions) =>
+      sessions.filter((session) => session.id !== id)
+    )
+  }
 
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            K
-          </span>
-          <span className="brand-name">Kestrel</span>
-        </div>
-        <span className="spike-badge">notch · local voice</span>
-      </header>
+    <div className="dashboard-root">
+      <div className="top-drag-strip" aria-hidden="true" />
 
-      <section className="hero">
-        <h1>Hold to talk. Release to act.</h1>
-        <p>
-          Hold {displayHotkey(keys.join('+'))} and speak. A notch appears at the top of the
-          screen with a live transcript; releasing sends the final words to Kestrel. Taps under
-          0.3 seconds are ignored, and Esc cancels. The notch never takes focus.
-        </p>
-      </section>
+      <div className="stoplight-controls">
+        {STOPLIGHTS.map(({ action, ariaLabel, color }) => (
+          <button
+            key={action}
+            type="button"
+            className="stoplight-btn"
+            style={{ backgroundColor: color }}
+            onClick={() => runWindowAction(action)}
+            aria-label={ariaLabel}
+          >
+            <StoplightGlyph action={action} />
+          </button>
+        ))}
+      </div>
 
-      <section className={`hotkey-card ${cardClass}`}>
-        <div className="card-head">
-          <div className="status" role="status" aria-live="polite">
-            <span className={`status-dot ${ready ? 'is-live' : ''}`} />
-            <span>{statusLabel}</span>
+      <aside className="sidebar">
+        <div className="sidebar-logo">
+          <div className="sidebar-logo-row">
+            <img src={wordmark} alt="VoiceOS" className="sidebar-wordmark" />
+            <span className="pro-badge">PRO</span>
           </div>
-          <span className="count">
-            {runtime?.triggerCount
-              ? `${runtime.triggerCount} ${runtime.triggerCount === 1 ? 'turn' : 'turns'}`
-              : 'No turns yet'}
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Primary">
+          {NAV_ITEMS.map(({ id, label, icon }) => {
+            const isActive = activeTab === id
+
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`nav-item${
+                  isActive
+                    ? ' liquid-glass-sidebar-tab liquid-glass-sidebar-tab--no-shimmer liquid-glass-sidebar-tab--cursor-shine liquid-glass-sidebar-tab--dark liquid-glass-sidebar-tab--cursor-shine--dark'
+                    : ''
+                }`}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setActiveTab(id)}
+                onMouseMove={trackShine}
+              >
+                <span className="nav-icon" aria-hidden="true">
+                  {icon}
+                </span>
+                <span className="nav-label">{label}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        <button
+          type="button"
+          className="sidebar-discord liquid-glass-sidebar-tab liquid-glass-sidebar-tab--no-shimmer liquid-glass-sidebar-tab--cursor-shine liquid-glass-sidebar-tab--dark liquid-glass-sidebar-tab--cursor-shine--dark"
+          onMouseMove={trackShine}
+        >
+          <span className="sidebar-discord-inner">
+            <DiscordIcon className="discord-icon" />
+            <span>Join our Discord community</span>
           </span>
-        </div>
+        </button>
 
-        <div className="keys" aria-label={`Push-to-talk shortcut: ${keys.join(' plus ')}`}>
-          {keys.map((key) => (
-            <kbd key={key}>{key}</kbd>
-          ))}
-        </div>
+        <button type="button" className="sidebar-account">
+          <span className="avatar" aria-hidden="true">
+            <AvatarIcon className="avatar-icon" />
+            <img src={lensOverlay} alt="" className="avatar-lens" />
+          </span>
+          <span className="account-name">Faiz</span>
+          <ChevronDownIcon className="account-chevron" />
+        </button>
+      </aside>
 
-        {broken || problemText ? (
-          <div className="error-row">
-            <p className={`card-note ${broken ? '' : 'is-warning'}`}>
-              {problemText ||
-                'Windows did not reserve the shortcut. Choose another one below.'}
-            </p>
-            <button className="button button-small" type="button" onClick={handleRetry}>
-              Retry
-            </button>
+      <main className="dashboard-main">
+        {activeTab === 'dashboard' && (
+          <div className="dashboard-content">
+            <div className="greeting">
+            <div className="orb" role="img" aria-label="VoiceOS orb">
+              <div
+                className="cloud-viewport orb-cloud"
+                style={{ backgroundImage: `url(${cloudsBlue})` }}
+              />
+              <img src={lensOverlay} alt="" className="orb-lens" />
+            </div>
+            <h1>
+              {greeting}, Faiz
+            </h1>
           </div>
-        ) : (
-          <p className="card-note">
-            The shortcut is reserved globally while Kestrel runs, so the focused app never sees
-            it. Releasing runs the command; a short tap does nothing.
-          </p>
+
+          <div className="quick-start-grid">
+            <section className="card quick-card">
+              <h4 className="quick-title">
+                <MicIcon className="quick-title-icon" />
+                Dictation Mode
+              </h4>
+              <div className="quick-meta">
+                <span>Hold</span>
+                <span className="key-group">
+                  <kbd className="keycap">control (left)</kbd>
+                  <span className="key-plus">+</span>
+                  <kbd className="keycap">shift (left)</kbd>
+                </span>
+                <span>in any text field</span>
+              </div>
+            </section>
+
+            <section className="card quick-card">
+              <h4 className="quick-title">
+                <AISparkleIcon className="quick-title-icon" />
+                Agent Mode
+              </h4>
+              <div className="quick-meta">
+                <span>Hold</span>
+                <span className="key-group">
+                  <kbd className="keycap">alt</kbd>
+                  <kbd className="keycap">control</kbd>
+                </span>
+                <span>to ask</span>
+              </div>
+            </section>
+          </div>
+
+          <section className="share-section">
+            <h3 className="share-heading">Share the love</h3>
+            <div className="card share-card">
+              <div className="share-row">
+                <div className="share-left">
+                  <div className="liquid-glass-badge liquid-glass-badge--dark">
+                    <span className="liquid-glass-badge__icon">
+                      <GiftIcon className="badge-icon" />
+                    </span>
+                  </div>
+                  <div className="share-copy">
+                    <h4>Refer a friend</h4>
+                    <p>Give a free month, get one when they subscribe.</p>
+                  </div>
+                </div>
+                <button type="button" className="ghost-button">
+                  Invite friends
+                </button>
+              </div>
+
+              <div className="share-divider" />
+
+              <div className="share-row">
+                <div className="share-left">
+                  <div className="liquid-glass-badge liquid-glass-badge--dark">
+                    <span className="liquid-glass-badge__icon">
+                      <CircleDollarSignIcon className="badge-icon" />
+                    </span>
+                  </div>
+                  <div className="share-copy">
+                    <h4>Affiliate Program</h4>
+                    <p>Earn 25% commission for a full year on everyone you refer.</p>
+                  </div>
+                </div>
+                <button type="button" className="ghost-button">
+                  Learn more
+                  <ExternalLinkIcon className="ghost-button-icon" />
+                </button>
+              </div>
+            </div>
+          </section>
+          </div>
         )}
 
-        <div className="card-foot">
-          <span className={`focus-live ${runtime?.windowFocused ? 'is-focused' : ''}`}>
-            <span className="mini-dot" />
-            {runtime?.windowFocused ? 'This window is focused' : 'This window is hidden or behind'}
-          </span>
-          <span className={runtime?.asrReady ? 'result-ok' : 'result-fail'}>
-            {runtime?.asrMode === 'fake'
-              ? 'Fake ASR · test mode'
-              : runtime?.asrReady
-                ? 'NVIDIA Nemotron · local'
-                : runtime?.asrError
-                  ? 'ASR offline'
-                  : 'Starting NVIDIA Nemotron…'}
-          </span>
-        </div>
-      </section>
-
-      <section className="settings-card">
-        <div className="card-head">
-          <span className="section-label">Settings</span>
-          <span className="local-tag">saved on this PC</span>
-        </div>
-
-        <form className="settings-form" onSubmit={handleSave}>
-          <label className="settings-field" htmlFor="hotkey-input">
-            <span>Shortcut</span>
-            <input
-              id="hotkey-input"
-              className="settings-input"
-              type="text"
-              value={hotkeyDraft}
-              onChange={(event) => setHotkeyDraft(event.target.value)}
-              placeholder="Control+Space"
-              spellCheck={false}
-              autoComplete="off"
+        {activeTab === 'history' && (
+          <div className="dashboard-content">
+            <HistoryPage
+              sessions={historySessions}
+              onDeleteSession={handleDeleteHistorySession}
             />
-          </label>
-
-          <label className="settings-field" htmlFor="asr-select">
-            <span>Speech engine</span>
-            <select
-              id="asr-select"
-              className="settings-input settings-select"
-              value={asrDraft}
-              onChange={(event) => setAsrDraft(event.target.value as AsrMode)}
-            >
-              <option value="nemo">NVIDIA Nemotron · local &amp; free</option>
-              <option value="fake">Fake transcript · smoke tests</option>
-            </select>
-          </label>
-
-          <div className="settings-actions">
-            <button className="button button-save" type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save settings'}
-            </button>
-            <span className="settings-note">
-              Use a modifier plus a key, e.g. Control+Space or Alt+F8. If Windows refuses it,
-              pick another.
-            </span>
           </div>
-        </form>
-
-        {formError && <p className="form-error">{formError}</p>}
-        {formNotice && <p className="form-notice">{formNotice}</p>}
-      </section>
-
-      <section className="log-card">
-        <div className="log-head">
-          <span className="section-label">Notch activity</span>
-          <span className="local-tag">audio never stored</span>
-        </div>
-        <ol className="log-list" aria-live="polite">
-          {entries.length === 0 ? (
-            <li className="empty">Hold the shortcut and speak to see a turn here.</li>
-          ) : (
-            entries.map((entry) => (
-              <li key={entry.id} className={`log-entry is-${entry.tone}`}>
-                <span className="log-time">{formatTime(entry.at)}</span>
-                <span className="log-mark" aria-hidden="true">
-                  {entry.tone === 'success' ? '✓' : entry.tone === 'error' ? '✕' : '•'}
-                </span>
-                <span className="log-text">
-                  <strong className="log-title">{entry.title}</strong> {entry.text}
-                </span>
-              </li>
-            ))
-          )}
-        </ol>
-      </section>
-
-      <footer className="footer">
-        <p>
-          Backend {runtime?.apiUrl ?? '—'} · v{runtime?.appVersion ?? '0.1.0'}
-          {bridgeError ? ` · ${bridgeError}` : ''}
-        </p>
-        <div className="actions">
-          <button className="button" type="button" onClick={() => window.kestrel.hideWindow()}>
-            Hide to tray
-          </button>
-          <button
-            className="button button-ghost"
-            type="button"
-            onClick={() => window.kestrel.quitApp()}
-          >
-            Quit
-          </button>
-        </div>
-      </footer>
-    </main>
+        )}
+      </main>
+    </div>
   )
 }

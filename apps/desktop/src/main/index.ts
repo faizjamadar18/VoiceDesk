@@ -195,13 +195,14 @@ function updateTray(): void {
 
 function createMainWindow(): void {
   const win = new BrowserWindow({
-    width: 640,
-    height: 860,
-    minWidth: 560,
-    minHeight: 720,
+    width: 1280,
+    height: 800,
+    minWidth: 960,
+    minHeight: 620,
     show: false,
     title: 'Kestrel',
-    backgroundColor: '#0b0f14',
+    frame: false,
+    backgroundColor: '#16171a',
     icon: resourcePath('icon.png'),
     autoHideMenuBar: true,
     webPreferences: {
@@ -444,6 +445,21 @@ function registerIpc(): void {
     isQuitting = true
     app.quit()
   })
+  ipcMain.on(IPC.windowMinimize, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+  })
+  ipcMain.on(IPC.windowMaximizeToggle, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    if (win.isMaximized()) {
+      win.unmaximize()
+    } else {
+      win.maximize()
+    }
+  })
+  ipcMain.on(IPC.windowClose, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
+  })
 
   ipcMain.on(IPC.notchReady, () => {
     notchPresenter?.handleReady()
@@ -545,7 +561,6 @@ async function initialize(): Promise<void> {
     process.env.KESTREL_SETTINGS_PATH?.trim() ||
     join(app.getPath('userData'), 'kestrel-settings.json')
   settingsStore = new SettingsStore(settingsPath)
-  const firstRun = !settingsStore.exists()
   settings = settingsStore.load()
 
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -576,10 +591,7 @@ async function initialize(): Promise<void> {
 
   updateTray()
   broadcastState()
-
-  if (firstRun || !registered || keyHook === null) {
-    showMainWindow()
-  }
+  showMainWindow()
 
   app.on('activate', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {

@@ -20,6 +20,9 @@ export const IPC = {
   retryHotkey: 'kestrel:retry-hotkey',
   hideWindow: 'kestrel:hide-window',
   quit: 'kestrel:quit',
+  windowMinimize: 'kestrel:window-minimize',
+  windowMaximizeToggle: 'kestrel:window-maximize-toggle',
+  windowClose: 'kestrel:window-close',
   state: 'kestrel:state',
   summon: 'kestrel:summon',
   summonResult: 'kestrel:summon-result',
@@ -287,6 +290,9 @@ export interface KestrelApi {
   saveSettings: (settings: Partial<KestrelSettings>) => Promise<SaveSettingsResult>
   hideWindow: () => void
   quitApp: () => void
+  minimizeWindow: () => void
+  toggleMaximizeWindow: () => void
+  closeWindow: () => void
   onState: (callback: (state: KestrelRuntimeState) => void) => () => void
   onSettingsChanged: (callback: (settings: KestrelSettings) => void) => () => void
   onNotchShow: (callback: () => void) => () => void
