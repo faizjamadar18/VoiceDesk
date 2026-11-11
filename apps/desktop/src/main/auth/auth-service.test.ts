@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   AuthService,
+  syncUserToBackend,
   type AuthStore,
   type AuthTokens,
   type AuthUser
@@ -161,6 +162,70 @@ describe('AuthService', () => {
       user,
       tokens
     })
+  })
+
+  it('dispatches userSyncCallback when authentication succeeds via setSession', async () => {
+    const store = new MemoryAuthStore()
+    const userSyncCallback = vi.fn()
+    const service = new AuthService({ store, userSyncCallback })
+
+    const user: AuthUser = { id: 'usr_sync_1', email: 'sync@example.com', name: 'Sync User' }
+    const tokens: AuthTokens = { accessToken: 'token-abc' }
+
+    await service.setSession(tokens, user)
+
+    expect(userSyncCallback).toHaveBeenCalledTimes(1)
+    expect(userSyncCallback).toHaveBeenCalledWith(user)
+  })
+
+  it('dispatches userSyncCallback when authentication succeeds via deep link', async () => {
+    const store = new MemoryAuthStore()
+    const userSyncCallback = vi.fn()
+    const dummyUser: AuthUser = {
+      id: 'usr_sync_2',
+      email: 'deep@example.com',
+      name: 'Deep User'
+    }
+    const tokenVerifier = vi.fn().mockResolvedValue(dummyUser)
+    const service = new AuthService({ store, tokenVerifier, userSyncCallback })
+
+    const callbackUrl =
+      'voicedesk://auth/callback#access_token=xyz987&refresh_token=ref123&expires_in=3600'
+    const success = await service.handleDeepLink(callbackUrl)
+
+    expect(success).toBe(true)
+    expect(userSyncCallback).toHaveBeenCalledTimes(1)
+    expect(userSyncCallback).toHaveBeenCalledWith(dummyUser)
+  })
+
+  it('syncUserToBackend sends a POST request with the user payload and returns true on success', async () => {
+    const user: AuthUser = {
+      id: 'usr_backend_1',
+      email: 'backend@example.com',
+      name: 'Backend User',
+      avatarUrl: 'https://example.com/pic.png'
+    }
+
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const result = await syncUserToBackend(user, 'http://test-server:3001')
+
+    expect(result).toBe(true)
+    expect(mockFetch).toHaveBeenCalledWith('http://test-server:3001/api/auth/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: 'usr_backend_1',
+        email: 'backend@example.com',
+        name: 'Backend User',
+        avatarUrl: 'https://example.com/pic.png'
+      })
+    })
+
+    vi.unstubAllGlobals()
   })
 })
 

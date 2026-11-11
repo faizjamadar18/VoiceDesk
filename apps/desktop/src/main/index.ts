@@ -28,7 +28,7 @@ import { HttpActionClient } from './action-client'
 import { loadEnvFiles } from './assistant/env'
 import { AssistantServer, parseApiAddress } from './assistant/server'
 import { AssistantService } from './assistant/service'
-import { AuthService } from './auth/auth-service'
+import { AuthService, syncUserToBackend } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
 import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
 import { normalizeInteractiveRegion } from './interactive-region'
@@ -644,6 +644,9 @@ async function initialize(): Promise<void> {
     store: new FileAuthStore(authStorePath),
     onStateChanged: (state: AuthState) => {
       sendToMain(IPC.authStateChanged, state)
+    },
+    userSyncCallback: (user) => {
+      void syncUserToBackend(user)
     }
   })
 

@@ -9,6 +9,17 @@
     "name": "WakoAI Inc.",
     "url": "https://wako.ai"
   },
+  "scripts": {
+    "dev:api": "npm --prefix apps/api run dev",
+    "dev:desktop": "npm --prefix apps/desktop run dev",
+    "start:api": "npm --prefix apps/api start",
+    "build:api": "npm --prefix apps/api run build",
+    "build:desktop": "npm --prefix apps/desktop run build",
+    "test:api": "npm --prefix apps/api test",
+    "test:desktop": "npm --prefix apps/desktop test",
+    "typecheck:api": "npm --prefix apps/api run typecheck",
+    "typecheck:desktop": "npm --prefix apps/desktop run typecheck"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",

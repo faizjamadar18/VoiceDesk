@@ -28,6 +28,7 @@ export interface AuthServiceOptions {
   store?: AuthStore
   onStateChanged?: (state: AuthState) => void
   tokenVerifier?: (tokens: AuthTokens) => Promise<AuthUser>
+  userSyncCallback?: (user: AuthUser) => Promise<void> | void
 }
 
 /**
@@ -79,11 +80,13 @@ export class AuthService {
   private readonly store?: AuthStore
   private readonly onStateChanged?: (state: AuthState) => void
   private readonly tokenVerifier?: (tokens: AuthTokens) => Promise<AuthUser>
+  private readonly userSyncCallback?: (user: AuthUser) => Promise<void> | void
 
   constructor(options: AuthServiceOptions = {}) {
     this.store = options.store
     this.onStateChanged = options.onStateChanged
     this.tokenVerifier = options.tokenVerifier
+    this.userSyncCallback = options.userSyncCallback
 
     if (this.store) {
       const stored = this.store.load()
@@ -179,6 +182,14 @@ export class AuthService {
       await this.store.save({ tokens, user })
     }
     this.setState(nextState)
+
+    if (this.userSyncCallback) {
+      try {
+        await this.userSyncCallback(user)
+      } catch (error) {
+        console.error('Failed to sync authenticated user:', error)
+      }
+    }
   }
 
   async signOut(): Promise<void> {
@@ -186,6 +197,30 @@ export class AuthService {
       await this.store.clear()
     }
     this.setState({ status: 'unauthenticated' })
+  }
+}
+
+export async function syncUserToBackend(
+  user: AuthUser,
+  apiBaseUrl: string = process.env.API_BASE_URL || 'http://localhost:3001'
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/auth/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl
+      })
+    })
+    return response.ok
+  } catch (error) {
+    console.error('Failed to sync user to backend:', error)
+    return false
   }
 }
 
