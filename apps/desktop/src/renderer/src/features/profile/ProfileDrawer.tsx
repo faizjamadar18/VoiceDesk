@@ -69,7 +69,7 @@ export function ProfileDrawer({
     >
       <div className="profile-drawer-user-row">
         <span className="profile-drawer-avatar" aria-hidden="true">
-          <span className="profile-drawer-avatar-text">{userName.charAt(0) || 'F'}</span>
+          <span className="profile-drawer-avatar-text">{(userName || 'User').charAt(0).toUpperCase()}</span>
           <img src={lensOverlay} alt="" className="profile-drawer-avatar-lens" />
         </span>
         <span

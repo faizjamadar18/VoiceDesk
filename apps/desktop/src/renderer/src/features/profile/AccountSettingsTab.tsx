@@ -14,18 +14,24 @@ export interface AccountSettingsTabProps {
   isDarkMode?: boolean
   onClose?: () => void
   userEmail?: string
+  userName?: string
+  onSignOut?: () => void
 }
 
 export function AccountSettingsTab({
   isDarkMode = true,
   onClose,
-  userEmail = 'faizj18.work@gmail.com'
+  userEmail = 'faizj18.work@gmail.com',
+  userName = 'Faiz .',
+  onSignOut
 }: AccountSettingsTabProps): JSX.Element {
-  const [firstName, setFirstName] = useState('Faiz')
-  const [lastName, setLastName] = useState('.')
+  const initialFirst = userName.split(' ')[0] || 'Faiz'
+  const initialLast = userName.split(' ').slice(1).join(' ') || ''
+  const [firstName, setFirstName] = useState(initialFirst)
+  const [lastName, setLastName] = useState(initialLast)
   const [isEditingName, setIsEditingName] = useState(false)
-  const [editFirstName, setEditFirstName] = useState('Faiz')
-  const [editLastName, setEditLastName] = useState('.')
+  const [editFirstName, setEditFirstName] = useState(initialFirst)
+  const [editLastName, setEditLastName] = useState(initialLast)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<string | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -213,7 +219,10 @@ export function AccountSettingsTab({
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              onSignOut?.()
+              onClose?.()
+            }}
             className="voiceos-account-signout-btn"
           >
             <LogOutIcon size={14} />

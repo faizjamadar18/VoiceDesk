@@ -9,7 +9,10 @@ import {
   type NotchOpenResult,
   type NotchStartPayload,
   type NotchStatePayload,
-  type SaveSettingsResult
+  type SaveSettingsResult,
+  type AuthState,
+  type AuthTokens,
+  type AuthUser
 } from '../shared/types'
 
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
@@ -59,7 +62,13 @@ const api: KestrelApi = {
     ipcRenderer.invoke(IPC.openNotchResult, id) as Promise<NotchOpenResult>,
   dismissNotchResult: () => ipcRenderer.send(IPC.dismissNotchResult),
   decideNotch: (action) => ipcRenderer.send(IPC.notchDecide, action),
-  setNotchRegion: (region) => ipcRenderer.send(IPC.notchRegion, region)
+  setNotchRegion: (region) => ipcRenderer.send(IPC.notchRegion, region),
+  getAuthState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
+  onAuthStateChanged: (callback) => subscribe<AuthState>(IPC.authStateChanged, callback),
+  signOut: () => ipcRenderer.invoke(IPC.authSignOut) as Promise<void>,
+  openOAuthUrl: (url) => ipcRenderer.invoke(IPC.authOpenOAuthUrl, url) as Promise<void>,
+  setAuthSession: (tokens: AuthTokens, user: AuthUser) =>
+    ipcRenderer.invoke(IPC.authSetSession, tokens, user) as Promise<void>
 }
 
 contextBridge.exposeInMainWorld('kestrel', api)

@@ -8,6 +8,7 @@ import {
   getPresetsForContext,
   getPreviewText
 } from './dummy-data'
+import { getGlassCardStyle } from './PolishingSection'
 
 describe('Dictation Configuration & Dummy Data', () => {
   it('defines the three core polishing levels with matching metadata', () => {
@@ -21,6 +22,36 @@ describe('Dictation Configuration & Dummy Data', () => {
 
     const lightOption = POLISH_OPTIONS.find((o) => o.id === 'light')
     expect(lightOption?.example).toContain('meeting got moved to Friday')
+    expect(lightOption?.annotated).toBe(
+      '~~Um~~ ==So== the meeting got moved to ~~thursday no wait~~ ==Friday,== ~~so~~ so we should ~~uh~~ prep the deck before that.'
+    )
+
+    const polishedOption = POLISH_OPTIONS.find((o) => o.id === 'polished')
+    expect(polishedOption?.annotated).toBe(
+      '~~Um so~~ ==The== meeting got moved to ~~thursday no wait~~ ==Friday,== ~~so~~ so we should ~~uh~~ prep the deck ~~before that~~ ==beforehand==.'
+    )
+  })
+
+  it('computes exact glassCardStyle matching VoiceOS in dark and light modes', () => {
+    const unselectedDark = getGlassCardStyle(false, true)
+    expect(unselectedDark.background).toBe('var(--dark-preview-background, #1b1c1f)')
+    expect(unselectedDark.border).toBe('2px solid transparent')
+    expect(unselectedDark.boxShadow).toBe('0 2px 8px rgba(0, 0, 0, 0.22)')
+
+    const selectedDark = getGlassCardStyle(true, true)
+    expect(selectedDark.border).toBe('2px solid var(--dark-border-selected, rgba(223, 226, 232, 0.18))')
+    expect(selectedDark.boxShadow).toBe('0 3px 10px rgba(0, 0, 0, 0.24)')
+
+    const unselectedLight = getGlassCardStyle(false, false)
+    expect(unselectedLight.background).toBe(
+      'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))'
+    )
+    expect(unselectedLight.border).toBe('2px solid transparent')
+    expect(unselectedLight.boxShadow).toBe('0 1px 3px rgba(0, 0, 0, 0.055)')
+
+    const selectedLight = getGlassCardStyle(true, false)
+    expect(selectedLight.border).toBe('2px solid rgba(100, 116, 139, 0.14)')
+    expect(selectedLight.boxShadow).toBe('0 2px 8px rgba(0, 0, 0, 0.06)')
   })
 
   it('defines four writing destinations matching VoiceOS specification', () => {

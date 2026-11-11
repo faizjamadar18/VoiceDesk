@@ -14,6 +14,7 @@ import type { AgentActionGlyph, AgentActionId, AgentActionItem } from './types'
 export interface ActionsSectionProps {
   actions: AgentActionItem[]
   onToggleAction: (actionId: AgentActionId, enabled: boolean) => void
+  onSelectAction?: (actionId: AgentActionId) => void
 }
 
 function renderActionGlyph(glyph: AgentActionGlyph): JSX.Element {
@@ -35,7 +36,8 @@ function renderActionGlyph(glyph: AgentActionGlyph): JSX.Element {
 
 export function ActionsSection({
   actions,
-  onToggleAction
+  onToggleAction,
+  onSelectAction
 }: ActionsSectionProps): JSX.Element {
   return (
     <section className="agent-card agent-actions-card" aria-labelledby="actions-heading">
@@ -55,7 +57,19 @@ export function ActionsSection({
 
       <div className="agent-actions-grid">
         {actions.map((action) => (
-          <div key={action.id} className="agent-action-item">
+          <div
+            key={action.id}
+            className="agent-action-item cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-white/20"
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelectAction?.(action.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onSelectAction?.(action.id)
+              }
+            }}
+          >
             <div className="agent-action-left">
               <div className="agent-action-tile" aria-hidden="true">
                 {renderActionGlyph(action.glyph)}
@@ -67,13 +81,19 @@ export function ActionsSection({
               </div>
             </div>
 
-            <AppleSwitch
-              checked={action.enabled}
-              disabled={!action.available}
-              label={action.title}
-              variant="green"
-              onToggle={() => onToggleAction(action.id, !action.enabled)}
-            />
+            <div
+              className="shrink-0"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <AppleSwitch
+                checked={action.enabled}
+                disabled={!action.available}
+                label={action.title}
+                variant="green"
+                onToggle={() => onToggleAction(action.id, !action.enabled)}
+              />
+            </div>
           </div>
         ))}
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { JSX, MouseEvent } from 'react'
 import wordmark from './assets/voiceos-wordmark.png'
 import cloudsBlue from './voiceos-notch/assets/cloudsBlue.png'
@@ -18,7 +18,6 @@ import { ChevronUpIcon } from './features/profile/icons'
 import type { SettingsTabId } from './features/profile/types'
 import {
   AISparkleIcon,
-  AvatarIcon,
   BlocksIcon,
   ChevronDownIcon,
   CircleDollarSignIcon,
@@ -29,6 +28,9 @@ import {
   MicIcon
 } from './components/dashboard-icons'
 import { ThemeProvider, useSystemTheme } from './context/ThemeContext'
+import { LoginPage } from './features/auth/LoginPage'
+import { useAuth } from './features/auth/useAuth'
+import { OnboardingFlow } from './features/onboarding/OnboardingFlow'
 
 type WindowAction = 'minimize' | 'maximize' | 'close'
 type TabId = 'dashboard' | 'history' | 'dictation' | 'agent' | 'apps'
@@ -109,6 +111,9 @@ function StoplightGlyph({ action }: { action: WindowAction }): JSX.Element {
 }
 
 function DashboardApp(): JSX.Element {
+  const { user, signOut } = useAuth()
+  const userName = user?.name || user?.email?.split('@')[0] || 'Faiz'
+  const userEmail = user?.email || 'faiz@voiceos.com'
   const { isDarkMode, systemTheme } = useSystemTheme()
   const greeting = getGreeting(new Date().getHours())
   const [activeTab, setActiveTab] = useState<TabId>('dashboard')
@@ -195,7 +200,7 @@ function DashboardApp(): JSX.Element {
             onOpenHelpCenter={() => {
               setIsHelpCenterOpen(true)
             }}
-            userName="Faiz"
+            userName={userName}
           />
           <button
             type="button"
@@ -210,9 +215,9 @@ function DashboardApp(): JSX.Element {
                 : undefined
             }}
           >
-            <span className="avatar" aria-hidden="true">
-              <AvatarIcon className="avatar-icon" />
-              <img src={lensOverlay} alt="" className="avatar-lens" />
+            <span className="profile-drawer-avatar" aria-hidden="true">
+              <span className="profile-drawer-avatar-text">{(userName || 'User').charAt(0).toUpperCase()}</span>
+              <img src={lensOverlay} alt="" className="profile-drawer-avatar-lens" />
             </span>
             <span
               className="account-name"
@@ -226,7 +231,7 @@ function DashboardApp(): JSX.Element {
                     : 'rgba(0, 0, 0, 0.6)'
               }}
             >
-              Faiz
+              {userName}
             </span>
             {isProfileMenuOpen ? (
               <ChevronUpIcon
@@ -278,7 +283,7 @@ function DashboardApp(): JSX.Element {
                         />
                         <img src={lensOverlay} alt="" className="orb-lens" />
                       </div>
-                      <h1>{greeting}, Faiz</h1>
+                      <h1>{greeting}, {userName}</h1>
                     </div>
 
                     <div className="quick-start-grid">
@@ -453,6 +458,9 @@ function DashboardApp(): JSX.Element {
       <SettingsModal
         isOpen={isSettingsOpen}
         defaultTab={settingsDefaultTab}
+        userEmail={userEmail}
+        userName={userName}
+        onSignOut={signOut}
         onClose={() => setIsSettingsOpen(false)}
       />
 
@@ -465,10 +473,53 @@ function DashboardApp(): JSX.Element {
   )
 }
 
+function AuthenticatedRouter(): JSX.Element {
+  const { isAuthenticated, isLoading, user } = useAuth()
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('onboarding_completed') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    if (user?.id) {
+      try {
+        const userSpecific = localStorage.getItem(`onboarding_completed_${user.id}`) === 'true'
+        const globalCompleted = localStorage.getItem('onboarding_completed') === 'true'
+        if (userSpecific || globalCompleted) {
+          setIsOnboardingCompleted(true)
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [user?.id])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen w-screen bg-[#16171a] text-white">
+        <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
+  if (!isOnboardingCompleted) {
+    return <OnboardingFlow onComplete={() => setIsOnboardingCompleted(true)} />
+  }
+
+  return <DashboardApp />
+}
+
 export default function App(): JSX.Element {
   return (
     <ThemeProvider>
-      <DashboardApp />
+      <AuthenticatedRouter />
     </ThemeProvider>
   )
 }

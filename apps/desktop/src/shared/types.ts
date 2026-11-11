@@ -53,7 +53,12 @@ export const IPC = {
   openNotchResult: 'kestrel:open-notch-result',
   dismissNotchResult: 'kestrel:dismiss-notch-result',
   notchRegion: 'kestrel:notch-region',
-  notchDecide: 'kestrel:notch-decide'
+  notchDecide: 'kestrel:notch-decide',
+  authGetState: 'kestrel:auth-get-state',
+  authSignOut: 'kestrel:auth-sign-out',
+  authOpenOAuthUrl: 'kestrel:auth-open-oauth-url',
+  authSetSession: 'kestrel:auth-set-session',
+  authStateChanged: 'kestrel:auth-state-changed'
 } as const
 
 /** Dedicated channels for the transparent screen overlay renderer. */
@@ -283,6 +288,26 @@ export interface ScreenAskInput {
   marked: boolean
 }
 
+export interface AuthTokens {
+  accessToken: string
+  refreshToken?: string
+  expiresIn?: number
+  tokenType?: string
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  name?: string
+  avatarUrl?: string
+}
+
+export type AuthState =
+  | { status: 'unauthenticated' }
+  | { status: 'authenticating'; startedAt: number }
+  | { status: 'authenticated'; user: AuthUser; tokens: AuthTokens }
+  | { status: 'error'; message: string }
+
 export interface KestrelApi {
   getState: () => Promise<KestrelRuntimeState>
   retryHotkey: () => Promise<KestrelRuntimeState>
@@ -312,4 +337,9 @@ export interface KestrelApi {
   dismissNotchResult: () => void
   decideNotch: (action: NotchDecisionAction) => void
   setNotchRegion: (region: NotchInteractiveRegion | null) => void
+  getAuthState: () => Promise<AuthState>
+  onAuthStateChanged: (callback: (state: AuthState) => void) => () => void
+  signOut: () => Promise<void>
+  openOAuthUrl: (url: string) => Promise<void>
+  setAuthSession: (tokens: AuthTokens, user: AuthUser) => Promise<void>
 }

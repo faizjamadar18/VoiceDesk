@@ -1,0 +1,400 @@
+/* Exact VoiceOS Onboarding & Login Styles */
+
+.voiceos-login-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+}
+
+/* Draggable window titlebar area */
+.login-drag-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  -webkit-app-region: drag;
+  z-index: 30;
+  pointer-events: auto;
+}
+
+/* Stoplight Window Controls (top-right) */
+.login-stoplights {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 40;
+  -webkit-app-region: no-drag;
+}
+
+.login-stoplight-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+
+.login-stoplight-btn:hover {
+  opacity: 0.85;
+}
+
+.login-stoplight-btn svg {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.login-stoplights:hover .login-stoplight-btn svg {
+  opacity: 1;
+}
+
+/* Two-column layout container */
+.login-container {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  max-width: 1320px;
+  height: 100%;
+  margin: 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 40px;
+}
+
+/* Left Column: Sign-in Card */
+.login-left-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 32px;
+  max-width: 500px;
+}
+
+.login-form-wrapper {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Logo */
+.login-logo {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  margin-bottom: 24px;
+}
+
+/* Heading and Subtitle */
+.login-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 6px 0;
+  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0 0 28px 0;
+  text-align: center;
+}
+
+/* Input */
+.login-input-group {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.login-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+  color: #111827;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.login-input::placeholder {
+  color: #9ca3af;
+}
+
+.login-input:focus {
+  background-color: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Primary Email Button */
+.login-btn-email {
+  width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.login-btn-email.disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  cursor: not-allowed;
+}
+
+.login-btn-email.active {
+  background-color: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.login-btn-email.active:hover {
+  background-color: #1f2937;
+}
+
+/* Or continue with divider */
+.login-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin: 18px 0;
+}
+
+.login-divider-line {
+  flex: 1;
+  height: 1px;
+  background-color: #e5e7eb;
+}
+
+.login-divider-text {
+  padding: 0 14px;
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* Google OAuth Button */
+.login-btn-google {
+  width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  margin-bottom: 24px;
+}
+
+.login-btn-google:hover {
+  background-color: #f9fafb;
+  border-color: #d1d5db;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.login-btn-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Terms and Privacy */
+.login-terms {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #6b7280;
+  text-align: center;
+  margin: 0 0 16px 0;
+}
+
+.login-terms a {
+  color: #111827;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.login-terms a:hover {
+  text-decoration: underline;
+}
+
+/* Footer mode switch */
+.login-mode-switch {
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+}
+
+.login-mode-switch button {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.login-mode-switch button:hover {
+  text-decoration: underline;
+}
+
+/* Right Column: Visual Backdrop */
+.login-right-col {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.login-sphere-container {
+  position: relative;
+  width: 440px;
+  height: 440px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Circular Sky Sphere */
+.login-sky-sphere {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.72),
+    inset 0 16px 32px rgba(255, 255, 255, 0.24),
+    inset 0 -12px 30px rgba(15, 65, 130, 0.16),
+    0 16px 36px rgba(30, 80, 145, 0.18);
+}
+
+.login-sky-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse 72% 42% at 32% 12%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 46%, transparent 72%);
+}
+
+/* Floating Mockup Window & Pill */
+.login-floating-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-top: 4%;
+}
+
+.login-mock-window {
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out, background-color 0.3s ease-out;
+}
+
+.login-mock-titlebar {
+  display: flex;
+  gap: 5px;
+  padding: 8px 10px;
+}
+
+.login-mock-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* Floating Voice Pill */
+.login-voice-pill-wrap {
+  margin-top: 14px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-voice-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background-color: #151516;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  height: 32px;
+  padding: 0 10px;
+  gap: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.login-voice-pill-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
+/* Ambient bottom blue gradient */
+.login-bottom-glow {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 140px;
+  pointer-events: none;
+  z-index: 5;
+  background: linear-gradient(to top, rgba(12, 140, 233, 0.16), rgba(12, 140, 233, 0.05) 50%, transparent);
+}
+

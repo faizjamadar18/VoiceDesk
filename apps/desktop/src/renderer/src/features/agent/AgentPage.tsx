@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
 import { AboutYouSection } from './AboutYouSection'
+import { ActionDetailModal } from './ActionDetailModal'
 import { ActionsSection } from './ActionsSection'
 import { AgentVoiceSection } from './AgentVoiceSection'
 import { DEFAULT_AGENT_SETTINGS } from './dummy-data'
@@ -45,6 +46,12 @@ export function AgentPage({
     memories: initialSettings?.memories ?? DEFAULT_AGENT_SETTINGS.memories,
     actions: initialSettings?.actions ?? DEFAULT_AGENT_SETTINGS.actions
   })
+
+  const [selectedActionId, setSelectedActionId] = useState<AgentActionId | null>(null)
+
+  const selectedAction = selectedActionId
+    ? settings.actions.find((a) => a.id === selectedActionId) ?? null
+    : null
 
   const updateSettings = (updater: (prev: AgentSettings) => AgentSettings): void => {
     setSettings((prev) => {
@@ -189,6 +196,13 @@ export function AgentPage({
 
       <ActionsSection
         actions={settings.actions}
+        onToggleAction={handleToggleAction}
+        onSelectAction={setSelectedActionId}
+      />
+
+      <ActionDetailModal
+        action={selectedAction}
+        onClose={() => setSelectedActionId(null)}
         onToggleAction={handleToggleAction}
       />
     </div>

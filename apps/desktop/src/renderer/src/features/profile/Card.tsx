@@ -34,7 +34,7 @@ export function Card({
 
   return (
     <div
-      className={`voiceos-card ${className}`}
+      className={`voiceos-card squircle-card backdrop-blur-sm ${className}`}
       onClick={onClick}
       style={{
         background: isDarkMode

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from app.actions import ActionExecutor, WindowsActionExecutor
@@ -69,6 +70,76 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 JPEG_SIGNATURE = b"\xff\xd8\xff"
 SUPPORTED_PROVIDERS = frozenset({"fake", "groq"})
 DEFAULT_PROVIDER = "groq"
+
+CALLBACK_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Successful - VoiceDesk</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #ffffff 0%, #edf4fe 100%);
+      font-family: system-ui, -apple-system, sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    .content-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 480px;
+    }
+    h1 {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 32px;
+      font-weight: 600;
+      color: #111827;
+      margin: 0 0 12px 0;
+    }
+    p {
+      font-size: 15px;
+      color: #6b7280;
+      margin: 0 0 28px 0;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="content-container">
+    <h1>Login Successful</h1>
+    <p>You can now return to VoiceDesk and start using your voice as your keyboard</p>
+    <button onclick="openApp()" style="display: inline-flex; align-items: center; gap: 10px; background: #000000; color: #ffffff; padding: 12px 24px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M1 1h6v6H1V1zm8 0h6v6H9V1zm-8 8h6v6H1V9zm8 0h6v6H9V9z"/>
+      </svg>
+      <span>Open VoiceDesk</span>
+    </button>
+  </div>
+  <script>
+    function openApp() {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      const target = 'voicedesk://auth/callback' + hash + (search ? (hash ? '&' : '?') + search.slice(1) : '');
+      window.location.href = target;
+    }
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(openApp, 300);
+    });
+  </script>
+</body>
+</html>
+"""
 
 TranscriberFactory = Callable[[str], Transcriber]
 
@@ -204,6 +275,11 @@ def create_app(
             provider=provider,
             configured=_provider_configured(provider),
         )
+
+    @application.get("/callback", response_class=HTMLResponse)
+    @application.get("/auth/callback", response_class=HTMLResponse)
+    async def auth_callback() -> HTMLResponse:
+        return HTMLResponse(content=CALLBACK_HTML)
 
     @application.post("/transcribe", response_model=TranscriptionResponse)
     async def transcribe(request: Request) -> TranscriptionResponse:

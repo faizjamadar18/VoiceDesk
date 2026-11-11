@@ -15,6 +15,7 @@ export interface PolishOption {
   tag: string
   desc: string[]
   example: string
+  annotated?: string
 }
 
 export const POLISH_OPTIONS: PolishOption[] = [
@@ -24,23 +25,28 @@ export const POLISH_OPTIONS: PolishOption[] = [
     tag: 'Instant',
     desc: ['Keeps your original wording', 'Basic cleanup only'],
     example:
-      'Um so the meeting got moved to thursday no wait friday so so we should uh prep the deck before that'
+      'Um so the meeting got moved to thursday no wait friday so so we should uh prep the deck before that.',
+    annotated: ''
   },
   {
     id: 'light',
     label: 'Light',
     tag: 'Fast',
-    desc: ['Removes self-corrections', 'Keeps formatting.'],
+    desc: ['Removes self-corrections', 'Fixes formatting'],
     example:
-      'So the meeting got moved to Friday, so we should prep the deck before that'
+      'So the meeting got moved to Friday, so we should prep the deck before that.',
+    annotated:
+      '~~Um~~ ==So== the meeting got moved to ~~thursday no wait~~ ==Friday,== ~~so~~ so we should ~~uh~~ prep the deck before that.'
   },
   {
     id: 'polished',
     label: 'Polished',
     tag: 'Smart',
-    desc: ['Everything in Light.', 'Smooths phrasing for clarity.'],
+    desc: ['Everything in Light', 'Smooths phrasing for clarity'],
     example:
-      'The meeting got moved to Friday, so we should prep the deck beforehand.'
+      'The meeting got moved to Friday, so we should prep the deck beforehand.',
+    annotated:
+      '~~Um so~~ ==The== meeting got moved to ~~thursday no wait~~ ==Friday,== ~~so~~ so we should ~~uh~~ prep the deck ~~before that~~ ==beforehand==.'
   }
 ]
 

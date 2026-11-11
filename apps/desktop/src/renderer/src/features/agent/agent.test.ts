@@ -2,8 +2,11 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { AboutYouSection } from './AboutYouSection'
+import { ActionDetailModal } from './ActionDetailModal'
 import { ActionsSection } from './ActionsSection'
+import { AgentPage } from './AgentPage'
 import { AgentVoiceSection } from './AgentVoiceSection'
+import { NATIVE_ACTION_META, getActionMeta } from './action-detail-catalog'
 import {
   AGENT_SPEED_OPTIONS,
   AGENT_VOICE_OPTIONS,
@@ -361,5 +364,187 @@ describe('Agent Card Stacking Context & Section Classes', () => {
 
     expect(html).toContain('agent-card')
     expect(html).toContain('agent-actions-card')
+  })
+})
+
+describe('Agent Action Detail Metadata Catalog', () => {
+  it('defines exact metadata for all six native actions matching VoiceOS specification', () => {
+    const actionIds: AgentActionId[] = [
+      'insertText',
+      'createPrompt',
+      'editText',
+      'reminders',
+      'controlPlayback',
+      'openApp'
+    ]
+
+    for (const id of actionIds) {
+      const meta = getActionMeta(id)
+      expect(meta).toBeDefined()
+      expect(meta.developer).toBe('VoiceOS')
+      expect(meta.type).toBe('System action')
+      expect(meta.glyph).toBeTruthy()
+
+      const en = meta.copy.en
+      expect(en.heroCaption).toBeTruthy()
+      expect(en.glanceCaption).toBeTruthy()
+      expect(en.queryChunks.length).toBeGreaterThan(0)
+      expect(en.answer).toBeTruthy()
+      expect(en.about).toBeTruthy()
+      expect(en.sampleCommands.length).toBeGreaterThanOrEqual(3)
+    }
+
+    expect(NATIVE_ACTION_META.insertText.glyph).toBe('pointerTrail')
+    expect(NATIVE_ACTION_META.insertText.copy.en.heroCaption).toBe(
+      'Point at it, ask about it'
+    )
+    expect(NATIVE_ACTION_META.insertText.copy.en.glanceCaption).toBe(
+      'Answers land in the notch'
+    )
+    expect(NATIVE_ACTION_META.insertText.copy.en.answer).toContain('API key')
+
+    expect(NATIVE_ACTION_META.editText.glyph).toBe('textSelection')
+    expect(NATIVE_ACTION_META.editText.copy.en.heroCaption).toBe(
+      'Highlight it, say the change'
+    )
+    expect(NATIVE_ACTION_META.editText.copy.en.answer).toContain(
+      'Could you send the file?'
+    )
+
+    expect(NATIVE_ACTION_META.createPrompt.glyph).toBe('promptDocument')
+    expect(NATIVE_ACTION_META.createPrompt.copy.en.heroCaption).toBe(
+      'Circle it, get the prompt'
+    )
+
+    expect(NATIVE_ACTION_META.controlPlayback.glyph).toBe('music')
+    expect(NATIVE_ACTION_META.controlPlayback.copy.en.heroCaption).toBe(
+      'Skip without switching apps'
+    )
+
+    expect(NATIVE_ACTION_META.openApp.glyph).toBe('appLaunch')
+    expect(NATIVE_ACTION_META.openApp.copy.en.heroCaption).toBe('Any app, hands free')
+
+    expect(NATIVE_ACTION_META.reminders.glyph).toBe('clock')
+    expect(NATIVE_ACTION_META.reminders.copy.en.heroCaption).toBe(
+      'Say it now, get reminded later'
+    )
+  })
+})
+
+describe('Agent Action Detail Modal', () => {
+  it('returns null when action is null', () => {
+    const html = renderToStaticMarkup(
+      createElement(ActionDetailModal, {
+        action: null,
+        onClose: () => {}
+      })
+    )
+    expect(html).toBe('')
+  })
+
+  it('renders ActionDetailModal for insertText with full specifications', () => {
+    const action = INITIAL_ACTIONS.find((a) => a.id === 'insertText')!
+    const html = renderToStaticMarkup(
+      createElement(ActionDetailModal, {
+        action,
+        onClose: () => {},
+        isDarkMode: true
+      })
+    )
+
+    // Accessible dialog sheet
+    expect(html).toContain('role="dialog"')
+    expect(html).toContain('aria-modal="true"')
+    expect(html).toContain('aria-label="Close"')
+
+    // Header info & switch
+    expect(html).toContain(action.title)
+    expect(html).toContain(action.description)
+    expect(html).toContain('role="switch"')
+    expect(html).toContain('aria-checked="true"')
+
+    // 3-column InfoStrip
+    expect(html).toContain('STATUS')
+    expect(html).toContain('On')
+    expect(html).toContain('Agent')
+    expect(html).toContain('TYPE')
+    expect(html).toContain('System action')
+    expect(html).toContain('DEVELOPER')
+    expect(html).toContain('VoiceOS')
+
+    // Preview carousel & figcaptions
+    expect(html).toContain('Preview')
+    expect(html).toContain('Point at it, ask about it')
+    expect(html).toContain('Answers land in the notch')
+    expect(html).toContain(
+      "The API key isn&#x27;t set — nothing is providing API_KEY when the client starts. Add it to .env.local and restart the dev server."
+    )
+
+    // About section
+    expect(html).toContain('About')
+    expect(html).toContain('Give the agent a live view of your screen.')
+
+    // Try saying section
+    expect(html).toContain('Try saying')
+    expect(html).toContain('“What does this error mean?”')
+    expect(html).toContain('“Summarize this page”')
+    expect(html).toContain('“What should I reply here?”')
+
+    // Information section with Screen Recording permissions row
+    expect(html).toContain('Information')
+    expect(html).toContain('Permissions')
+    expect(html).toContain('Screen Recording')
+  })
+
+  it('renders ActionDetailModal for controlPlayback with music scene and disabled status when toggled off', () => {
+    const action = {
+      ...INITIAL_ACTIONS.find((a) => a.id === 'controlPlayback')!,
+      enabled: false
+    }
+
+    const html = renderToStaticMarkup(
+      createElement(ActionDetailModal, {
+        action,
+        onClose: () => {},
+        isDarkMode: false
+      })
+    )
+
+    expect(html).toContain('Control music')
+    expect(html).toContain('STATUS')
+    expect(html).toContain('Off')
+    expect(html).toContain('aria-checked="false"')
+    expect(html).toContain('Skip without switching apps')
+    expect(html).toContain('It names the track it moved to')
+    expect(html).toContain('Skipped — now playing Golden Hour by JVKE.')
+    expect(html).toContain('Pause the music')
+  })
+})
+
+describe('ActionsSection Interaction & Accessibility', () => {
+  it('renders action cards with cursor-pointer, role=button, and tabIndex=0 for keyboard accessibility', () => {
+    const html = renderToStaticMarkup(
+      createElement(ActionsSection, {
+        actions: INITIAL_ACTIONS,
+        onToggleAction: () => {},
+        onSelectAction: () => {}
+      })
+    )
+
+    expect(html).toContain('cursor-pointer')
+    expect(html).toContain('role="button"')
+    expect(html).toContain('tabindex="0"')
+  })
+
+  it('renders AgentPage and mounts ActionDetailModal without errors', () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentPage, {
+        initialSettings: DEFAULT_AGENT_SETTINGS
+      })
+    )
+
+    expect(html).toContain('agent-page')
+    expect(html).toContain('Actions')
+    expect(html).toContain('Point and ask about your screen')
   })
 })

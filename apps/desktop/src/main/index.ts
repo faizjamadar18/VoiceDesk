@@ -11,9 +11,12 @@ import {
   Tray
 } from 'electron'
 import { statSync } from 'node:fs'
-import { isAbsolute, join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import {
   IPC,
+  type AuthState,
+  type AuthTokens,
+  type AuthUser,
   type KestrelRuntimeState,
   type KestrelSettings,
   type NotchActivity,
@@ -22,6 +25,8 @@ import {
   type SaveSettingsResult
 } from '../shared/types'
 import { HttpActionClient } from './action-client'
+import { AuthService } from './auth/auth-service'
+import { FileAuthStore } from './auth/file-store'
 import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
 import { normalizeInteractiveRegion } from './interactive-region'
 import { startKeyHook, type KeyHookHandle } from './key-hook'
@@ -66,6 +71,9 @@ let asrError: string | null = null
 let asrGeneration = 0
 let nemoServer: NemoServer | null = null
 let transcriber: LiveTranscriber | null = null
+let authService: AuthService | null = null
+
+const PROTOCOL_SCHEME = 'voicedesk'
 
 const apiUrl = (process.env.KESTREL_API_URL?.trim() || DEFAULT_API_URL).replace(/\/+$/, '')
 
@@ -233,7 +241,12 @@ function createMainWindow(): void {
 
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
-  win.webContents.on('did-finish-load', broadcastState)
+  win.webContents.on('did-finish-load', () => {
+    broadcastState()
+    if (authService) {
+      sendToMain(IPC.authStateChanged, authService.getState())
+    }
+  })
 
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -500,6 +513,19 @@ function registerIpc(): void {
   ipcMain.on(IPC.notchRegion, (_event, region: unknown) => {
     notchPresenter?.setRegion(normalizeInteractiveRegion(region))
   })
+  ipcMain.handle(IPC.authGetState, () => authService?.getState() ?? { status: 'unauthenticated' })
+  ipcMain.handle(IPC.authSignOut, async () => {
+    await authService?.signOut()
+  })
+  ipcMain.handle(IPC.authOpenOAuthUrl, async (_event, url: unknown) => {
+    if (typeof url === 'string') {
+      authService?.startLogin()
+      await shell.openExternal(url)
+    }
+  })
+  ipcMain.handle(IPC.authSetSession, async (_event, tokens: AuthTokens, user: AuthUser) => {
+    await authService?.setSession(tokens, user)
+  })
 }
 
 function createPushToTalk(): void {
@@ -553,6 +579,22 @@ function createNotch(): void {
   })
 }
 
+function registerProtocolClient(): void {
+  try {
+    if (!app.isPackaged) {
+      if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [
+          resolve(process.argv[1])
+        ])
+      }
+    } else {
+      app.setAsDefaultProtocolClient(PROTOCOL_SCHEME)
+    }
+  } catch (error) {
+    console.error('[protocol] failed to set as default protocol client', error)
+  }
+}
+
 async function initialize(): Promise<void> {
   Menu.setApplicationMenu(null)
   nativeTheme.themeSource = 'dark'
@@ -563,6 +605,18 @@ async function initialize(): Promise<void> {
   settingsStore = new SettingsStore(settingsPath)
   settings = settingsStore.load()
 
+  const authStorePath =
+    process.env.KESTREL_AUTH_PATH?.trim() ||
+    join(app.getPath('userData'), 'kestrel-auth.json')
+  authService = new AuthService({
+    store: new FileAuthStore(authStorePath),
+    onStateChanged: (state: AuthState) => {
+      sendToMain(IPC.authStateChanged, state)
+    }
+  })
+
+  registerProtocolClient()
+
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === 'media')
   })
@@ -572,6 +626,11 @@ async function initialize(): Promise<void> {
   createMainWindow()
   createTray()
   createNotch()
+
+  const initialDeepLink = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
+  if (initialDeepLink) {
+    void authService.handleDeepLink(initialDeepLink)
+  }
 
   const registered = registerChord(settings.hotkey)
   hotkeyRegistered = registered
@@ -609,8 +668,20 @@ if (!app.requestSingleInstanceLock()) {
   app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
   app.commandLine.appendSwitch('enable-unsafe-webgpu')
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
     showMainWindow()
+    const deepLink = commandLine.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
+    if (deepLink && authService) {
+      void authService.handleDeepLink(deepLink)
+    }
+  })
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    showMainWindow()
+    if (authService) {
+      void authService.handleDeepLink(url)
+    }
   })
 
   app.on('before-quit', () => {

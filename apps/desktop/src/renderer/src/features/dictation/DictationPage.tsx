@@ -162,6 +162,7 @@ export function DictationPage({
         pinnedApps={activeContextConfig?.assignedApps ?? []}
         onPinApp={handlePinApp}
         onUnpinApp={handleUnpinApp}
+        polishStyle={settings.polishStyle}
       />
 
       <SpellingSection

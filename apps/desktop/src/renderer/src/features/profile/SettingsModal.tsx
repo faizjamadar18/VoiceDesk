@@ -20,12 +20,18 @@ export interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
   defaultTab?: SettingsTabId
+  userEmail?: string
+  userName?: string
+  onSignOut?: () => void
 }
 
 export function SettingsModal({
   isOpen,
   onClose,
-  defaultTab = 'general'
+  defaultTab = 'general',
+  userEmail,
+  userName,
+  onSignOut
 }: SettingsModalProps): JSX.Element | null {
   const { isDarkMode } = useSystemTheme()
   const [activeTab, setActiveTab] = useState<SettingsTabId>(defaultTab)
@@ -197,7 +203,13 @@ export function SettingsModal({
             {activeTab === 'appearance' && <AppearanceSettingsTab isDarkMode={isDarkMode} />}
             {activeTab === 'subscription' && <SubscriptionSettingsTab isDarkMode={isDarkMode} />}
             {activeTab === 'account' && (
-              <AccountSettingsTab isDarkMode={isDarkMode} onClose={onClose} />
+              <AccountSettingsTab
+                isDarkMode={isDarkMode}
+                onClose={onClose}
+                userEmail={userEmail}
+                userName={userName}
+                onSignOut={onSignOut}
+              />
             )}
             {activeTab === 'team' && (
               <TeamSettingsTab
