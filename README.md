@@ -2,7 +2,7 @@
 
 Windows voice agent. Working codename; final brand TBD.
 
-Hold **`Ctrl + Space`** and speak. A notch slides down from the top center of the screen with a live transcript. Release, and the final words are transcribed locally and sent to the backend, which performs the action. A tap shorter than **0.3 s** does nothing. **Esc** cancels. The notch never takes focus.
+Hold **`Ctrl + Space`** and speak. A notch slides down from the top center of the screen with a live transcript. Release, and the final words are transcribed locally and sent to the app's local API, which performs the action. A tap shorter than **0.3 s** does nothing. **Esc** cancels. The notch never takes focus.
 
 ## How it works
 
@@ -11,7 +11,7 @@ Hold **`Ctrl + Space`** and speak. A notch slides down from the top center of th
 3. `PushToTalk` waits 300 ms before starting. A shorter tap shows no notch, opens no microphone, and starts no turn.
 4. The notch window is transparent, frameless, `focusable: false`, always on top, and shown with `showInactive()`. It listens for PCM only while the turn is active.
 5. Partial transcripts stream from a local NVIDIA Nemotron engine over a loopback WebSocket. Releasing commits the turn; the final transcript is produced locally in a few hundred milliseconds.
-6. The transcript is posted to the local backend (`POST /act` by default at `http://127.0.0.1:8765`).
+6. The transcript is posted to the app's local API (`POST /act` by default at `http://127.0.0.1:8765`).
 7. A rule-based planner opens apps, searches the web, answers time/date, or returns text to type. For `type`, the desktop pastes the text into the app that still has focus.
 8. The result or error appears in the notch, which then hides itself.
 
@@ -40,7 +40,6 @@ Not done yet:
 
 - Windows 10/11
 - Node.js **22.12+**. `.nvmrc` pins 22.17.1; nvm-windows needs the version passed explicitly (`nvm use 22.17.1`).
-- Python **3.12+** for the action backend
 - A microphone
 - About 1 GB free for the local engine and speech model
 
@@ -52,16 +51,6 @@ Install desktop dependencies from the repository root:
 nvm use 22.17.1
 npm install
 ```
-
-Create the API virtualenv and install its dependencies:
-
-```powershell
-cd apps\api
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-```
-
-`requirements-dev.txt` includes the runtime requirements plus pytest.
 
 ### Local speech recognition
 
@@ -113,15 +102,13 @@ keeps the model loaded between turns. Audio is streamed as raw PCM16 over
 written to disk, and the process stops when Kestrel quits. No cloud service,
 API key, or per-token cost is involved in the notch path.
 
-### Run the backend
+### Local API
 
-The notch path only needs `/act`, which is local and key-free:
-
-```powershell
-npm run api
-```
-
-This runs uvicorn on `127.0.0.1:8765`. The API binds to localhost only.
+The app hosts the action API in-process on `127.0.0.1:8765` (override the base
+URL with `KESTREL_API_URL`). There is no separate backend to start: the server
+binds to localhost only, and it stops when the app quits. It serves `/health`,
+`/act`, `/act/confirm`, `/act/undo`, `/screen/ask`, the OAuth `/callback`, and
+the legacy `/transcribe` endpoint.
 
 The legacy `/transcribe` endpoint still supports a deterministic `fake` provider and a Groq provider, but the notch flow now transcribes locally and does not call it.
 
@@ -166,26 +153,25 @@ Settings are stored at `%APPDATA%\@kestrel\desktop\kestrel-settings.json` for re
 
 | Variable | Read by | Default | Purpose |
 |---|---|---|---|
-| `KESTREL_API_URL` | desktop | `http://127.0.0.1:8765` | Base URL of the local action backend |
+| `KESTREL_API_URL` | desktop | `http://127.0.0.1:8765` | Base URL of the app's local action API |
 | `KESTREL_ASR_MODE` | desktop | settings | Force `nemo` or `fake` for the notch path (legacy `whisper` maps to `nemo`) |
 | `KESTREL_HOME` | desktop | `%LOCALAPPDATA%\Kestrel` | Install root for the engine and model |
 | `KESTREL_NEMO_EXECUTABLE` | desktop | `<home>\bin\nemo-speech\bin\nemo-speech.exe` | Override the engine executable |
 | `KESTREL_NEMO_MODEL` | desktop | `<home>\models\nemotron-speech-streaming-en-0.6b.q8_0.gguf` | Override the model file |
-| `KESTREL_FAKE_TRANSCRIPT` | desktop | `open notepad` | Text returned by the fake transcriber |
+| `KESTREL_FAKE_TRANSCRIPT` | desktop | `open notepad` | Text the fake transcriber returns (the legacy `/transcribe` fake default is `Fake transcription from Kestrel.`) |
 | `KESTREL_SETTINGS_PATH` | desktop | userData path | Alternate settings file, used by the smoke |
-| `KESTREL_ACTION_DRY_RUN` | API | `0` | `1` plans actions without launching apps or URLs |
-| `KESTREL_ASR_PROVIDER` | API | `groq` | Legacy `/transcribe` provider: `fake` or `groq` |
-| `KESTREL_FAKE_TRANSCRIPT` | API | `Fake transcription from Kestrel.` | Text returned by the legacy fake provider |
-| `GROQ_API_KEY` | API | unset | Enables the Groq planner (natural-language commands) and optional cloud ASR |
-| `KESTREL_GROQ_API_KEY` | API | unset | Alias for `GROQ_API_KEY` |
-| `KESTREL_GROQ_MODEL` | API | `openai/gpt-oss-20b` | Groq model to try first (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b` fallbacks) |
-| `KESTREL_GROQ_BASE_URL` | API | `https://api.groq.com/openai/v1` | Override the Groq base URL (tests or a proxy) |
-| `KESTREL_FILE_ROOTS` | API | `~/Documents` | Comma-separated folders the file tools may search |
-| `KESTREL_MCP_ENABLED` | API | `0` | `1` connects the MCP integrations in `apps/api/mcp_servers.json` |
-| `KESTREL_MCP_CONFIG` | API | `apps/api/mcp_servers.json` | Override the MCP server config path |
-| `KESTREL_GIT_REPO` | API | unset | Local repository the Git tools operate on |
-| `GITHUB_MCP_TOKEN` | API | unset | GitHub token for the GitHub integration |
-| `NOTION_TOKEN` | API | unset | Notion integration token |
+| `KESTREL_ACTION_DRY_RUN` | desktop | `0` | `1` plans actions without launching apps or URLs |
+| `KESTREL_ASR_PROVIDER` | desktop | `groq` | Legacy `/transcribe` provider: `fake` or `groq` |
+| `GROQ_API_KEY` | desktop | unset | Enables the Groq planner (natural-language commands) and optional cloud ASR |
+| `KESTREL_GROQ_API_KEY` | desktop | unset | Alias for `GROQ_API_KEY` |
+| `KESTREL_GROQ_MODEL` | desktop | `openai/gpt-oss-20b` | Groq model to try first (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b` fallbacks) |
+| `KESTREL_GROQ_BASE_URL` | desktop | `https://api.groq.com/openai/v1` | Override the Groq base URL (tests or a proxy) |
+| `KESTREL_FILE_ROOTS` | desktop | `~/Documents` | Comma-separated folders the file tools may search |
+| `KESTREL_MCP_ENABLED` | desktop | `0` | `1` connects the MCP integrations in `apps/desktop/mcp_servers.json` |
+| `KESTREL_MCP_CONFIG` | desktop | `apps/desktop/mcp_servers.json` | Override the MCP server config path |
+| `KESTREL_GIT_REPO` | desktop | unset | Local repository the Git tools operate on |
+| `GITHUB_MCP_TOKEN` | desktop | unset | GitHub token for the GitHub integration |
+| `NOTION_TOKEN` | desktop | unset | Notion integration token |
 
 The Groq key is optional. With no key, Kestrel uses the deterministic
 rule planner; with a key, natural phrasing ("could you please open the
@@ -197,15 +183,15 @@ exhausted one) so a single bad response never drops the command.
 ### Git, GitHub, and Notion (MCP)
 
 Set `KESTREL_MCP_ENABLED=1` to let Kestrel drive three services through MCP
-servers declared in `apps/api/mcp_servers.json` (copy
-`apps/api/mcp_servers.json.example`). Tokens sit in `apps/api/.env`
+servers declared in `apps/desktop/mcp_servers.json` (copy
+`apps/desktop/mcp_servers.json.example`). Tokens sit in `apps/desktop/.env.local`
 (`GITHUB_MCP_TOKEN`, `NOTION_TOKEN`) and the Git tools point at the repository
 in `KESTREL_GIT_REPO`. Read-only tools run immediately; anything that changes
 state asks for confirmation first. `GET /mcp/status` shows each server's
 connection. A server with a missing or invalid token simply reports an error
 and the others keep working. Each server lists a short `tools` allowlist so the
 planner's one-shot request fits Groq's free-tier 8000 tokens-per-minute cap. See
-`apps/api/README.md` for the full setup.
+`apps/desktop/mcp_servers.json.example` for the full setup.
 
 ## Actions
 
@@ -223,8 +209,6 @@ planner's one-shot request fits Groq's free-tier 8000 tokens-per-minute cap. See
 
 ```powershell
 npm test            # desktop Vitest suite
-npm run test:api    # FastAPI pytest suite
-npm run test:all    # both suites
 npm run smoke:notch # production build + end-to-end notch smoke
 ```
 
@@ -250,7 +234,6 @@ Artifacts:
 
 - `logs/notch-smoke.log` - app process log
 - `logs/notch-smoke-console.log` - smoke console transcript
-- `logs/notch-api.log` - test backend log
 - `logs/notch-window.png` - screenshot of the live notch
 
 A microphone is required. No model or network request is used by the smoke.
@@ -260,7 +243,7 @@ A microphone is required. No model or network request is used by the smoke.
 - The microphone is opened when a turn starts and its tracks are stopped when the turn ends. A one-time device check at launch opens and immediately releases it. Kestrel does not hold the mic open while idle.
 - PCM lives in renderer and main-process memory. It is streamed to the local NVIDIA engine over a loopback WebSocket and is never written to disk.
 - In Nemotron mode no audio or transcript leaves the machine.
-- The backend receives only the final text on `/act`. There is no transcript database.
+- The app's local API receives only the final text on `/act`. There is no transcript database.
 - The main window keeps the recent notch activity in memory for display; it is not persisted.
 - A `type` action copies the text to the clipboard before pasting. The clipboard keeps it until something else replaces it, as with any paste.
 
@@ -270,7 +253,7 @@ A microphone is required. No model or network request is used by the smoke.
 
 **"Speech recognition is not ready yet" or ASR offline.** Confirm `nemo-speech.exe` and the model exist at the paths above, then run `nemo-speech.exe doctor`. Check the app log for `[nemo]` or `[asr]` errors. For pipeline testing without the engine, set `KESTREL_ASR_MODE=fake`.
 
-**Action fails with `fetch failed`.** Start the backend (`npm run api`) and check `http://127.0.0.1:8765/health`.
+**Action fails with `fetch failed`.** The app hosts the local API in-process. Check `http://127.0.0.1:8765/health` while the app runs; if the action still fails, look for `[assistant]` errors in the app log.
 
 **No microphone.** Allow desktop apps to use the microphone in Windows Settings -> Privacy & security -> Microphone. A capture failure appears in the notch.
 

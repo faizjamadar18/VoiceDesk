@@ -20,7 +20,6 @@
 param(
   [string]$LogPath,
   [string]$ConsoleLogPath,
-  [string]$ApiLogPath,
   [string]$ScreenshotPath
 )
 
@@ -28,10 +27,8 @@ $ErrorActionPreference = 'Stop'
 
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $desktopDir = Join-Path $root 'apps\desktop'
-$apiDir = Join-Path $root 'apps\api'
 $logsDir = Join-Path $root 'logs'
 $electronExe = Join-Path $root 'node_modules\electron\dist\electron.exe'
-$apiPython = Join-Path $apiDir '.venv\Scripts\python.exe'
 $appMain = Join-Path $desktopDir 'out\main\index.js'
 $notchHtml = Join-Path $desktopDir 'out\renderer\notch.html'
 
@@ -43,11 +40,9 @@ $testStartedAt = Get-Date
 
 if (-not $LogPath) { $LogPath = Join-Path $logsDir 'notch-smoke.log' }
 if (-not $ConsoleLogPath) { $ConsoleLogPath = Join-Path $logsDir 'notch-smoke-console.log' }
-if (-not $ApiLogPath) { $ApiLogPath = Join-Path $logsDir 'notch-api.log' }
 if (-not $ScreenshotPath) { $ScreenshotPath = Join-Path $logsDir 'notch-window.png' }
 $LogPath = [IO.Path]::GetFullPath($LogPath)
 $ConsoleLogPath = [IO.Path]::GetFullPath($ConsoleLogPath)
-$ApiLogPath = [IO.Path]::GetFullPath($ApiLogPath)
 $ScreenshotPath = [IO.Path]::GetFullPath($ScreenshotPath)
 
 # --- Preconditions ---------------------------------------------------------
@@ -60,9 +55,6 @@ if (-not (Test-Path -LiteralPath $appMain)) {
 }
 if (-not (Test-Path -LiteralPath $notchHtml)) {
   throw "The notch renderer is missing at $notchHtml. Run 'npm run build' first."
-}
-if (-not (Test-Path -LiteralPath $apiPython)) {
-  throw "The API virtualenv is missing at $apiPython. Create it and install requirements-dev.txt."
 }
 
 $sharedTypesPath = Join-Path $desktopDir 'src\shared\types.ts'
@@ -77,7 +69,7 @@ if (-not $hotkeyMatch.Success) {
 $hotkey = $hotkeyMatch.Groups[1].Value
 
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
-foreach ($path in @($LogPath, $ConsoleLogPath, $ApiLogPath, $ScreenshotPath)) {
+foreach ($path in @($LogPath, $ConsoleLogPath, $ScreenshotPath)) {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
   Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
 }
@@ -201,16 +193,6 @@ function Get-KestrelProcess {
 function Stop-KestrelProcesses {
   Get-KestrelProcesses |
     ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
-}
-
-function Stop-TestBackendProcesses {
-  Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
-    Where-Object {
-      $_.CommandLine -and
-      $_.CommandLine -match 'app\.main:app' -and
-      $_.CommandLine -match '8791'
-    } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 }
 
 function Get-PortListenerPid {
@@ -385,7 +367,6 @@ function Save-WindowScreenshot {
 
 # --- Test body -------------------------------------------------------------
 
-$backendLauncherPath = Join-Path $env:TEMP ("kestrel-notch-api-" + [Guid]::NewGuid().ToString('N') + '.cmd')
 $appLauncherPath = Join-Path $env:TEMP ("kestrel-notch-app-" + [Guid]::NewGuid().ToString('N') + '.cmd')
 $targetScriptPath = Join-Path $env:TEMP ("kestrel-notch-target-" + [Guid]::NewGuid().ToString('N') + '.ps1')
 $targetOutputPath = Join-Path $env:TEMP ("kestrel-notch-text-" + [Guid]::NewGuid().ToString('N') + '.txt')
@@ -393,7 +374,6 @@ $targetKeyLogPath = Join-Path $env:TEMP ("kestrel-notch-keys-" + [Guid]::NewGuid
 $targetErrorPath = Join-Path $env:TEMP ("kestrel-notch-target-error-" + [Guid]::NewGuid().ToString('N') + '.txt')
 $settingsPath = Join-Path $env:TEMP ("kestrel-notch-settings-" + [Guid]::NewGuid().ToString('N') + '.json')
 
-$backendLauncher = $null
 $appLauncher = $null
 $kestrel = $null
 $target = $null
@@ -406,7 +386,6 @@ try {
   $hadClipboard = $null -ne $previousClipboard
 
   Stop-KestrelProcesses
-  Stop-TestBackendProcesses
   $portDeadline = (Get-Date).AddSeconds(5)
   while ((Get-PortListenerPid -Port $testPort) -and (Get-Date) -lt $portDeadline) {
     Start-Sleep -Milliseconds 200
@@ -420,45 +399,24 @@ try {
   Write-Host ''
   Write-Host 'Kestrel notch push-to-talk smoke test' -ForegroundColor Cyan
   Write-Host "Log: $LogPath"
-  Write-Host "API log: $ApiLogPath"
   Write-Host "Console log: $ConsoleLogPath"
   Write-Host "Hotkey: $hotkey"
   Write-Host "Fake transcript: $expectedSpoken"
   Write-Host ''
 
-  # 1. Local API on a test-only port, with action execution disabled.
-  @"
-@echo off
-cd /d "$apiDir"
-set "KESTREL_ASR_PROVIDER=fake"
-set "KESTREL_FAKE_TRANSCRIPT=$expectedSpoken"
-set "KESTREL_ACTION_DRY_RUN=1"
-"$apiPython" -m uvicorn app.main:app --host 127.0.0.1 --port $testPort > "$ApiLogPath" 2>&1
-"@ | Set-Content -LiteralPath $backendLauncherPath -Encoding ASCII
-
-  $backendLauncher = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d', '/c', "`"$backendLauncherPath`"" -WindowStyle Hidden -PassThru
-
-  $health = Wait-For -TimeoutSeconds 30 -FailureMessage 'The API did not become healthy on port 8791 within 30 seconds.' -Condition {
-    if ($backendLauncher.HasExited) {
-      $tail = (Get-Content -LiteralPath $ApiLogPath -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
-      throw "The API launcher exited early.`n$tail"
-    }
-    try {
-      Invoke-RestMethod -Uri "http://127.0.0.1:$testPort/health" -UseBasicParsing -TimeoutSec 2
-    } catch {
-      $null
-    }
-  }
-  Check ($health.status -eq 'ok' -and $health.provider -eq 'fake' -and $health.configured -eq $true) 'API health reports provider=fake and configured=true'
-
-  # 2. Built app with fake ASR and an isolated settings file.
+  # 1. Built app with fake ASR, an isolated settings file, and action execution
+  #    disabled. The app hosts the local API in-process on the test port.
+  #    The API is health-checked below, after the app launches.
   @"
 @echo off
 cd /d "$desktopDir"
 set "KESTREL_API_URL=http://127.0.0.1:$testPort"
 set "KESTREL_ASR_MODE=fake"
+set "KESTREL_ASR_PROVIDER=fake"
 set "KESTREL_FAKE_TRANSCRIPT=$expectedSpoken"
 set "KESTREL_SETTINGS_PATH=$settingsPath"
+set "KESTREL_ACTION_DRY_RUN=1"
+set "KESTREL_MCP_ENABLED=0"
 "$electronExe" . > "$LogPath" 2>&1
 "@ | Set-Content -LiteralPath $appLauncherPath -Encoding ASCII
 
@@ -475,6 +433,20 @@ set "KESTREL_SETTINGS_PATH=$settingsPath"
   $kestrelHwnd = $kestrel.MainWindowHandle
   Write-Host "App pid=$($kestrel.Id) hwnd=$kestrelHwnd" -ForegroundColor DarkGray
   Check ([KestrelNotchNative]::IsWindowVisible($kestrelHwnd)) 'app opens with a visible window on first run'
+
+  # 2. The app-hosted API is healthy on the test port.
+  $health = Wait-For -TimeoutSeconds 30 -FailureMessage 'The app-hosted API did not become healthy on port 8791 within 30 seconds.' -Condition {
+    if ($appLauncher.HasExited) {
+      $tail = (Get-Content -LiteralPath $LogPath -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
+      throw "The Kestrel launcher exited early.`n$tail"
+    }
+    try {
+      Invoke-RestMethod -Uri "http://127.0.0.1:$testPort/health" -UseBasicParsing -TimeoutSec 2
+    } catch {
+      $null
+    }
+  }
+  Check ($health.status -eq 'ok' -and $health.provider -eq 'fake' -and $health.configured -eq $true) 'the app-hosted API health reports provider=fake and configured=true'
 
   $ready = Wait-Until -TimeoutSeconds 30 -IntervalMilliseconds 250 -Condition {
     $text = Get-LogText -Path $LogPath
@@ -713,9 +685,9 @@ $script:timer.Start()
   Check ($cancelSegmentText -match '\[notch\] cancel session=\d+') 'Esc cancelled the live session'
   Check ($cancelSegmentText -notmatch '\[notch\] final') 'cancelled hold never produced a final transcript or action'
 
-  # 9. The API executed the planned action in dry-run mode.
-  $apiLogText = Get-LogText -Path $ApiLogPath
-  Check ($apiLogText -match '\[act\] status=ok action=type dryRun=True') 'API log shows the dry-run type action'
+  # 9. The app-hosted API executed the planned action in dry-run mode.
+  $appLogText = Get-LogText -Path $LogPath
+  Check ($appLogText -match '\[notch\] action status=ok action=type dryRun=true') 'the app-hosted API executed the dry-run type action'
 
   # 10. Privacy checks.
   $audioExtensions = @('.webm', '.wav', '.opus', '.mp3', '.m4a', '.ogg', '.flac')
@@ -794,10 +766,7 @@ $script:timer.Start()
   try { if ($target) { Stop-ProcessTree -Process $target } } catch { }
   try { if ($appLauncher) { Stop-ProcessTree -Process $appLauncher } } catch { }
   try { Stop-KestrelProcesses } catch { }
-  try { if ($backendLauncher) { Stop-ProcessTree -Process $backendLauncher } } catch { }
-  try { Stop-TestBackendProcesses } catch { }
 
-  Remove-Item -LiteralPath $backendLauncherPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $appLauncherPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $targetScriptPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $targetOutputPath -Force -ErrorAction SilentlyContinue

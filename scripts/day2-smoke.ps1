@@ -4,7 +4,7 @@
 
   Proves the hold-to-talk dictation pipeline end to end with the fake ASR
   provider and the real microphone:
-    1. the local API starts on a test-only port and reports provider=fake,
+    1. the app-hosted local API reports provider=fake,
     2. the built app registers Ctrl+Space and starts its low-level key hook,
     3. a hidden Kestrel does not steal focus while a separate app is typed into,
     4. holding the chord records, transcribes, and pastes the expected text
@@ -22,7 +22,6 @@
 param(
   [string]$LogPath,
   [string]$ConsoleLogPath,
-  [string]$ApiLogPath,
   [string]$ScreenshotPath
 )
 
@@ -30,10 +29,8 @@ $ErrorActionPreference = 'Stop'
 
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $desktopDir = Join-Path $root 'apps\desktop'
-$apiDir = Join-Path $root 'apps\api'
 $logsDir = Join-Path $root 'logs'
 $electronExe = Join-Path $root 'node_modules\electron\dist\electron.exe'
-$apiPython = Join-Path $apiDir '.venv\Scripts\python.exe'
 $appMain = Join-Path $desktopDir 'out\main\index.js'
 
 $testPort = 8791
@@ -42,11 +39,9 @@ $testStartedAt = Get-Date
 
 if (-not $LogPath) { $LogPath = Join-Path $logsDir 'day2-smoke.log' }
 if (-not $ConsoleLogPath) { $ConsoleLogPath = Join-Path $logsDir 'day2-smoke-console.log' }
-if (-not $ApiLogPath) { $ApiLogPath = Join-Path $logsDir 'day2-api.log' }
 if (-not $ScreenshotPath) { $ScreenshotPath = Join-Path $logsDir 'day2-window.png' }
 $LogPath = [IO.Path]::GetFullPath($LogPath)
 $ConsoleLogPath = [IO.Path]::GetFullPath($ConsoleLogPath)
-$ApiLogPath = [IO.Path]::GetFullPath($ApiLogPath)
 $ScreenshotPath = [IO.Path]::GetFullPath($ScreenshotPath)
 
 # --- Preconditions ---------------------------------------------------------
@@ -56,9 +51,6 @@ if (-not (Test-Path -LiteralPath $electronExe)) {
 }
 if (-not (Test-Path -LiteralPath $appMain)) {
   throw "No production build found at $appMain. Run 'npm run build' first."
-}
-if (-not (Test-Path -LiteralPath $apiPython)) {
-  throw "The API virtualenv is missing at $apiPython. Create it with 'python -m venv apps\api\.venv' and install apps\api\requirements-dev.txt."
 }
 
 $sharedTypesPath = Join-Path $desktopDir 'src\shared\types.ts'
@@ -75,11 +67,9 @@ $hotkeyLogPattern = [regex]::Escape($hotkey)
 New-Item -ItemType Directory -Force -Path $logsDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ConsoleLogPath) | Out-Null
-New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ApiLogPath) | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ScreenshotPath) | Out-Null
 
 Remove-Item -LiteralPath $LogPath -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $ApiLogPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ScreenshotPath -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ConsoleLogPath -Force -ErrorAction SilentlyContinue
 
@@ -216,17 +206,6 @@ function Stop-KestrelProcesses {
     ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
 }
 
-function Stop-TestBackendProcesses {
-  # Only the API instance this smoke owns: uvicorn app.main:app on port 8791.
-  Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
-    Where-Object {
-      $_.CommandLine -and
-      $_.CommandLine -match 'app\.main:app' -and
-      $_.CommandLine -match '8791'
-    } |
-    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-}
-
 function Get-PortListenerPid {
   param([int]$Port)
 
@@ -350,13 +329,11 @@ function Save-WindowScreenshot {
 
 # --- Test body -------------------------------------------------------------
 
-$backendLauncherPath = Join-Path $env:TEMP ("kestrel-day2-api-" + [Guid]::NewGuid().ToString('N') + '.cmd')
 $appLauncherPath = Join-Path $env:TEMP ("kestrel-day2-app-" + [Guid]::NewGuid().ToString('N') + '.cmd')
 $targetScriptPath = Join-Path $env:TEMP ("kestrel-day2-target-" + [Guid]::NewGuid().ToString('N') + '.ps1')
 $targetOutputPath = Join-Path $env:TEMP ("kestrel-day2-text-" + [Guid]::NewGuid().ToString('N') + '.txt')
 $targetErrorPath = Join-Path $env:TEMP ("kestrel-day2-target-error-" + [Guid]::NewGuid().ToString('N') + '.txt')
 
-$backendLauncher = $null
 $appLauncher = $null
 $kestrel = $null
 $target = $null
@@ -371,7 +348,6 @@ try {
 
   # A stale instance would make the single-instance lock silently swallow the test launch.
   Stop-KestrelProcesses
-  Stop-TestBackendProcesses
   $portDeadline = (Get-Date).AddSeconds(5)
   while ((Get-PortListenerPid -Port $testPort) -and (Get-Date) -lt $portDeadline) {
     Start-Sleep -Milliseconds 200
@@ -385,40 +361,19 @@ try {
   Write-Host ''
   Write-Host 'Kestrel Day 2 smoke test' -ForegroundColor Cyan
   Write-Host "Log: $LogPath"
-  Write-Host "API log: $ApiLogPath"
   Write-Host "Console log: $ConsoleLogPath"
   Write-Host "Expected fake transcript: $expectedTranscript"
   Write-Host ''
 
-  # 1. Local API on a test-only port.
-  @"
-@echo off
-cd /d "$apiDir"
-set "KESTREL_ASR_PROVIDER=fake"
-set "KESTREL_FAKE_TRANSCRIPT=$expectedTranscript"
-"$apiPython" -m uvicorn app.main:app --host 127.0.0.1 --port $testPort > "$ApiLogPath" 2>&1
-"@ | Set-Content -LiteralPath $backendLauncherPath -Encoding ASCII
-
-  $backendLauncher = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d', '/c', "`"$backendLauncherPath`"" -WindowStyle Hidden -PassThru
-
-  $health = Wait-For -TimeoutSeconds 30 -FailureMessage 'The API did not become healthy on port 8791 within 30 seconds.' -Condition {
-    if ($backendLauncher.HasExited) {
-      $tail = (Get-Content -LiteralPath $ApiLogPath -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
-      throw "The API launcher exited early.`n$tail"
-    }
-    try {
-      Invoke-RestMethod -Uri "http://127.0.0.1:$testPort/health" -UseBasicParsing -TimeoutSec 2
-    } catch {
-      $null
-    }
-  }
-  Check ($health.status -eq 'ok' -and $health.provider -eq 'fake' -and $health.configured -eq $true) 'API health reports provider=fake and configured=true'
-
-  # 2. Built app pointed at the test API.
+  # 1. Built app pointed at the test API (hosted in-process by the app).
+  #    The API is health-checked below, after the app launches.
   @"
 @echo off
 cd /d "$desktopDir"
 set "KESTREL_API_URL=http://127.0.0.1:$testPort"
+set "KESTREL_ASR_PROVIDER=fake"
+set "KESTREL_FAKE_TRANSCRIPT=$expectedTranscript"
+set "KESTREL_MCP_ENABLED=0"
 "$electronExe" . > "$LogPath" 2>&1
 "@ | Set-Content -LiteralPath $appLauncherPath -Encoding ASCII
 
@@ -435,6 +390,19 @@ set "KESTREL_API_URL=http://127.0.0.1:$testPort"
   $kestrelHwnd = $kestrel.MainWindowHandle
   Write-Host "App pid=$($kestrel.Id) hwnd=$kestrelHwnd" -ForegroundColor DarkGray
   Check ([KestrelDay2Native]::IsWindowVisible($kestrelHwnd)) 'app opens with a visible window'
+
+  $appHealth = Wait-For -TimeoutSeconds 30 -FailureMessage 'The app-hosted API did not become healthy on port 8791 within 30 seconds.' -Condition {
+    if ($appLauncher.HasExited) {
+      $tail = (Get-Content -LiteralPath $LogPath -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
+      throw "The Kestrel launcher exited early.`n$tail"
+    }
+    try {
+      Invoke-RestMethod -Uri "http://127.0.0.1:$testPort/health" -UseBasicParsing -TimeoutSec 2
+    } catch {
+      $null
+    }
+  }
+  Check ($appHealth.status -eq 'ok' -and $appHealth.provider -eq 'fake' -and $appHealth.configured -eq $true) 'the app-hosted API health reports provider=fake and configured=true'
 
   $hotkeyReady = Wait-Until -TimeoutSeconds 30 -IntervalMilliseconds 250 -Condition {
     $text = Get-LogText -Path $LogPath
@@ -778,15 +746,12 @@ $script:timer.Start()
   Write-Host "FAIL  $fatalMessage" -ForegroundColor Red
   $script:failures.Add($fatalMessage) | Out-Null
 } finally {
-  # Stop the target first, then the app tree, then the API tree. Logs and the
+  # Stop the target first, then the app tree. Logs and the
   # screenshot stay on disk even when a check failed.
   try { if ($target) { Stop-ProcessTree -Process $target } } catch { }
   try { if ($appLauncher) { Stop-ProcessTree -Process $appLauncher } } catch { }
   try { Stop-KestrelProcesses } catch { }
-  try { if ($backendLauncher) { Stop-ProcessTree -Process $backendLauncher } } catch { }
-  try { Stop-TestBackendProcesses } catch { }
 
-  Remove-Item -LiteralPath $backendLauncherPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $appLauncherPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $targetScriptPath -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $targetOutputPath -Force -ErrorAction SilentlyContinue

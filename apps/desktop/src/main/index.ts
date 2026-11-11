@@ -25,6 +25,9 @@ import {
   type SaveSettingsResult
 } from '../shared/types'
 import { HttpActionClient } from './action-client'
+import { loadEnvFiles } from './assistant/env'
+import { AssistantServer, parseApiAddress } from './assistant/server'
+import { AssistantService } from './assistant/service'
 import { AuthService } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
 import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
@@ -72,13 +75,13 @@ let asrGeneration = 0
 let nemoServer: NemoServer | null = null
 let transcriber: LiveTranscriber | null = null
 let authService: AuthService | null = null
+let assistantService: AssistantService | null = null
+let assistantServer: AssistantServer | null = null
 
 const PROTOCOL_SCHEME = 'voicedesk'
 
-const apiUrl = (process.env.KESTREL_API_URL?.trim() || DEFAULT_API_URL).replace(/\/+$/, '')
-
 function apiBaseUrl(): string {
-  return apiUrl
+  return (process.env.KESTREL_API_URL?.trim() || DEFAULT_API_URL).replace(/\/+$/, '')
 }
 
 function resourcesRoot(): string {
@@ -599,6 +602,35 @@ async function initialize(): Promise<void> {
   Menu.setApplicationMenu(null)
   nativeTheme.themeSource = 'dark'
 
+  // The main process does not use Vite's env loading, so load the app's env
+  // files (`apps/desktop/.env.local`, then `.env`) before any code reads
+  // `process.env`.
+  loadEnvFiles([
+    join(app.getAppPath(), '.env.local'),
+    join(app.getAppPath(), '.env')
+  ])
+
+  // The assistant runs in-process, but the Supabase OAuth redirect and the
+  // notch both need a real localhost URL, so host the same HTTP surface the
+  // Python backend provided.
+  assistantService = new AssistantService({
+    mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json')
+  })
+  await assistantService.initialize()
+
+  const bind = parseApiAddress(process.env.KESTREL_API_URL)
+  assistantServer = new AssistantServer({
+    service: assistantService,
+    host: bind.host,
+    port: bind.port
+  })
+  try {
+    await assistantServer.listen()
+    console.log(`[assistant] local API listening on ${assistantServer.url()}`)
+  } catch (error) {
+    console.error('[assistant] failed to start the local API', error)
+  }
+
   const settingsPath =
     process.env.KESTREL_SETTINGS_PATH?.trim() ||
     join(app.getPath('userData'), 'kestrel-settings.json')
@@ -699,6 +731,10 @@ if (!app.requestSingleInstanceLock()) {
     notchPresenter?.dispose()
     notchPresenter = null
     notchController = null
+    void assistantServer?.close()
+    assistantServer = null
+    void assistantService?.close()
+    assistantService = null
     void nemoServer?.stop()
     nemoServer = null
     tray?.destroy()
