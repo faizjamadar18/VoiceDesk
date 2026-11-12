@@ -11,7 +11,7 @@ import type { ComposioIntegration } from './composio/integration'
 import type { ComposioStatus } from './composio/types'
 import { ToolRegistry } from './registry'
 import { AssistantService, emptyIntegrationsStatus } from './service'
-import type { Tool } from './types'
+import type { Planner, Tool } from './types'
 
 function makeTool(name: string): Tool {
   return {
@@ -28,6 +28,32 @@ function makeTool(name: string): Tool {
 
 const CAL_CREATE = makeTool('googlecalendar_create_event')
 const CAL_LIST = makeTool('googlecalendar_list_events')
+
+/** A planner that always calls one tool with no arguments. */
+function plannerFor(name: string): Planner {
+  return {
+    plan: async () => ({ kind: 'tool', call: { name, arguments: {} } })
+  }
+}
+
+/** A confirmation-required write tool whose `prepare` optionally returns a card. */
+function makeWriteTool(
+  name: string,
+  prepare: Tool['prepare']
+): Tool {
+  return {
+    spec: {
+      name,
+      description: `${name} tool`,
+      parameters: { type: 'object', properties: {}, required: [] },
+      risk: 'write',
+      requiresConfirmation: true,
+      actionLabel: name
+    },
+    run: () => ({ status: 'ok', action: name, message: 'Done.' }),
+    prepare
+  }
+}
 
 function statusFor(tools: readonly Tool[]): ComposioStatus {
   return {
@@ -209,5 +235,38 @@ describe('AssistantService integrations', () => {
       .map((spec) => spec.name)
     expect(selected).toContain('googlecalendar_create_event')
     expect(selected).toContain('googlecalendar_list_events')
+  })
+})
+
+describe('AssistantService confirmation cards', () => {
+  it('carries a card from prepare into the pending response', async () => {
+    const registry = new ToolRegistry()
+    const card = { kind: 'email_compose', mode: 'send' }
+    registry.register(makeWriteTool('gmail_send_email', () => ({ arguments: {}, card })))
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('gmail_send_email')
+    })
+
+    const response = await service.act('send it')
+
+    expect(response.status).toBe('pending')
+    expect(response.card).toEqual(card)
+  })
+
+  it('leaves the pending card null when prepare returns none', async () => {
+    const registry = new ToolRegistry()
+    registry.register(
+      makeWriteTool('gmail_create_draft', () => ({ arguments: {} }))
+    )
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('gmail_create_draft')
+    })
+
+    const response = await service.act('draft it')
+
+    expect(response.status).toBe('pending')
+    expect(response.card).toBeNull()
   })
 })

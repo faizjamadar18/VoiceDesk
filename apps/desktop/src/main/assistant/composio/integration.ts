@@ -22,6 +22,7 @@ import type { McpClient, McpServerConfig, McpTool } from '../mcp/types'
 import type { Tool } from '../types'
 import { createCalendarTools } from './calendar'
 import { ComposioAuthError, ComposioClient } from './client'
+import { createGmailTools } from './gmail'
 import type { ComposioKeyStore } from './key'
 import { keyProblem } from './key'
 import { COMPOSIO_PROVIDERS } from './providers'
@@ -75,7 +76,8 @@ type ToolFactory = (options: {
  * one line here.
  */
 const TOOL_FACTORIES: Partial<Record<ComposioProviderId, ToolFactory>> = {
-  googlecalendar: createCalendarTools
+  googlecalendar: createCalendarTools,
+  gmail: createGmailTools
 }
 
 const UNSUPPORTED_MESSAGE = 'That app is not supported yet.'

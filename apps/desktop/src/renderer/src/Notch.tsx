@@ -12,6 +12,8 @@ import {
   type NotchCard,
   type NotchDecision,
   type NotchDecisionAction,
+  type NotchEmailComposeCard,
+  type NotchEmailListCard,
   type NotchFileResult,
   type NotchPhase,
   type NotchWeatherCard,
@@ -1074,13 +1076,26 @@ export default function Notch(): JSX.Element {
   const showAnswer = !isSynthesizing && (phase === 'result' || phase === 'error') && answer.length > 0
   const hasWeatherCard = card?.kind === 'weather'
   const weather = hasWeatherCard ? (card as NotchWeatherCard) : null
+  // WHY: the card union also allows Record<string, unknown>, so narrow by kind
+  // the same way the weather card does before touching typed fields.
+  const emailList = card?.kind === 'email_list' ? (card as NotchEmailListCard) : null
+  const emailCompose =
+    card?.kind === 'email_compose' ? (card as NotchEmailComposeCard) : null
   const hasTranscript = transcript.trim().length > 0
   const hasExpandedContent =
-    hasTranscript || showAnswer || results !== null || decision !== null || weather !== null
+    hasTranscript ||
+    showAnswer ||
+    results !== null ||
+    decision !== null ||
+    weather !== null ||
+    emailList !== null ||
+    emailCompose !== null
   const showBottomHint =
     phase !== 'listening' &&
     decision === null &&
-    (showAnswer || results !== null || weather !== null)
+    (showAnswer || results !== null || weather !== null) &&
+    emailList === null &&
+    emailCompose === null
 
   const presentation = deriveNotchPresentation({
     phase,
@@ -1138,6 +1153,159 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
+      {emailList && (
+        <div className="kestrel-email-list">
+          <div className="kestrel-email-list-title">{emailList.title}</div>
+          <ul className="kestrel-email-list-rows">
+            {emailList.rows.map((row, index) => (
+              <li key={index} className="kestrel-email-row">
+                <div className="kestrel-email-row-text">
+                  <span className="kestrel-email-row-title">{row.title}</span>
+                  <span className="kestrel-email-row-subtitle">{row.subtitle}</span>
+                </div>
+                <span className="kestrel-email-row-trailing">{row.trailing}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {emailCompose && (
+        <div className="kestrel-email-compose">
+          <div className="kestrel-email-compose-head">
+            <span className="kestrel-email-mark" aria-hidden="true">
+              M
+            </span>
+            <span className="kestrel-email-compose-title">{emailCompose.title}</span>
+            <button
+              type="button"
+              className="kestrel-email-compose-close"
+              aria-label="Close composer"
+              onClick={() => decide('cancel')}
+            >
+              ×
+            </button>
+          </div>
+
+          {emailCompose.mode === 'reply' && emailCompose.threadCount !== null && (
+            <div className="kestrel-email-thread">View thread ({emailCompose.threadCount})</div>
+          )}
+
+          <div className="kestrel-email-field">
+            <span className="kestrel-email-field-label">To</span>
+            <div className="kestrel-email-chips">
+              {emailCompose.to.map((address, index) => (
+                <span key={index} className="kestrel-email-chip">
+                  {address}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {emailCompose.cc.length > 0 && (
+            <div className="kestrel-email-field">
+              <span className="kestrel-email-field-label">Cc</span>
+              <div className="kestrel-email-chips">
+                {emailCompose.cc.map((address, index) => (
+                  <span key={index} className="kestrel-email-chip">
+                    {address}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {emailCompose.bcc.length > 0 && (
+            <div className="kestrel-email-field">
+              <span className="kestrel-email-field-label">Bcc</span>
+              <div className="kestrel-email-chips">
+                {emailCompose.bcc.map((address, index) => (
+                  <span key={index} className="kestrel-email-chip">
+                    {address}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {emailCompose.mode !== 'reply' && (
+            <div className="kestrel-email-field">
+              <span className="kestrel-email-field-label">Subject</span>
+              <span className="kestrel-email-subject">{emailCompose.subject}</span>
+              <button
+                type="button"
+                className="kestrel-email-copy"
+                aria-label="Copy subject"
+                onClick={() => window.kestrel?.copyToClipboard(emailCompose.subject)}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <rect
+                    x="9"
+                    y="9"
+                    width="11"
+                    height="11"
+                    rx="2"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="kestrel-email-body">
+            {emailCompose.body}
+            <button
+              type="button"
+              className="kestrel-email-copy"
+              aria-label="Copy body"
+              onClick={() => window.kestrel?.copyToClipboard(emailCompose.body)}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <rect
+                  x="9"
+                  y="9"
+                  width="11"
+                  height="11"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="kestrel-email-compose-foot">
+            <button
+              type="button"
+              className="kestrel-email-discard"
+              disabled={decision?.busy}
+              onClick={() => decide('cancel')}
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              className="kestrel-email-send"
+              disabled={decision?.busy}
+              onClick={() => decide('confirm')}
+            >
+              {emailCompose.mode === 'draft' ? 'Save draft' : 'Send'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {results !== null && (
         <div className="kestrel-file-results">
           <span className="kestrel-file-results-label">
@@ -1168,7 +1336,7 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
-      {decision !== null && (
+      {decision !== null && emailCompose === null && (
         <div className="kestrel-decision">
           <p className="kestrel-decision-target">
             {decision.target || 'Action requires approval'}

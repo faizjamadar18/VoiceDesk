@@ -56,6 +56,7 @@ export const IPC = {
   dismissNotchResult: 'kestrel:dismiss-notch-result',
   notchRegion: 'kestrel:notch-region',
   notchDecide: 'kestrel:notch-decide',
+  copyToClipboard: 'kestrel:copy-to-clipboard',
   authGetState: 'kestrel:auth-get-state',
   authSignOut: 'kestrel:auth-sign-out',
   authOpenOAuthUrl: 'kestrel:auth-open-oauth-url',
@@ -152,7 +153,44 @@ export interface NotchWeatherCard {
   icon: string
 }
 
-export type NotchCard = NotchWeatherCard | Record<string, unknown>
+export type NotchCard =
+  | NotchWeatherCard
+  | NotchEmailListCard
+  | NotchEmailComposeCard
+  | Record<string, unknown>
+
+/** One email row in {@link NotchEmailListCard}. Display-only. */
+export interface NotchEmailListRow {
+  /** Sender display name, e.g. "Product Hunt Daily". */
+  title: string
+  /** Subject line, or subject plus a short preview. */
+  subtitle: string
+  /** Short date such as "Nov 11". */
+  trailing: string
+}
+
+/** The newest emails, newest first, under a titled heading. */
+export interface NotchEmailListCard {
+  kind: 'email_list'
+  /** e.g. "Unread inbox: first 5" or "Latest inbox emails". */
+  title: string
+  rows: NotchEmailListRow[]
+}
+
+/** A composed email waiting on the user's choice. */
+export interface NotchEmailComposeCard {
+  kind: 'email_compose'
+  mode: 'send' | 'reply' | 'draft'
+  /** e.g. "New Message" or "Reply". */
+  title: string
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  body: string
+  /** Messages in the thread, for "View thread (N)". Null when new. */
+  threadCount: number | null
+}
 
 /**
  * A file row shown in the notch. Display-only: the absolute path never leaves
@@ -413,6 +451,7 @@ export interface KestrelApi {
   dismissNotchResult: () => void
   cancelNotchActive: () => void
   decideNotch: (action: NotchDecisionAction) => void
+  copyToClipboard: (text: string) => void
   setNotchRegion: (region: NotchInteractiveRegion | null) => void
   getAuthState: () => Promise<AuthState>
   onAuthStateChanged: (callback: (state: AuthState) => void) => () => void

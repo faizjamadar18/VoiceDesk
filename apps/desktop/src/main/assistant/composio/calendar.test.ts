@@ -537,7 +537,7 @@ describe('readableError', () => {
   })
 
   it('falls back to a generic line when there is nothing to read', () => {
-    expect(readableError('')).toBe('Google Calendar returned an error.')
+    expect(readableError('')).toBe('The app returned an error.')
   })
 })
 

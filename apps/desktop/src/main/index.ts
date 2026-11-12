@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   globalShortcut,
   ipcMain,
   Menu,
@@ -538,6 +539,10 @@ function registerIpc(): void {
   ipcMain.on(IPC.notchDecide, (_event, action: unknown) => {
     if (action !== 'confirm' && action !== 'cancel' && action !== 'undo') return
     void notchController?.decide(action)
+  })
+  ipcMain.on(IPC.copyToClipboard, (_event, text: unknown) => {
+    if (typeof text !== 'string') return
+    clipboard.writeText(text)
   })
   ipcMain.on(IPC.notchRegion, (_event, region: unknown) => {
     notchPresenter?.setRegion(normalizeInteractiveRegion(region))

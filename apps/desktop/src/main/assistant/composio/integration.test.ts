@@ -336,7 +336,7 @@ describe('ComposioIntegration', () => {
       DEFAULT_CALLBACK_URL
     )
 
-    const unsupported = await harness.integration.connect('gmail')
+    const unsupported = await harness.integration.connect('notion')
     expect(unsupported.ok).toBe(false)
     expect(unsupported.url).toBeNull()
     expect(unsupported.message).toBe('That app is not supported yet.')

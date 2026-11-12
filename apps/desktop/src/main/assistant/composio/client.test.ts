@@ -17,7 +17,7 @@ const CALENDAR: readonly ComposioProviderSpec[] = COMPOSIO_PROVIDERS
 
 const SESSION_BODY = {
   user_id: 'user-1',
-  toolkits: { enable: ['googlecalendar'] },
+  toolkits: { enable: ['googlecalendar', 'gmail'] },
   tools: {
     googlecalendar: {
       enable: [
@@ -25,6 +25,15 @@ const SESSION_BODY = {
         'GOOGLECALENDAR_CREATE_EVENT',
         'GOOGLECALENDAR_PATCH_EVENT',
         'GOOGLECALENDAR_DELETE_EVENT'
+      ]
+    },
+    gmail: {
+      enable: [
+        'GMAIL_FETCH_EMAILS',
+        'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID',
+        'GMAIL_SEND_EMAIL',
+        'GMAIL_REPLY_TO_THREAD',
+        'GMAIL_CREATE_EMAIL_DRAFT'
       ]
     }
   },

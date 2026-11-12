@@ -631,8 +631,16 @@ export class NotchController {
           this.clearFileResults()
         )
       } else if (response.card) {
-        // Rich cards stay for 6 seconds (or until Esc / new turn) as agreed
-        this.scheduleHide(this.options.resultVisibleMs ?? 6_000)
+        // A rich card stays long enough to read. An email list is row-based
+        // like file results, so it gets the same long safety timeout instead of
+        // the short one used by self-contained cards such as the weather card.
+        const kind =
+          typeof response.card['kind'] === 'string' ? response.card['kind'] : ''
+        this.scheduleHide(
+          kind === 'email_list'
+            ? this.options.fileResultsVisibleMs ?? FILE_RESULTS_SAFETY_MS
+            : this.options.resultVisibleMs ?? 6_000
+        )
       } else {
         this.scheduleHide(this.options.resultVisibleMs ?? 2_000)
       }

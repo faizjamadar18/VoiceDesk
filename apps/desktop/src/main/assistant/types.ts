@@ -50,6 +50,7 @@ export interface ToolPreparation {
   display?: string | null
   message?: string | null
   outcome?: ToolOutcome | null
+  card?: Record<string, unknown> | null
 }
 
 export interface ActionExecutor {

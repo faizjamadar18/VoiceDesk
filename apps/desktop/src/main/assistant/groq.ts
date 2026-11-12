@@ -161,9 +161,24 @@ export class GroqClient implements LlmClient {
             'When the user asks to open an application, search files, check weather, ' +
             'type text, or perform any action, call the corresponding tool. ' +
             "Always call a tool if one fits the user's intent. " +
-            'When the user asks to schedule, move, cancel, or check a meeting ' +
+            'When the user asks to schedule, move, cancel, or check a meeting, ' +
+            'or to check, read, send, reply to, or draft an email, ' +
             'and a matching tool is available, call that tool directly. ' +
-            'Never ask the user which calendar or app to use. ' +
+            'Never ask the user which calendar, mailbox, or app to use. ' +
+            'For email, pick the matching email tool from intent: to list or ' +
+            'check the inbox, use the list tool, setting `unread_only` when the ' +
+            'user says unread; to read one email, use the read tool, where the ' +
+            "newest email is `position` 1, so 'the second one' means " +
+            '`position` 2; to send, reply, or draft, use the matching tool. ' +
+            'If the user names a person instead of an address, pass that ' +
+            'name as the recipient and let the tool look it up; never ' +
+            'invent, guess, or complete an email address yourself. ' +
+            'When the user does not dictate the text, write the subject and the ' +
+            'whole body yourself in a short, natural, professional tone, ' +
+            'greeting by name when it is known and signing off with the ' +
+            "user's own name only when they use one. Never invent an email " +
+            'address. Results come back newest first, and only the newest few ' +
+            'are shown or spoken. ' +
             `Current date and time: ${formatLocalTimestamp(this.clock())} ` +
             `(${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` +
             'Whenever the user mentions a relative time (today, tomorrow, next Tuesday, ' +

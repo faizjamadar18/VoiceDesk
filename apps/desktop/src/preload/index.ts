@@ -70,6 +70,7 @@ const api: KestrelApi = {
   dismissNotchResult: () => ipcRenderer.send(IPC.dismissNotchResult),
   cancelNotchActive: () => ipcRenderer.send(IPC.notchCancelActive),
   decideNotch: (action) => ipcRenderer.send(IPC.notchDecide, action),
+  copyToClipboard: (text) => ipcRenderer.send(IPC.copyToClipboard, text),
   setNotchRegion: (region) => ipcRenderer.send(IPC.notchRegion, region),
   getAuthState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
   onAuthStateChanged: (callback) => subscribe<AuthState>(IPC.authStateChanged, callback),

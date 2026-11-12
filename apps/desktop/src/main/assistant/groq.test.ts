@@ -206,8 +206,9 @@ describe('GroqClient', () => {
     expect(messages[0].content).toContain('You are Kestrel')
     expect(messages[0].content).toContain('Always call a tool')
     expect(messages[0].content).toContain(
-      'Never ask the user which calendar or app to use.'
+      'Never ask the user which calendar, mailbox, or app to use.'
     )
+    expect(messages[0].content).toContain('Never invent an email address.')
     expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
     expect(calls[0].init.signal).toBeInstanceOf(AbortSignal)
   })

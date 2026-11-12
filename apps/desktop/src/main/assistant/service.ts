@@ -416,7 +416,8 @@ export class AssistantService {
         risk: spec.risk,
         requiresConfirmation: true,
         dryRun,
-        target: prepared.display ?? null
+        target: prepared.display ?? null,
+        card: prepared.card ?? null
       })
     }
 
