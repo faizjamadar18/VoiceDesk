@@ -1,10 +1,12 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import type { IntegrationsStatus } from '../../../../shared/types'
 import { APP_ACTIONS_CATALOG, getAppActions } from './app-actions-catalog'
 import { AppDetailModal } from './AppDetailModal'
 import { AppRow } from './AppRow'
-import { AppsPage } from './AppsPage'
+import { AppsPage, resolveApps, runIntegrationToggle } from './AppsPage'
+import { ComposioKeyCard } from './ComposioKeyCard'
 import { INITIAL_APPS } from './dummy-data'
 import type { AppItem } from './types'
 
@@ -32,15 +34,12 @@ describe('Apps Tab (App Store) Configuration & Data', () => {
     ])
   })
 
-  it('initializes with Notion connected and all other 14 apps available', () => {
+  it('initializes with all 15 apps available (integration state comes from the main process)', () => {
     const connected = INITIAL_APPS.filter((a) => a.connected)
     const available = INITIAL_APPS.filter((a) => !a.connected)
 
-    expect(connected).toHaveLength(1)
-    expect(connected[0].name).toBe('Notion')
-    expect(connected[0].description).toBe('Manage pages and databases')
-
-    expect(available).toHaveLength(14)
+    expect(connected).toHaveLength(0)
+    expect(available).toHaveLength(15)
   })
 
   it('marks beta status on Spotify, Slack, Codex, Obsidian, and X (Twitter)', () => {
@@ -88,7 +87,7 @@ describe('Apps Tab State Transitions', () => {
     // Connect Spotify
     toggleApp('spotify', true)
     expect(apps.find((a) => a.id === 'spotify')?.connected).toBe(true)
-    expect(apps.filter((a) => a.connected)).toHaveLength(2)
+    expect(apps.filter((a) => a.connected)).toHaveLength(1)
 
     // Disconnect Notion
     toggleApp('notion', false)
@@ -232,11 +231,12 @@ describe('AppDetailModal Component & Behavior', () => {
 
   it('renders connected state switch when app is connected', () => {
     const notionApp = INITIAL_APPS.find((a) => a.id === 'notion')!
-    expect(notionApp.connected).toBe(true)
+    const connectedApp: AppItem = { ...notionApp, connected: true }
+    expect(connectedApp.connected).toBe(true)
 
     const html = renderToStaticMarkup(
       createElement(AppDetailModal, {
-        app: notionApp,
+        app: connectedApp,
         onClose: () => {},
         isDarkMode: true
       })
@@ -306,7 +306,117 @@ describe('AppRow & AppsPage Interaction', () => {
     expect(html).toContain('Connect apps to use with Agent Mode')
     expect(html).toContain('Official')
     expect(html).toContain('Custom')
-    expect(html).toContain('Connected')
     expect(html).toContain('Available')
+  })
+})
+
+describe('Composio Integrations UI', () => {
+  const noKeyStatus: IntegrationsStatus = {
+    hasKey: false,
+    keySource: null,
+    sessionId: null,
+    providers: [],
+    error: null
+  }
+
+  const hasKeyStatus: IntegrationsStatus = {
+    hasKey: true,
+    keySource: 'stored',
+    sessionId: 'session-1',
+    providers: [],
+    error: null
+  }
+
+  const brokenKeyStatus: IntegrationsStatus = {
+    hasKey: true,
+    keySource: 'stored',
+    sessionId: null,
+    providers: [],
+    error: 'Your Composio API key was rejected.'
+  }
+
+  it('renders the key card with an input when no key is available', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposioKeyCard, { status: noKeyStatus, onSaved: () => {} })
+    )
+
+    expect(html).toContain('Connect your apps')
+    expect(html).toContain('Composio API key')
+    expect(html).toContain('type="password"')
+    expect(html).toContain('placeholder="ak_..."')
+    expect(html).toContain('ak_...')
+    expect(html).toContain('Save key')
+  })
+
+  it('renders nothing once a key is available', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposioKeyCard, { status: hasKeyStatus, onSaved: () => {} })
+    )
+
+    expect(html).toBe('')
+  })
+
+  it('keeps the card visible with a replacement prompt when the saved key was rejected', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposioKeyCard, { status: brokenKeyStatus, onSaved: () => {} })
+    )
+
+    expect(html).toContain('composio-key-input')
+    expect(html).toContain('Fix your Composio key')
+    expect(html).toContain('Your saved key was rejected. Paste a working key below to replace it.')
+    expect(html).toContain('Your Composio API key was rejected.')
+  })
+
+  it('hints that the key starts with ak_ and not ck_', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposioKeyCard, { status: noKeyStatus, onSaved: () => {} })
+    )
+
+    expect(html).toContain('ak_')
+    expect(html).toContain('not ck_')
+  })
+
+  it('shows Google Calendar connected only when the status reports googlecalendar connected', () => {
+    const connectedStatus: IntegrationsStatus = {
+      ...hasKeyStatus,
+      providers: [
+        { id: 'googlecalendar', label: 'Google Calendar', connected: true, toolCount: 7, error: null }
+      ]
+    }
+
+    const connected = resolveApps(INITIAL_APPS, connectedStatus).find(
+      (a) => a.id === 'googlecalendar'
+    )
+    expect(connected?.connected).toBe(true)
+
+    const available = resolveApps(INITIAL_APPS, noKeyStatus).find(
+      (a) => a.id === 'googlecalendar'
+    )
+    expect(available?.connected).toBe(false)
+
+    // Non-integration apps keep the value they were seeded with.
+    const spotify = resolveApps(INITIAL_APPS, connectedStatus).find((a) => a.id === 'spotify')
+    expect(spotify?.connected).toBe(INITIAL_APPS.find((a) => a.id === 'spotify')?.connected)
+  })
+
+  it('blocks Connect with no key and does not call connectIntegration', async () => {
+    const connectIntegration = vi.fn(async () => ({ ok: true, url: null, message: 'connected' }))
+    const refreshIntegrations = vi.fn(async () => noKeyStatus)
+    vi.stubGlobal('window', { kestrel: { connectIntegration, refreshIntegrations } })
+
+    try {
+      const outcome = await runIntegrationToggle(
+        'googlecalendar',
+        true,
+        noKeyStatus,
+        window.kestrel
+      )
+
+      expect(outcome.message).toContain('Paste your Composio key')
+      expect(outcome.refresh).toBe(false)
+      expect(connectIntegration).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

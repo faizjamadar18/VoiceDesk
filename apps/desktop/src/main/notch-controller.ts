@@ -427,7 +427,11 @@ export class NotchController {
             )
 
       this.decision = null
-      this.emit('result', this.lastTranscript || null, response.message, response.status)
+      // Speak the confirmation once the choice is applied. Falling back to the
+      // message keeps a cancel ("Cancelled.") audible too.
+      this.emit('result', this.lastTranscript || null, response.message, response.status, {
+        spoken: response.spokenResponse || response.message
+      })
       this.scheduleHide(this.options.resultVisibleMs ?? 2_000)
     } catch (error) {
       // The card stays put so the user can try again; the plan is unchanged.

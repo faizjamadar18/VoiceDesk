@@ -14,9 +14,11 @@ import { statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   IPC,
+  isIntegrationId,
   type AuthState,
   type AuthTokens,
   type AuthUser,
+  type IntegrationConnectResult,
   type KestrelRuntimeState,
   type KestrelSettings,
   type NotchActivity,
@@ -25,9 +27,15 @@ import {
   type SaveSettingsResult
 } from '../shared/types'
 import { HttpActionClient } from './action-client'
+import { loadOrCreateUserId } from './assistant/composio/identity'
+import {
+  ComposioIntegration,
+  DEFAULT_CALLBACK_URL
+} from './assistant/composio/integration'
+import { ComposioKeyStore } from './assistant/composio/key'
 import { loadEnvFiles } from './assistant/env'
 import { AssistantServer, parseApiAddress } from './assistant/server'
-import { AssistantService } from './assistant/service'
+import { AssistantService, emptyIntegrationsStatus } from './assistant/service'
 import { AuthService, syncUserToBackend } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
 import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
@@ -83,6 +91,7 @@ let nemoServer: NemoServer | null = null
 let transcriber: LiveTranscriber | null = null
 let authService: AuthService | null = null
 let assistantService: AssistantService | null = null
+let composioIntegration: ComposioIntegration | null = null
 let assistantServer: AssistantServer | null = null
 let speechSynthesizer: SpeechSynthesizer | null = null
 let speechEngine: WorkerSpeechEngine | null = null
@@ -546,6 +555,34 @@ function registerIpc(): void {
   ipcMain.handle(IPC.authSetSession, async (_event, tokens: AuthTokens, user: AuthUser) => {
     await authService?.setSession(tokens, user)
   })
+  ipcMain.handle(IPC.integrationsGetStatus, () =>
+    assistantService?.integrationsStatus() ?? emptyIntegrationsStatus()
+  )
+  ipcMain.handle(IPC.integrationsRefresh, () =>
+    assistantService?.refreshIntegrations() ?? Promise.resolve(emptyIntegrationsStatus())
+  )
+  ipcMain.handle(IPC.integrationsSetKey, (_event, key: unknown) => {
+    if (typeof key !== 'string') return emptyIntegrationsStatus()
+    return assistantService?.setIntegrationsKey(key) ?? Promise.resolve(emptyIntegrationsStatus())
+  })
+  ipcMain.handle(IPC.integrationsClearKey, () =>
+    assistantService?.clearIntegrationsKey() ?? Promise.resolve(emptyIntegrationsStatus())
+  )
+  ipcMain.handle(IPC.integrationsConnect, async (_event, id: unknown) => {
+    if (!isIntegrationId(id)) {
+      return { ok: false, url: null, message: 'That app is not supported yet.' } satisfies IntegrationConnectResult
+    }
+    const result =
+      (await assistantService?.connectIntegration(id)) ??
+      ({ ok: false, url: null, message: 'Integrations are not available.' } satisfies IntegrationConnectResult)
+    if (result.ok && result.url) {
+      // Open the provider's consent page in the system browser, then wait in the
+      // background for the connection to appear so the UI updates by itself.
+      await shell.openExternal(result.url)
+      void assistantService?.awaitIntegration(id)
+    }
+    return result
+  })
   ipcMain.handle(IPC.speechSynthesize, async (_event, text: unknown) => {
     if (typeof text !== 'string') return null
     return speechSynthesizer?.synthesize(text) ?? null
@@ -619,6 +656,17 @@ function createNotch(): void {
   })
 }
 
+function handleDeepLink(url: string): void {
+  if (url.startsWith(`${PROTOCOL_SCHEME}://composio`)) {
+    showMainWindow()
+    // The browser flow just finished; re-check the connections now instead of
+    // waiting for the poll. `refreshIntegrations` never rejects.
+    void assistantService?.refreshIntegrations()
+    return
+  }
+  void authService?.handleDeepLink(url)
+}
+
 function registerProtocolClient(): void {
   try {
     if (!app.isPackaged) {
@@ -650,8 +698,22 @@ async function initialize(): Promise<void> {
   // The assistant runs in-process, but the Supabase OAuth redirect and the
   // notch both need a real localhost URL, so host the same HTTP surface the
   // Python backend provided.
+  // The Composio API key is bring-your-own-key: it stays on this machine, and
+  // the user id is generated once and kept stable for this install.
+  const composioKeyPath =
+    process.env.KESTREL_COMPOSIO_KEY_PATH?.trim() ||
+    join(app.getPath('userData'), 'kestrel-composio.json')
+  const composioUserIdPath = join(app.getPath('userData'), 'kestrel-composio-user.json')
+  composioIntegration = new ComposioIntegration({
+    keyStore: new ComposioKeyStore(composioKeyPath),
+    userId: loadOrCreateUserId(composioUserIdPath),
+    callbackUrl: DEFAULT_CALLBACK_URL,
+    onStatus: (status) => sendToMain(IPC.integrationsChanged, status)
+  })
+
   assistantService = new AssistantService({
-    mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json')
+    mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json'),
+    integrations: composioIntegration
   })
   await assistantService.initialize()
 
@@ -705,7 +767,7 @@ async function initialize(): Promise<void> {
 
   const initialDeepLink = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
   if (initialDeepLink) {
-    void authService.handleDeepLink(initialDeepLink)
+    handleDeepLink(initialDeepLink)
   }
 
   const registered = registerChord(settings.hotkey)
@@ -747,17 +809,15 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', (_event, commandLine) => {
     showMainWindow()
     const deepLink = commandLine.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
-    if (deepLink && authService) {
-      void authService.handleDeepLink(deepLink)
+    if (deepLink) {
+      handleDeepLink(deepLink)
     }
   })
 
   app.on('open-url', (event, url) => {
     event.preventDefault()
     showMainWindow()
-    if (authService) {
-      void authService.handleDeepLink(url)
-    }
+    handleDeepLink(url)
   })
 
   app.on('before-quit', () => {
@@ -779,6 +839,8 @@ if (!app.requestSingleInstanceLock()) {
     assistantServer = null
     void assistantService?.close()
     assistantService = null
+    void composioIntegration?.close()
+    composioIntegration = null
     void nemoServer?.stop()
     nemoServer = null
     speechStreamBridge?.cancelAll()

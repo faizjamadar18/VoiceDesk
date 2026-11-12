@@ -143,13 +143,25 @@ export interface ToolSelectorOptions {
 export class ToolSelector {
   private embedder: Embedder | null
   readonly topK: number
-  private readonly alwaysInclude: ReadonlySet<string>
+  private readonly alwaysInclude: Set<string>
   private readonly toolCache = new Map<string, number[]>()
 
   constructor(options: ToolSelectorOptions = {}) {
     this.embedder = options.embedder ?? null
     this.topK = options.topK ?? DEFAULT_TOP_K
     this.alwaysInclude = new Set(options.alwaysInclude ?? [])
+  }
+
+  /**
+   * Always offer these tools, no matter the transcript or `topK`.
+   *
+   * Used for tools that must never be filtered out — the built-ins, and every
+   * tool from a connected app the user has authorised. Empty names are ignored.
+   */
+  pin(...names: string[]): void {
+    for (const name of names) {
+      if (name) this.alwaysInclude.add(name)
+    }
   }
 
   select(transcript: string, specs: ToolSpec[]): ToolSpec[] {

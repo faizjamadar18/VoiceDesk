@@ -14,8 +14,16 @@
 
 import { homedir } from 'node:os'
 import path from 'node:path'
-import type { ActionResponse, ScreenAnswerResponse, ScreenAskInput } from '../../shared/types'
+import type {
+  ActionResponse,
+  IntegrationConnectResult,
+  IntegrationId,
+  IntegrationsStatus,
+  ScreenAnswerResponse,
+  ScreenAskInput
+} from '../../shared/types'
 import { WindowsActionExecutor } from './actions'
+import type { ComposioIntegration } from './composio/integration'
 import { DirectFileSearch, FileOps } from './files'
 import { DEFAULT_GROQ_MODEL, resilientFromEnv } from './groq'
 import { loadServerConfigs } from './mcp/config'
@@ -23,7 +31,7 @@ import { McpManager } from './mcp/registry'
 import { PendingStore } from './pending'
 import { FallbackPlanner, GroqPlanner, RulePlanner } from './planner'
 import { ToolRegistry } from './registry'
-import { selectorFromEnv } from './retrieval'
+import { selectorFromEnv, type ToolSelector } from './retrieval'
 import {
   FakeTranscriber,
   GroqTranscriber,
@@ -63,6 +71,17 @@ const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
 const SUPPORTED_PROVIDERS: ReadonlySet<string> = new Set(['fake', 'groq'])
 const DEFAULT_PROVIDER = 'groq'
 
+/** The integrations status reported when no integration is wired in. */
+export function emptyIntegrationsStatus(): IntegrationsStatus {
+  return {
+    hasKey: false,
+    keySource: null,
+    sessionId: null,
+    providers: [],
+    error: null
+  }
+}
+
 /** The API's HTTP error, mirroring FastAPI's `HTTPException`. */
 export class AssistantHttpError extends Error {
   readonly status: number
@@ -97,6 +116,8 @@ export interface AssistantServiceOptions {
   visionClient?: VisionClient
   mcpManager?: McpManager | null
   weather?: { fetch(location: string): Promise<WeatherResult> }
+  /** The Composio integration that contributes voice tools for connected apps. */
+  integrations?: ComposioIntegration | null
   /** Home directory used by FileOps and the default file roots. */
   home?: string
   /** Default file roots when `KESTREL_FILE_ROOTS` is unset. */
@@ -220,9 +241,9 @@ export function validateArguments(spec: ToolSpec, args: unknown): boolean {
   return true
 }
 
-/** "Ready to <lowercased description>. Approval needed." from a tool summary. */
-export function pendingMessage(description: string): string {
-  const trimmed = description.replace(/\s+$/, '').replace(/\.+$/, '')
+/** "Ready to <lowercased action label>. Approval needed." from a short action label. */
+export function pendingMessage(actionLabel: string): string {
+  const trimmed = actionLabel.replace(/\s+$/, '').replace(/\.+$/, '')
   if (!trimmed) {
     return 'Approval needed.'
   }
@@ -243,6 +264,10 @@ export class AssistantService {
   private readonly executor: ActionExecutor
   private readonly planner: Planner
   readonly plannerProvider: string
+  private readonly integrations: ComposioIntegration | null
+  private readonly toolSelector: ToolSelector | null
+  private integrationToolNames: string[] = []
+  private integrationRefresh: Promise<IntegrationsStatus> | null = null
   private manager: McpManager | null
   private readonly mcpConfigPath: string
   private readonly home: string
@@ -277,8 +302,19 @@ export class AssistantService {
     this.manager = options.mcpManager ?? null
     this.mcpConfigPath = options.mcpConfigPath ?? path.join(process.cwd(), 'mcp_servers.json')
 
-    this.planner = buildPlanner(options.planner, this.registry, this.clock)
+    this.integrations = options.integrations ?? null
+    const prepared = buildPlanner(options.planner, this.registry, this.clock)
+    this.planner = prepared.planner
+    this.toolSelector = prepared.selector
     this.plannerProvider = plannerProvider(this.planner)
+  }
+
+  /**
+   * The tool selector the planner uses, or null when tool retrieval is off.
+   * A host may need to know whether retrieval is active.
+   */
+  get activeToolSelector(): ToolSelector | null {
+    return this.toolSelector
   }
 
   /**
@@ -290,11 +326,15 @@ export class AssistantService {
     if (this.initialized) return
     this.initialized = true
     this.manager = await setupMcp(this.manager, this.registry, this.mcpConfigPath)
+    // Deliberately not awaited: the Composio session is a network call and must
+    // not hold up startup. `refreshIntegrations` is idempotent and self-deduping.
+    void this.refreshIntegrations()
   }
 
   async close(): Promise<void> {
     await this.manager?.close()
     this.manager = null
+    await this.integrations?.close()
   }
 
   // -- ActionClient surface ---------------------------------------------
@@ -366,7 +406,7 @@ export class AssistantService {
 
     if (spec.requiresConfirmation && !dryRun) {
       const planId = this.pending.create(spec.name, prepared.arguments)
-      const message = prepared.message || pendingMessage(spec.description)
+      const message = prepared.message || pendingMessage(label)
       return actionResponse({
         status: 'pending',
         action: label,
@@ -420,6 +460,9 @@ export class AssistantService {
       status: 'ok',
       action: tool.spec.actionLabel || tool.spec.name,
       message: outcome.message,
+      // The confirmation is the last thing the user hears after approving, so
+      // speak it rather than leaving the approval line as the final word.
+      spokenResponse: outcome.spokenResponse || outcome.message,
       dryRun: false,
       canUndo: Boolean(tool.spec.undo),
       target: outcome.target ?? null
@@ -527,6 +570,103 @@ export class AssistantService {
     }
   }
 
+  // -- Integrations ------------------------------------------------------
+
+  integrationsStatus(): IntegrationsStatus {
+    return this.integrations?.status() ?? emptyIntegrationsStatus()
+  }
+
+  /**
+   * Re-check the connected apps and rebuild their tools. Self-deduping: a
+   * concurrent call joins the refresh already in flight. Never rejects.
+   */
+  refreshIntegrations(): Promise<IntegrationsStatus> {
+    if (this.integrationRefresh !== null) {
+      return this.integrationRefresh
+    }
+    const refresh = this.runRefresh()
+    this.integrationRefresh = refresh
+    void refresh.finally(() => {
+      if (this.integrationRefresh === refresh) {
+        this.integrationRefresh = null
+      }
+    })
+    return refresh
+  }
+
+  async setIntegrationsKey(key: string): Promise<IntegrationsStatus> {
+    const integration = this.integrations
+    if (integration === null) {
+      return emptyIntegrationsStatus()
+    }
+    const status = await integration.setKey(key)
+    this.applyIntegrationTools()
+    return status
+  }
+
+  async clearIntegrationsKey(): Promise<IntegrationsStatus> {
+    const integration = this.integrations
+    if (integration === null) {
+      return emptyIntegrationsStatus()
+    }
+    const status = await integration.clearKey()
+    this.applyIntegrationTools()
+    return status
+  }
+
+  async connectIntegration(id: IntegrationId): Promise<IntegrationConnectResult> {
+    const integration = this.integrations
+    if (integration === null) {
+      return { ok: false, url: null, message: 'Integrations are not available.' }
+    }
+    return integration.connect(id)
+  }
+
+  async awaitIntegration(id: IntegrationId): Promise<boolean> {
+    const integration = this.integrations
+    if (integration === null) {
+      return false
+    }
+    const connected = await integration.waitForConnection(id)
+    this.applyIntegrationTools()
+    return connected
+  }
+
+  private async runRefresh(): Promise<IntegrationsStatus> {
+    try {
+      const integration = this.integrations
+      if (integration === null) {
+        return emptyIntegrationsStatus()
+      }
+      const status = await integration.refresh()
+      this.applyIntegrationTools()
+      return status
+    } catch {
+      // ComposioIntegration never throws, but hold that line here too.
+      return this.integrationsStatus()
+    }
+  }
+
+  /**
+   * Rebuild the registry's integration tools.
+   *
+   * The registry is keyed by name and `register` overwrites, so a shrinking
+   * tool set must be removed explicitly.
+   */
+  private applyIntegrationTools(): void {
+    const integration = this.integrations
+    if (integration === null) return
+    for (const name of this.integrationToolNames) this.registry.delete(name)
+    this.integrationToolNames = []
+    for (const tool of integration.tools) {
+      this.registry.register(tool)
+      this.integrationToolNames.push(tool.spec.name)
+    }
+    // A connected app's tools are always offered to the model, so they must not
+    // be filtered out by tool retrieval, which keeps only the top-ranked specs.
+    this.toolSelector?.pin(...this.integrationToolNames)
+  }
+
   async transcribe(
     audio: Uint8Array | ArrayBuffer,
     contentType: string
@@ -592,18 +732,21 @@ function buildPlanner(
   injected: Planner | undefined,
   registry: ToolRegistry,
   clock: () => Date
-): Planner {
+): { planner: Planner; selector: ToolSelector | null } {
   if (injected !== undefined) {
-    return injected
+    return { planner: injected, selector: null }
   }
   if (groqKeyPresent()) {
     const selector = toolRetrievalEnabled() ? selectorFromEnv() : null
-    return new FallbackPlanner(
-      new GroqPlanner(registry, resilientFromEnv(), selector ?? undefined),
-      new RulePlanner(clock)
-    )
+    return {
+      planner: new FallbackPlanner(
+        new GroqPlanner(registry, resilientFromEnv(), selector ?? undefined),
+        new RulePlanner(clock)
+      ),
+      selector
+    }
   }
-  return new RulePlanner(clock)
+  return { planner: new RulePlanner(clock), selector: null }
 }
 
 function plannerProvider(planner: Planner): string {

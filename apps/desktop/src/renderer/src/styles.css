@@ -7643,3 +7643,12 @@ html:not(.dark) .app-action-pill--inactive:hover,
 .animate-cursor-blink {
   animation: cursor-blink 1s steps(2) infinite;
 }
+
+/* Composio key card (new) */
+.composio-key-card { margin-bottom: 16px; }
+.composio-key-card-body { margin: 0 0 12px; font-size: 12px; line-height: 1.5; color: rgba(255, 255, 255, 0.55); }
+.composio-key-card-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.composio-key-card-label { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+.composio-key-card-input { width: 220px; }
+.composio-key-card-link { background: none; border-color: transparent; }
+.composio-key-card-error { margin: 12px 0 0; font-size: 12px; color: #f87171; }

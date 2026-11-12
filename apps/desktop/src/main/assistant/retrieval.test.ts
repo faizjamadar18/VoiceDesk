@@ -145,6 +145,19 @@ describe('ToolSelector', () => {
     expect(new Set(picked)).toEqual(BUILTINS)
   })
 
+  it('returns a pinned tool even when topK is 1 and it would not rank first', () => {
+    const selector = new ToolSelector({ embedder: null, topK: 1 })
+
+    selector.pin('notion_create_page')
+    const picked = names(selector.select('send an email to alice', catalog()))
+
+    // The pinned tool is offered alongside the single best-ranked candidate,
+    // even though it is not the transcript's best match.
+    expect(picked).toContain('notion_create_page')
+    expect(picked).toContain('gmail_send_message')
+    expect(picked.filter((name) => name !== 'notion_create_page')).toHaveLength(1)
+  })
+
   it('keeps original order and does not mutate the input', () => {
     const specs = catalog()
     const snapshot = [...specs]

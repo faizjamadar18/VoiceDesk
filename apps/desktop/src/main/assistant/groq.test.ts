@@ -10,6 +10,7 @@ import {
   GroqQuotaError,
   ResilientLlmClient,
   contentFromResponse,
+  formatLocalTimestamp,
   modelChainFromEnv,
   resilientFromEnv,
   toolCallsFromResponse
@@ -136,6 +137,27 @@ describe('contentFromResponse', () => {
   })
 })
 
+describe('formatLocalTimestamp', () => {
+  it('renders a local timestamp with an explicit UTC offset', () => {
+    expect(formatLocalTimestamp(new Date())).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/
+    )
+  })
+
+  it('round-trips the local wall clock', () => {
+    const date = new Date(2026, 10, 12, 14, 32, 5)
+    const stamp = formatLocalTimestamp(date)
+    const [datePart, timePart] = stamp.slice(0, 19).split('T')
+    const [year, month, day] = datePart.split('-').map(Number)
+    const [hours, minutes, seconds] = timePart.split(':').map(Number)
+    const rebuilt = new Date(year, month - 1, day, hours, minutes, seconds)
+
+    expect(rebuilt.getHours()).toBe(date.getHours())
+    expect(rebuilt.getMinutes()).toBe(date.getMinutes())
+    expect(rebuilt.getSeconds()).toBe(date.getSeconds())
+  })
+})
+
 describe('GroqClient', () => {
   it('sends the tool definitions and returns a tool call', async () => {
     const { fetch, calls } = recordingFetch(() =>
@@ -183,8 +205,31 @@ describe('GroqClient', () => {
     expect(messages[0].role).toBe('system')
     expect(messages[0].content).toContain('You are Kestrel')
     expect(messages[0].content).toContain('Always call a tool')
+    expect(messages[0].content).toContain(
+      'Never ask the user which calendar or app to use.'
+    )
     expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
     expect(calls[0].init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('sends the current date, time, and a relative-date resolution rule', async () => {
+    const fixed = new Date(2026, 10, 12, 14, 32, 5)
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', {
+      fetch,
+      clock: () => fixed
+    })
+
+    await client.choose('schedule a meeting tomorrow at 3', [])
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages[0].content).toContain(formatLocalTimestamp(fixed))
+    expect(messages[0].content).toContain('absolute ISO 8601 datetime')
   })
 
   it('returns content when there are no tool calls', async () => {

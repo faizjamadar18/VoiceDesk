@@ -61,6 +61,12 @@ export const IPC = {
   authOpenOAuthUrl: 'kestrel:auth-open-oauth-url',
   authSetSession: 'kestrel:auth-set-session',
   authStateChanged: 'kestrel:auth-state-changed',
+  integrationsGetStatus: 'kestrel:integrations-get-status',
+  integrationsSetKey: 'kestrel:integrations-set-key',
+  integrationsClearKey: 'kestrel:integrations-clear-key',
+  integrationsConnect: 'kestrel:integrations-connect',
+  integrationsRefresh: 'kestrel:integrations-refresh',
+  integrationsChanged: 'kestrel:integrations-changed',
   speechSynthesize: 'speech:synthesize',
   speechStreamStart: 'speech:stream-start',
   speechStreamCancel: 'speech:stream-cancel',
@@ -267,6 +273,51 @@ export interface SaveSettingsResult {
   settings: KestrelSettings
 }
 
+/** The apps Kestrel can drive through Composio. Ids match the App Store catalog. */
+export const INTEGRATION_IDS = [
+  'googlecalendar',
+  'gmail',
+  'googlesuper',
+  'notion'
+] as const
+
+export type IntegrationId = (typeof INTEGRATION_IDS)[number]
+
+/** True when `value` is one of the known integration ids. */
+export function isIntegrationId(value: unknown): value is IntegrationId {
+  return (
+    typeof value === 'string' &&
+    (INTEGRATION_IDS as readonly string[]).includes(value)
+  )
+}
+
+export interface IntegrationStatus {
+  id: IntegrationId
+  label: string
+  connected: boolean
+  /** How many voice tools this provider contributed. */
+  toolCount: number
+  error: string | null
+}
+
+export interface IntegrationsStatus {
+  /** True when a Composio API key is available (stored by the user, or from the environment). */
+  hasKey: boolean
+  keySource: 'stored' | 'env' | null
+  sessionId: string | null
+  providers: IntegrationStatus[]
+  /** A problem with the key or the Composio session, shown verbatim to the user. */
+  error: string | null
+}
+
+export interface IntegrationConnectResult {
+  ok: boolean
+  /** The Composio authorization link, when one was produced. */
+  url: string | null
+  /** A short line to show the user. */
+  message: string
+}
+
 export interface ActionResponse {
   status: 'ok' | 'unhandled' | 'error' | 'pending' | 'cancelled'
   action: string
@@ -368,6 +419,12 @@ export interface KestrelApi {
   signOut: () => Promise<void>
   openOAuthUrl: (url: string) => Promise<void>
   setAuthSession: (tokens: AuthTokens, user: AuthUser) => Promise<void>
+  getIntegrationsStatus: () => Promise<IntegrationsStatus>
+  setIntegrationsKey: (key: string) => Promise<IntegrationsStatus>
+  clearIntegrationsKey: () => Promise<IntegrationsStatus>
+  connectIntegration: (id: IntegrationId) => Promise<IntegrationConnectResult>
+  refreshIntegrations: () => Promise<IntegrationsStatus>
+  onIntegrationsChanged: (callback: (status: IntegrationsStatus) => void) => () => void
   synthesizeSpeech: (text: string) => Promise<Uint8Array | null>
   startSpeechStream: (requestId: string, text: string) => void
   cancelSpeechStream: (requestId: string) => void

@@ -22,7 +22,7 @@ export const INITIAL_APPS: AppItem[] = [
     name: 'Notion',
     description: 'Manage pages and databases',
     iconUrl: notionIcon,
-    connected: true,
+    connected: false,
     category: 'noteTaking',
     official: true
   },

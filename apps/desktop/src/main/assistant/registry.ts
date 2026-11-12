@@ -16,6 +16,11 @@ export class ToolRegistry {
     return this.tools.get(name)
   }
 
+  /** Remove a tool. Returns true when something was removed. Idempotent. */
+  delete(name: string): boolean {
+    return this.tools.delete(name)
+  }
+
   specs(): ToolSpec[] {
     return [...this.tools.values()].map((tool) => tool.spec)
   }

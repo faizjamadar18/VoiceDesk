@@ -15,7 +15,10 @@ import {
   type SpeechStreamErrorPayload,
   type AuthState,
   type AuthTokens,
-  type AuthUser
+  type AuthUser,
+  type IntegrationConnectResult,
+  type IntegrationId,
+  type IntegrationsStatus
 } from '../shared/types'
 
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
@@ -74,6 +77,18 @@ const api: KestrelApi = {
   openOAuthUrl: (url) => ipcRenderer.invoke(IPC.authOpenOAuthUrl, url) as Promise<void>,
   setAuthSession: (tokens: AuthTokens, user: AuthUser) =>
     ipcRenderer.invoke(IPC.authSetSession, tokens, user) as Promise<void>,
+  getIntegrationsStatus: () =>
+    ipcRenderer.invoke(IPC.integrationsGetStatus) as Promise<IntegrationsStatus>,
+  setIntegrationsKey: (key) =>
+    ipcRenderer.invoke(IPC.integrationsSetKey, key) as Promise<IntegrationsStatus>,
+  clearIntegrationsKey: () =>
+    ipcRenderer.invoke(IPC.integrationsClearKey) as Promise<IntegrationsStatus>,
+  connectIntegration: (id: IntegrationId) =>
+    ipcRenderer.invoke(IPC.integrationsConnect, id) as Promise<IntegrationConnectResult>,
+  refreshIntegrations: () =>
+    ipcRenderer.invoke(IPC.integrationsRefresh) as Promise<IntegrationsStatus>,
+  onIntegrationsChanged: (callback) =>
+    subscribe<IntegrationsStatus>(IPC.integrationsChanged, callback),
   synthesizeSpeech: (text: string) =>
     ipcRenderer.invoke(IPC.speechSynthesize, text) as Promise<Uint8Array | null>,
   startSpeechStream: (requestId, text) =>

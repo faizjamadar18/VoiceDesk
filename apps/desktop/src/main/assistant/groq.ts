@@ -38,6 +38,7 @@ interface GroqClientOptions {
   fetch?: FetchLike
   baseUrl?: string
   model?: string
+  clock?: () => Date
 }
 
 interface ChatMessage {
@@ -67,6 +68,7 @@ export class GroqClient implements LlmClient {
   readonly model: string
   private readonly apiKey: string
   private readonly fetchImpl: FetchLike
+  private readonly clock: () => Date
 
   constructor(apiKey: string, options: GroqClientOptions = {}) {
     this.apiKey = apiKey
@@ -74,6 +76,7 @@ export class GroqClient implements LlmClient {
       options.fetch ?? ((url, init) => globalThis.fetch(url, init))
     this.baseUrl = (options.baseUrl ?? DEFAULT_GROQ_BASE_URL).replace(/\/+$/, '')
     this.model = options.model ?? DEFAULT_GROQ_MODEL
+    this.clock = options.clock ?? (() => new Date())
   }
 
   static fromEnv(options: { fetch?: FetchLike } = {}): GroqClient {
@@ -157,7 +160,16 @@ export class GroqClient implements LlmClient {
             'Answer conversational questions concisely, warmly, and naturally. ' +
             'When the user asks to open an application, search files, check weather, ' +
             'type text, or perform any action, call the corresponding tool. ' +
-            "Always call a tool if one fits the user's intent."
+            "Always call a tool if one fits the user's intent. " +
+            'When the user asks to schedule, move, cancel, or check a meeting ' +
+            'and a matching tool is available, call that tool directly. ' +
+            'Never ask the user which calendar or app to use. ' +
+            `Current date and time: ${formatLocalTimestamp(this.clock())} ` +
+            `(${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` +
+            'Whenever the user mentions a relative time (today, tomorrow, next Tuesday, ' +
+            'in two hours, this Friday), work out the exact date first and pass an ' +
+            'absolute ISO 8601 datetime such as 2026-11-13T15:00:00 to the tool. ' +
+            'Never pass a date word to a tool.'
         },
         { role: 'user', content: transcript }
       ],
@@ -185,6 +197,37 @@ export class GroqClient implements LlmClient {
       )
     }
   }
+}
+
+/**
+ * Local wall-clock timestamp with an explicit UTC offset, e.g.
+ * 2026-11-12T14:32:05+05:30.
+ *
+ * Built from the date's local fields rather than `toISOString()`, which emits
+ * UTC and would lose the local wall clock.
+ */
+export function formatLocalTimestamp(date: Date): string {
+  const pad = (value: number, width = 2): string =>
+    String(value).padStart(width, '0')
+
+  // `getTimezoneOffset()` returns the minutes to ADD to local time to reach
+  // UTC, so a zone ahead of UTC (e.g. +05:30) yields a negative value. Flip
+  // the sign to render the conventional local offset.
+  const offsetMinutes = date.getTimezoneOffset()
+  const sign = offsetMinutes <= 0 ? '+' : '-'
+  const absoluteOffset = Math.abs(offsetMinutes)
+  const offset = `${sign}${pad(Math.floor(absoluteOffset / 60))}:${pad(
+    absoluteOffset % 60
+  )}`
+
+  const datePart =
+    `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-` +
+    `${pad(date.getDate())}`
+  const timePart =
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:` +
+    `${pad(date.getSeconds())}`
+
+  return `${datePart}T${timePart}${offset}`
 }
 
 export function replyFromResponse(data: unknown): LlmReply {
