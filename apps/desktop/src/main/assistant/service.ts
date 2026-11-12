@@ -16,12 +16,15 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import type {
   ActionResponse,
+  HistoryRecord,
   IntegrationConnectResult,
   IntegrationId,
   IntegrationsStatus,
   ScreenAnswerResponse,
   ScreenAskInput
 } from '../../shared/types'
+import { buildRecentContext } from '../history/context'
+import type { HistoryStore } from '../history/store'
 import { WindowsActionExecutor } from './actions'
 import type { ComposioIntegration } from './composio/integration'
 import { DirectFileSearch, FileOps } from './files'
@@ -42,6 +45,7 @@ import {
 import { buildDefaultRegistry } from './tools'
 import type {
   ActionExecutor,
+  ChatTurn,
   Directive,
   FileSearch,
   FileOpsLike,
@@ -124,6 +128,10 @@ export interface AssistantServiceOptions {
   defaultFileRoots?: string[]
   /** Path to `mcp_servers.json`, used only when MCP is enabled. */
   mcpConfigPath?: string
+  /** Local history of finished turns, replayed to the model and appended to. */
+  history?: HistoryStore
+  /** Called with each saved turn, so a host can mirror it. */
+  onHistoryRecorded?: (record: HistoryRecord) => void
 }
 
 export interface HealthResponse {
@@ -262,6 +270,7 @@ export class AssistantService {
   private readonly weather: { fetch(location: string): Promise<WeatherResult> }
   private readonly pending: PendingStore
   private readonly executor: ActionExecutor
+  private readonly history: HistoryStore | null
   private readonly planner: Planner
   readonly plannerProvider: string
   private readonly integrations: ComposioIntegration | null
@@ -303,7 +312,16 @@ export class AssistantService {
     this.mcpConfigPath = options.mcpConfigPath ?? path.join(process.cwd(), 'mcp_servers.json')
 
     this.integrations = options.integrations ?? null
-    const prepared = buildPlanner(options.planner, this.registry, this.clock)
+    this.history = options.history ?? null
+    const prepared = buildPlanner(
+      options.planner,
+      this.registry,
+      this.clock,
+      () =>
+        this.history
+          ? buildRecentContext(this.history.list(), this.clock())
+          : []
+    )
     this.planner = prepared.planner
     this.toolSelector = prepared.selector
     this.plannerProvider = plannerProvider(this.planner)
@@ -340,6 +358,31 @@ export class AssistantService {
   // -- ActionClient surface ---------------------------------------------
 
   async act(transcript: string): Promise<ActionResponse> {
+    const response = await this.runAct(transcript)
+    this.recordTurn(transcript, response)
+    return response
+  }
+
+  /**
+   * Saves a finished turn. A turn with no spoken reply (for example the bare
+   * `screen` directive, which defers to the vision route) is not recorded.
+   */
+  private recordTurn(prompt: string, response: ActionResponse): void {
+    const reply = (response.spokenResponse || response.message || '').trim()
+    if (!reply) {
+      return
+    }
+    const tool =
+      response.action === 'answer' || response.action === 'none'
+        ? null
+        : response.action
+    const saved = this.history?.record({ prompt, reply, tool })
+    if (saved) {
+      this.options.onHistoryRecorded?.(saved)
+    }
+  }
+
+  private async runAct(transcript: string): Promise<ActionResponse> {
     const dryRun = actionDryRun()
     const directive: Directive = await this.planner.plan(transcript)
 
@@ -528,6 +571,14 @@ export class AssistantService {
     }
 
     const cleaned = answer.trim()
+    const saved = this.history?.record({
+      prompt: input.question.trim(),
+      reply: cleaned,
+      tool: 'look_at_screen'
+    })
+    if (saved) {
+      this.options.onHistoryRecorded?.(saved)
+    }
     const latencyMs = Math.max(0, Math.floor(performance.now() - started))
     return {
       answer: cleaned,
@@ -732,7 +783,8 @@ export class AssistantService {
 function buildPlanner(
   injected: Planner | undefined,
   registry: ToolRegistry,
-  clock: () => Date
+  clock: () => Date,
+  recentContext: () => ChatTurn[]
 ): { planner: Planner; selector: ToolSelector | null } {
   if (injected !== undefined) {
     return { planner: injected, selector: null }
@@ -741,7 +793,12 @@ function buildPlanner(
     const selector = toolRetrievalEnabled() ? selectorFromEnv() : null
     return {
       planner: new FallbackPlanner(
-        new GroqPlanner(registry, resilientFromEnv(), selector ?? undefined),
+        new GroqPlanner(
+          registry,
+          resilientFromEnv(),
+          selector ?? undefined,
+          recentContext
+        ),
         new RulePlanner(clock)
       ),
       selector

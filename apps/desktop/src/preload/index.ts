@@ -16,6 +16,7 @@ import {
   type AuthState,
   type AuthTokens,
   type AuthUser,
+  type HistoryRecord,
   type IntegrationConnectResult,
   type IntegrationId,
   type IntegrationsStatus
@@ -90,6 +91,9 @@ const api: KestrelApi = {
     ipcRenderer.invoke(IPC.integrationsRefresh) as Promise<IntegrationsStatus>,
   onIntegrationsChanged: (callback) =>
     subscribe<IntegrationsStatus>(IPC.integrationsChanged, callback),
+  listHistory: () => ipcRenderer.invoke(IPC.historyList) as Promise<HistoryRecord[]>,
+  deleteHistory: (id) => ipcRenderer.invoke(IPC.historyDelete, id) as Promise<HistoryRecord[]>,
+  onHistoryChanged: (callback) => subscribeEvent(IPC.historyChanged, callback),
   synthesizeSpeech: (text: string) =>
     ipcRenderer.invoke(IPC.speechSynthesize, text) as Promise<Uint8Array | null>,
   startSpeechStream: (requestId, text) =>

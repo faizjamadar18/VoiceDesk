@@ -68,6 +68,9 @@ export const IPC = {
   integrationsConnect: 'kestrel:integrations-connect',
   integrationsRefresh: 'kestrel:integrations-refresh',
   integrationsChanged: 'kestrel:integrations-changed',
+  historyList: 'kestrel:history-list',
+  historyDelete: 'kestrel:history-delete',
+  historyChanged: 'kestrel:history-changed',
   speechSynthesize: 'speech:synthesize',
   speechStreamStart: 'speech:stream-start',
   speechStreamCancel: 'speech:stream-cancel',
@@ -385,6 +388,29 @@ export interface ScreenAskInput {
   marked: boolean
 }
 
+/**
+ * One finished voice turn, saved locally on the user's machine.
+ * Text only: no audio, screenshots, or other media are ever stored.
+ */
+export interface HistoryRecord {
+  id: string
+  /** ISO 8601 timestamp of when the turn finished. */
+  createdAt: string
+  /** What the user said (or asked about the screen). */
+  prompt: string
+  /** What the assistant said back. */
+  reply: string
+  /** The action/tool label that produced the reply, or null for a plain answer. */
+  tool: string | null
+}
+
+/** The fields a caller supplies; the store adds `id` and `createdAt`. */
+export interface NewHistoryRecord {
+  prompt: string
+  reply: string
+  tool?: string | null
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken?: string
@@ -464,6 +490,9 @@ export interface KestrelApi {
   connectIntegration: (id: IntegrationId) => Promise<IntegrationConnectResult>
   refreshIntegrations: () => Promise<IntegrationsStatus>
   onIntegrationsChanged: (callback: (status: IntegrationsStatus) => void) => () => void
+  listHistory: () => Promise<HistoryRecord[]>
+  deleteHistory: (id: string) => Promise<HistoryRecord[]>
+  onHistoryChanged: (callback: () => void) => () => void
   synthesizeSpeech: (text: string) => Promise<Uint8Array | null>
   startSpeechStream: (requestId: string, text: string) => void
   cancelSpeechStream: (requestId: string) => void

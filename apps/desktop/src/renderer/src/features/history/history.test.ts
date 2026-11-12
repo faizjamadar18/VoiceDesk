@@ -1,35 +1,79 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DUMMY_HISTORY_SESSIONS,
-  VoiceOSMode
-} from './HistoryPage'
+import { filterRecords, formatRelativeTime } from './HistoryPage'
+import type { HistoryRecord } from '../../../../shared/types'
 
-describe('History Feature & VoiceOS Mode Contract', () => {
-  it('defines the four core VoiceOS modes with exact numeric values', () => {
-    expect(VoiceOSMode.DICTATE).toBe(0)
-    expect(VoiceOSMode.EDIT).toBe(1)
-    expect(VoiceOSMode.WRITE).toBe(2)
-    expect(VoiceOSMode.AGENT).toBe(3)
+const RECORDS: HistoryRecord[] = [
+  {
+    id: 'record-1',
+    createdAt: '2025-01-01T00:00:00.000Z',
+    prompt: 'Book a meeting with Alice',
+    reply: 'Done — the meeting is booked for Monday.',
+    tool: 'calendar'
+  },
+  {
+    id: 'record-2',
+    createdAt: '2025-01-02T00:00:00.000Z',
+    prompt: 'What is the weather?',
+    reply: 'It is sunny today.',
+    tool: null
+  }
+]
+
+const SECONDS = 1000
+const MINUTES = 60 * SECONDS
+const HOURS = 60 * MINUTES
+const DAYS = 24 * HOURS
+
+const isoAgo = (ms: number): string => new Date(Date.now() - ms).toISOString()
+
+describe('filterRecords', () => {
+  it('returns everything for an empty or whitespace-only query', () => {
+    expect(filterRecords(RECORDS, '')).toBe(RECORDS)
+    expect(filterRecords(RECORDS, '   ')).toBe(RECORDS)
+    expect(filterRecords(RECORDS, '')).toHaveLength(RECORDS.length)
   })
 
-  it('contains expected dummy history sessions including a recoverable failure', () => {
-    expect(DUMMY_HISTORY_SESSIONS.length).toBeGreaterThan(0)
-
-    const failureSession = DUMMY_HISTORY_SESSIONS.find((s) =>
-      s.transcript?.includes('Audio saved for retranscription')
-    )
-    expect(failureSession).toBeDefined()
-    expect(failureSession?.mode).toBe(VoiceOSMode.DICTATE)
-    expect(failureSession?.audio_file_path).toBeDefined()
+  it('matches the prompt case-insensitively', () => {
+    expect(filterRecords(RECORDS, 'ALICE')).toEqual([RECORDS[0]])
   })
 
-  it('contains sessions with transcript and app_name', () => {
-    for (const session of DUMMY_HISTORY_SESSIONS) {
-      expect(session.id).toBeDefined()
-      expect(session.app_name).toBe('VoiceOS')
-      expect(session.transcript).toBeDefined()
-      expect(typeof session.created_at).toBe('string')
-    }
+  it('matches the reply case-insensitively', () => {
+    expect(filterRecords(RECORDS, 'sunny')).toEqual([RECORDS[1]])
+  })
+
+  it('returns an empty list when nothing matches', () => {
+    expect(filterRecords(RECORDS, 'nonexistent')).toEqual([])
   })
 })
 
+describe('formatRelativeTime', () => {
+  it('reports the last few seconds as "just now"', () => {
+    expect(formatRelativeTime(isoAgo(5 * SECONDS))).toBe('just now')
+  })
+
+  it('reports seconds ago', () => {
+    expect(formatRelativeTime(isoAgo(30 * SECONDS))).toBe('30s ago')
+  })
+
+  it('reports minutes ago', () => {
+    expect(formatRelativeTime(isoAgo(5 * MINUTES))).toBe('5m ago')
+  })
+
+  it('reports hours ago', () => {
+    expect(formatRelativeTime(isoAgo(3 * HOURS))).toBe('3h ago')
+  })
+
+  it('reports the previous day as "yesterday"', () => {
+    expect(formatRelativeTime(isoAgo(26 * HOURS))).toBe('yesterday')
+  })
+
+  it('reports a few days ago in days', () => {
+    expect(formatRelativeTime(isoAgo(3 * DAYS))).toBe('3d ago')
+  })
+
+  it('falls back to an absolute date for an old timestamp', () => {
+    expect(formatRelativeTime('2020-01-15T10:30:00.000Z')).toMatch(
+      /^[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} [AP]M$/
+    )
+  })
+})

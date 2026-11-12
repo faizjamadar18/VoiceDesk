@@ -11,6 +11,7 @@
 import { planAction } from './actions'
 import { ToolRegistry } from './registry'
 import type {
+  ChatTurn,
   Directive,
   LlmClient,
   Planner,
@@ -102,15 +103,18 @@ export class GroqPlanner implements Planner {
   private readonly registry: ToolRegistry
   private readonly client: LlmClient
   private readonly selector: ToolSelector | undefined
+  private readonly recentContext: (() => ChatTurn[]) | undefined
 
   constructor(
     registry: ToolRegistry,
     client: LlmClient,
-    selector?: ToolSelector
+    selector?: ToolSelector,
+    recentContext?: () => ChatTurn[]
   ) {
     this.registry = registry
     this.client = client
     this.selector = selector
+    this.recentContext = recentContext
   }
 
   async plan(transcript: string): Promise<Directive> {
@@ -119,7 +123,8 @@ export class GroqPlanner implements Planner {
       specs = this.selector.select(transcript, specs)
     }
     specs = [...specs, LOOK_AT_SCREEN_SPEC]
-    const reply = await this.client.choose(transcript, specs)
+    const history = this.recentContext?.() ?? []
+    const reply = await this.client.choose(transcript, specs, history)
     for (const call of reply.calls) {
       if (call.name === LOOK_AT_SCREEN_SPEC.name) {
         return { kind: 'screen', question: transcript }

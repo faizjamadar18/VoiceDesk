@@ -3,11 +3,8 @@ import type { JSX, MouseEvent } from 'react'
 import wordmark from './assets/voiceos-wordmark.png'
 import cloudsBlue from './voiceos-notch/assets/cloudsBlue.png'
 import lensOverlay from './voiceos-notch/assets/lens.png'
-import {
-  DUMMY_HISTORY_SESSIONS,
-  HistoryPage
-} from './features/history/HistoryPage'
-import type { HistorySession } from './features/history/HistoryPage'
+import { HistoryPage } from './features/history/HistoryPage'
+import type { HistoryRecord } from '../../shared/types'
 import { DictationPage } from './features/dictation/DictationPage'
 import { AgentPage } from './features/agent/AgentPage'
 import { AppsPage } from './features/apps/AppsPage'
@@ -117,14 +114,28 @@ function DashboardApp(): JSX.Element {
   const { isDarkMode, systemTheme } = useSystemTheme()
   const greeting = getGreeting(new Date().getHours())
   const [activeTab, setActiveTab] = useState<TabId>('dashboard')
-  const [historySessions, setHistorySessions] = useState<HistorySession[]>(
-    DUMMY_HISTORY_SESSIONS
+  const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([])
+
+  useEffect(() => {
+    void window.kestrel.listHistory().then(setHistoryRecords)
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      void window.kestrel.listHistory().then(setHistoryRecords)
+    }
+  }, [activeTab])
+
+  useEffect(
+    () =>
+      window.kestrel.onHistoryChanged(() => {
+        void window.kestrel.listHistory().then(setHistoryRecords)
+      }),
+    []
   )
 
-  const handleDeleteHistorySession = (id: string): void => {
-    setHistorySessions((sessions) =>
-      sessions.filter((session) => session.id !== id)
-    )
+  const handleDeleteHistoryRecord = (id: string): void => {
+    void window.kestrel.deleteHistory(id).then(setHistoryRecords)
   }
 
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
@@ -438,8 +449,8 @@ function DashboardApp(): JSX.Element {
 
                 {activeTab === 'history' && (
                   <HistoryPage
-                    sessions={historySessions}
-                    onDeleteSession={handleDeleteHistorySession}
+                    records={historyRecords}
+                    onDeleteRecord={handleDeleteHistoryRecord}
                   />
                 )}
 

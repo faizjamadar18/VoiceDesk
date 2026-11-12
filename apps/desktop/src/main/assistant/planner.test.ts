@@ -8,6 +8,7 @@ import {
 } from './planner'
 import { ToolRegistry } from './registry'
 import type {
+  ChatTurn,
   Directive,
   LlmClient,
   LlmReply,
@@ -23,15 +24,23 @@ const FIXED_NOW = new Date(2026, 10, 7, 9, 41, 12)
 class FakeLlmClient implements LlmClient {
   calls: ToolCall[]
   content: string | null
-  seen: { transcript: string; specs: ToolSpec[] } | null = null
+  seen: {
+    transcript: string
+    specs: ToolSpec[]
+    history: ChatTurn[] | undefined
+  } | null = null
 
   constructor(calls: ToolCall[], content: string | null = null) {
     this.calls = calls
     this.content = content
   }
 
-  async choose(transcript: string, specs: ToolSpec[]): Promise<LlmReply> {
-    this.seen = { transcript, specs }
+  async choose(
+    transcript: string,
+    specs: ToolSpec[],
+    history?: ChatTurn[]
+  ): Promise<LlmReply> {
+    this.seen = { transcript, specs, history }
     return { calls: this.calls, content: this.content }
   }
 }
@@ -345,6 +354,35 @@ describe('GroqPlanner', () => {
       'web_search',
       'look_at_screen'
     ])
+  })
+
+  it('passes the injected recent context as the third choose argument', async () => {
+    const registry = buildRegistry()
+    const client = new FakeLlmClient([
+      { name: 'open_app', arguments: { app: 'calculator' } }
+    ])
+    const history: ChatTurn[] = [
+      { role: 'user', content: '[3 minutes ago] open calc' },
+      { role: 'assistant', content: 'Opening Calculator.' }
+    ]
+    const planner = new GroqPlanner(registry, client, undefined, () => [
+      ...history
+    ])
+
+    await planWith(planner, 'open calc')
+
+    expect(client.seen?.history).toEqual(history)
+  })
+
+  it('passes an empty history when no recent context is injected', async () => {
+    const registry = buildRegistry()
+    const client = new FakeLlmClient([
+      { name: 'open_app', arguments: { app: 'calculator' } }
+    ])
+
+    await planWith(new GroqPlanner(registry, client), 'open calc')
+
+    expect(client.seen?.history).toEqual([])
   })
 
   it('offers a planner-only screen tool description', async () => {

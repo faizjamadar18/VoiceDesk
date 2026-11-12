@@ -233,6 +233,85 @@ describe('GroqClient', () => {
     expect(messages[0].content).toContain('absolute ISO 8601 datetime')
   })
 
+  it('replays prior turns between the system message and the transcript', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('and now', [], [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' }
+    ])
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages).toHaveLength(4)
+    expect(messages[0].role).toBe('system')
+    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[1]).toEqual({ role: 'user', content: 'hi' })
+    expect(messages[2]).toEqual({ role: 'assistant', content: 'hello' })
+    expect(messages[3]).toEqual({ role: 'user', content: 'and now' })
+  })
+
+  it('sends only the system and current user messages with no history', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('open notepad', [])
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages).toHaveLength(2)
+    expect(messages[0].role).toBe('system')
+    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
+  })
+
+  it('replays the same history on the schema retry', async () => {
+    const bad = spec('notion_api_patch_block_children', 'Append blocks.')
+    const { fetch, calls } = recordingFetch((_call, index) => {
+      if (index === 0) {
+        return jsonResponse(
+          {
+            error: {
+              message:
+                'invalid JSON schema for tool ' +
+                'notion_api_patch_block_children'
+            }
+          },
+          400
+        )
+      }
+      return jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    })
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose(
+      'and now',
+      [bad],
+      [
+        { role: 'user', content: 'hi' },
+        { role: 'assistant', content: 'hello' }
+      ]
+    )
+
+    expect(calls).toHaveLength(2)
+    const messages = bodyOf(calls[1]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages[1]).toEqual({ role: 'user', content: 'hi' })
+    expect(messages[2]).toEqual({ role: 'assistant', content: 'hello' })
+    expect(messages[3]).toEqual({ role: 'user', content: 'and now' })
+  })
+
   it('returns content when there are no tool calls', async () => {
     const { fetch } = recordingFetch(() =>
       jsonResponse({ choices: [{ message: { content: 'Which page?' } }] })

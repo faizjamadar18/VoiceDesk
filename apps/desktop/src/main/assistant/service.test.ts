@@ -7,11 +7,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { HistoryRecord, NewHistoryRecord } from '../../shared/types'
+import type { HistoryStore } from '../history/store'
 import type { ComposioIntegration } from './composio/integration'
 import type { ComposioStatus } from './composio/types'
 import { ToolRegistry } from './registry'
 import { AssistantService, emptyIntegrationsStatus } from './service'
 import type { Planner, Tool } from './types'
+import type { VisionClient } from './vision'
 
 function makeTool(name: string): Tool {
   return {
@@ -25,6 +28,71 @@ function makeTool(name: string): Tool {
     run: () => ({ status: 'ok', action: name, message: '' })
   }
 }
+
+/** A read-only tool that reports a spoken message, so a turn is recorded. */
+function makeSpokenTool(name: string, message: string): Tool {
+  return {
+    spec: {
+      name,
+      description: `${name} tool`,
+      parameters: { type: 'object', properties: {}, required: [] },
+      risk: 'read',
+      requiresConfirmation: false
+    },
+    run: () => ({ status: 'ok', action: name, message })
+  }
+}
+
+/** Only the four public methods the service calls on a `HistoryStore`. */
+class FakeHistory {
+  private readonly saved: HistoryRecord[] = []
+  private nextId = 1
+
+  record(entry: NewHistoryRecord, now: Date = new Date()): HistoryRecord {
+    const record: HistoryRecord = {
+      id: `record-${this.nextId}`,
+      createdAt: now.toISOString(),
+      prompt: entry.prompt,
+      reply: entry.reply,
+      tool: entry.tool ?? null
+    }
+    this.nextId += 1
+    this.saved.push(record)
+    return record
+  }
+
+  list(): HistoryRecord[] {
+    return [...this.saved]
+  }
+
+  delete(id: string): boolean {
+    const index = this.saved.findIndex((record) => record.id === id)
+    if (index === -1) return false
+    this.saved.splice(index, 1)
+    return true
+  }
+
+  count(): number {
+    return this.saved.length
+  }
+
+  entries(): HistoryRecord[] {
+    return [...this.saved]
+  }
+}
+
+class FakeVision implements VisionClient {
+  constructor(private readonly answerText = 'The file could not be found.') {}
+
+  async answer(): Promise<string> {
+    return this.answerText
+  }
+}
+
+// A minimal, well-formed PNG header: detectImageType only reads the magic bytes.
+const PNG_BASE64 = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
+]).toString('base64')
 
 const CAL_CREATE = makeTool('googlecalendar_create_event')
 const CAL_LIST = makeTool('googlecalendar_list_events')
@@ -268,5 +336,150 @@ describe('AssistantService confirmation cards', () => {
 
     expect(response.status).toBe('pending')
     expect(response.card).toBeNull()
+  })
+})
+
+describe('AssistantService history', () => {
+  const answerPlanner: Planner = {
+    plan: async () => ({ kind: 'answer', message: 'It is noon.' })
+  }
+
+  function serviceWith(
+    planner: Planner,
+    history: FakeHistory,
+    onHistoryRecorded?: (record: HistoryRecord) => void
+  ): AssistantService {
+    return new AssistantService({
+      registry: new ToolRegistry(),
+      planner,
+      history: history as unknown as HistoryStore,
+      onHistoryRecorded
+    })
+  }
+
+  it('records a finished turn with the transcript and spoken reply', async () => {
+    const history = new FakeHistory()
+    const service = serviceWith(answerPlanner, history)
+
+    await service.act('what time is it')
+
+    expect(history.entries()).toHaveLength(1)
+    expect(history.entries()[0]?.prompt).toBe('what time is it')
+    expect(history.entries()[0]?.reply).toBe('It is noon.')
+  })
+
+  it('records a plain answer with a null tool', async () => {
+    const history = new FakeHistory()
+    const service = serviceWith(answerPlanner, history)
+
+    await service.act('what time is it')
+
+    expect(history.entries()[0]?.tool).toBeNull()
+  })
+
+  it('records an unhandled turn with a null tool', async () => {
+    const history = new FakeHistory()
+    const service = serviceWith(
+      { plan: async () => ({ kind: 'none', message: 'No idea.' }) },
+      history
+    )
+
+    await service.act('do a backflip')
+
+    expect(history.entries()[0]).toMatchObject({
+      prompt: 'do a backflip',
+      reply: 'No idea.',
+      tool: null
+    })
+  })
+
+  it('records the action label for a tool turn', async () => {
+    const history = new FakeHistory()
+    const registry = new ToolRegistry()
+    registry.register(makeSpokenTool('current_time', "It's 12:00."))
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('current_time'),
+      history: history as unknown as HistoryStore
+    })
+
+    await service.act('what time is it')
+
+    expect(history.entries()[0]).toMatchObject({
+      prompt: 'what time is it',
+      reply: "It's 12:00.",
+      tool: 'current_time'
+    })
+  })
+
+  it('records a screen question and answer with the screen tool', async () => {
+    const history = new FakeHistory()
+    const service = new AssistantService({
+      registry: new ToolRegistry(),
+      history: history as unknown as HistoryStore,
+      visionClient: new FakeVision()
+    })
+
+    await service.askScreen({
+      question: 'what error is this?',
+      imageBase64: PNG_BASE64,
+      marked: false
+    })
+
+    expect(history.entries()).toEqual([
+      expect.objectContaining({
+        prompt: 'what error is this?',
+        reply: 'The file could not be found.',
+        tool: 'look_at_screen'
+      })
+    ])
+  })
+
+  it('notifies the host with the saved record', async () => {
+    const history = new FakeHistory()
+    const recorded: HistoryRecord[] = []
+    const service = serviceWith(answerPlanner, history, (record) =>
+      recorded.push(record)
+    )
+
+    await service.act('what time is it')
+
+    expect(recorded).toEqual(history.entries())
+    expect(recorded[0]).toBe(history.entries()[0])
+  })
+
+  it('does not record a turn without a reply', async () => {
+    const history = new FakeHistory()
+    const service = serviceWith(
+      { plan: async () => ({ kind: 'screen', question: 'what is this?' }) },
+      history
+    )
+
+    const response = await service.act('what is this?')
+
+    expect(response.action).toBe('look_at_screen')
+    expect(history.entries()).toEqual([])
+  })
+
+  it('does not record when the vision call throws', async () => {
+    const history = new FakeHistory()
+    const service = new AssistantService({
+      registry: new ToolRegistry(),
+      history: history as unknown as HistoryStore,
+      visionClient: {
+        answer: async () => {
+          throw new Error('vision exploded')
+        }
+      }
+    })
+
+    await expect(
+      service.askScreen({
+        question: 'what is this?',
+        imageBase64: PNG_BASE64,
+        marked: false
+      })
+    ).rejects.toThrow()
+    expect(history.entries()).toEqual([])
   })
 })

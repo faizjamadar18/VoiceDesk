@@ -145,8 +145,18 @@ export interface Planner {
   plan(transcript: string): Promise<Directive>
 }
 
+/** One prior conversation turn replayed to the model. */
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface LlmClient {
-  choose(transcript: string, specs: ToolSpec[]): Promise<LlmReply>
+  choose(
+    transcript: string,
+    specs: ToolSpec[],
+    history?: ChatTurn[]
+  ): Promise<LlmReply>
 }
 
 export interface ToolSelector {

@@ -1437,6 +1437,23 @@ kbd {
   user-select: text;
 }
 
+.history-reply {
+  position: relative;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.history-reply p {
+  padding-right: 32px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1.625;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
 .history-copy-button {
   position: absolute;
   top: 0;
@@ -4649,6 +4666,16 @@ html:not(.dark) .history-mode,
 html:not(.dark) .history-transcript p,
 .light .history-transcript p {
   color: #666666;
+}
+
+html:not(.dark) .history-reply,
+.light .history-reply {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+html:not(.dark) .history-reply p,
+.light .history-reply p {
+  color: #555555;
 }
 
 html:not(.dark) .history-copy-button,

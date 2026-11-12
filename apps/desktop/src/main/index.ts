@@ -39,6 +39,7 @@ import { AssistantServer, parseApiAddress } from './assistant/server'
 import { AssistantService, emptyIntegrationsStatus } from './assistant/service'
 import { AuthService, syncUserToBackend } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
+import { HistoryStore } from './history/store'
 import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
 import { normalizeInteractiveRegion } from './interactive-region'
 import { startKeyHook, type KeyHookHandle } from './key-hook'
@@ -92,6 +93,7 @@ let nemoServer: NemoServer | null = null
 let transcriber: LiveTranscriber | null = null
 let authService: AuthService | null = null
 let assistantService: AssistantService | null = null
+let historyStore: HistoryStore | null = null
 let composioIntegration: ComposioIntegration | null = null
 let assistantServer: AssistantServer | null = null
 let speechSynthesizer: SpeechSynthesizer | null = null
@@ -588,6 +590,11 @@ function registerIpc(): void {
     }
     return result
   })
+  ipcMain.handle(IPC.historyList, () => historyStore?.list() ?? [])
+  ipcMain.handle(IPC.historyDelete, (_event, id: unknown) => {
+    if (typeof id === 'string') historyStore?.delete(id)
+    return historyStore?.list() ?? []
+  })
   ipcMain.handle(IPC.speechSynthesize, async (_event, text: unknown) => {
     if (typeof text !== 'string') return null
     return speechSynthesizer?.synthesize(text) ?? null
@@ -716,9 +723,16 @@ async function initialize(): Promise<void> {
     onStatus: (status) => sendToMain(IPC.integrationsChanged, status)
   })
 
+  const historyPath =
+    process.env.KESTREL_HISTORY_PATH?.trim() ||
+    join(app.getPath('userData'), 'kestrel-history.json')
+  historyStore = new HistoryStore(historyPath)
+
   assistantService = new AssistantService({
     mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json'),
-    integrations: composioIntegration
+    integrations: composioIntegration,
+    history: historyStore,
+    onHistoryRecorded: () => sendToMain(IPC.historyChanged)
   })
   await assistantService.initialize()
 

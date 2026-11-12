@@ -5,7 +5,13 @@
  * `fetch`; tests inject a fake fetch seam so no request leaves the process.
  */
 
-import type { LlmClient, LlmReply, ToolCall, ToolSpec } from './types'
+import type {
+  ChatTurn,
+  LlmClient,
+  LlmReply,
+  ToolCall,
+  ToolSpec
+} from './types'
 
 export const DEFAULT_GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b'
@@ -87,7 +93,11 @@ export class GroqClient implements LlmClient {
     })
   }
 
-  async choose(transcript: string, specs: ToolSpec[]): Promise<LlmReply> {
+  async choose(
+    transcript: string,
+    specs: ToolSpec[],
+    history: ChatTurn[] = []
+  ): Promise<LlmReply> {
     const url = `${this.baseUrl}/chat/completions`
     const headers = {
       Authorization: `Bearer ${this.apiKey}`,
@@ -97,7 +107,7 @@ export class GroqClient implements LlmClient {
     let remaining = [...specs]
     let response: Response | undefined
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const body = this.buildBody(transcript, remaining)
+      const body = this.buildBody(transcript, remaining, history)
       response = await this.post(url, headers, body)
       if (response.status === 400 && attempt === 0) {
         const dropped = await offendingTool(response, remaining)
@@ -140,7 +150,11 @@ export class GroqClient implements LlmClient {
     return replyFromResponse(data)
   }
 
-  private buildBody(transcript: string, specs: ToolSpec[]): ChatBody {
+  private buildBody(
+    transcript: string,
+    specs: ToolSpec[],
+    history: ChatTurn[]
+  ): ChatBody {
     const tools: FunctionTool[] = specs.map((spec) => ({
       type: 'function',
       function: {
@@ -186,6 +200,7 @@ export class GroqClient implements LlmClient {
             'absolute ISO 8601 datetime such as 2026-11-13T15:00:00 to the tool. ' +
             'Never pass a date word to a tool.'
         },
+        ...history.map((turn) => ({ role: turn.role, content: turn.content })),
         { role: 'user', content: transcript }
       ],
       tools,
@@ -449,7 +464,11 @@ export class ResilientLlmClient implements LlmClient {
     return [...ready, ...cooling]
   }
 
-  async choose(transcript: string, specs: ToolSpec[]): Promise<LlmReply> {
+  async choose(
+    transcript: string,
+    specs: ToolSpec[],
+    history: ChatTurn[] = []
+  ): Promise<LlmReply> {
     const failures: string[] = []
     const now = this.clock()
     for (const client of this.ordered()) {
@@ -457,7 +476,7 @@ export class ResilientLlmClient implements LlmClient {
       const attempts = cooling ? 1 : this.attempts
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         try {
-          return await client.choose(transcript, specs)
+          return await client.choose(transcript, specs, history)
         } catch (error) {
           if (error instanceof GroqQuotaError) {
             this.skipUntil.set(client.model, this.clock() + this.cooldown)
