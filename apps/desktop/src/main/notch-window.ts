@@ -49,7 +49,8 @@ export function createNotchWindow(): BrowserWindow {
     fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
-    focusable: false,
+    focusable: true,
+    acceptFirstMouse: true,
     hasShadow: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -88,6 +89,7 @@ export class NotchWindowPresenter implements NotchPresenter {
   private lastState: NotchStatePayload | null = null
   private lastPartial = ''
   private inputEnabled = false
+  private speechActive = false
   private contentHeight = NOTCH_HEIGHT
   private disposed = false
   private interactive = false
@@ -133,12 +135,28 @@ export class NotchWindowPresenter implements NotchPresenter {
     if (this.disposed || this.win.isDestroyed()) return
     this.clearInteraction()
     this.inputEnabled = false
+    this.speechActive = false
     this.contentHeight = NOTCH_HEIGHT
     this.applyBounds()
     this.lastState = null
     this.lastPartial = ''
     this.send(IPC.notchHide)
+    if (this.win.isFocused()) {
+      this.win.blur()
+    }
     this.win.hide()
+  }
+
+  dismissWithAnimation(): void {
+    if (this.disposed || this.win.isDestroyed()) return
+    this.send(IPC.notchDismiss)
+  }
+
+  setSpeechActive(active: boolean): void {
+    if (this.disposed || this.win.isDestroyed()) return
+    if (this.speechActive === active) return
+    this.speechActive = active
+    this.applyInputEnabled(this.shouldEnableInput(this.lastState))
   }
 
   /**
@@ -195,6 +213,7 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.lastPartial = ''
     this.lastState = null
     this.inputEnabled = false
+    this.speechActive = false
     this.contentHeight = NOTCH_HEIGHT
     this.clearInteraction()
     this.applyBounds()
@@ -213,6 +232,7 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.lastPartial = ''
     this.lastState = null
     this.inputEnabled = false
+    this.speechActive = false
     this.contentHeight = NOTCH_HEIGHT
     this.clearInteraction()
     this.applyBounds()
@@ -224,21 +244,35 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.lastState = state
     if (state.transcript) this.lastPartial = state.transcript
 
-    // Answers are selectable and scrollable, so they need the same pointer
-    // handoff as cards. The height still comes from the measured content.
-    const inputEnabled =
+    this.send(IPC.notchState, state)
+    this.applyInputEnabled(this.shouldEnableInput(state))
+  }
+
+  private shouldEnableInput(state: NotchStatePayload | null): boolean {
+    if (this.speechActive) return true
+    if (!state) return false
+    return (
+      state.phase === 'processing' ||
+      state.phase === 'acting' ||
+      state.phase === 'result' ||
+      state.phase === 'error' ||
+      state.card != null ||
       Array.isArray(state.results) ||
       state.decision != null ||
-      ((state.phase === 'result' || state.phase === 'error') && !!state.message)
+      Boolean(state.spoken)
+    )
+  }
 
-    this.send(IPC.notchState, state)
-    if (inputEnabled !== this.inputEnabled) {
-      this.inputEnabled = inputEnabled
-      if (inputEnabled) {
-        this.startInteractionPolling()
-      } else {
-        this.clearInteraction()
+  private applyInputEnabled(inputEnabled: boolean): void {
+    if (inputEnabled === this.inputEnabled) return
+    this.inputEnabled = inputEnabled
+    if (inputEnabled) {
+      this.startInteractionPolling()
+      if (this.interactiveRegion !== null && this.win.isVisible()) {
+        this.syncPointer()
       }
+    } else {
+      this.clearInteraction()
     }
   }
 
@@ -292,6 +326,11 @@ export class NotchWindowPresenter implements NotchPresenter {
   }
 
   private send(channel: string, payload?: unknown): void {
+    this.sendToRenderer(channel, payload)
+  }
+
+  /** Public entry for one-off sends (e.g. streaming speech) to the notch renderer. */
+  sendToRenderer(channel: string, payload?: unknown): void {
     if (!this.ready || this.disposed || this.win.isDestroyed()) return
     if (this.win.webContents.isDestroyed()) return
     if (payload === undefined) {

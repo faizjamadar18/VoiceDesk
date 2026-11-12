@@ -19,7 +19,16 @@
  * It is presentation only: no IPC, no network, no state.
  */
 
-import { type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DependencyList,
+  type ReactNode,
+  type RefObject
+} from "react";
 
 /* ---- Exact inline styles from markdownComponents$1 (171781-172155). ---- */
 
@@ -388,10 +397,75 @@ export function VoiceOsMarkdown({ text }: { text: string }): ReactNode {
 
 /* ---- Composed wrappers matching the VoiceOS notch render tree. ---- */
 
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+/**
+ * Computes the edge-fade mask class for a scrollable response body so clipped
+ * prose trails off with VoiceOS's 22px gradient ramp instead of a hard cut.
+ */
+export function computeScrollFadeClass(
+  scrollHeight: number,
+  clientHeight: number,
+  scrollTop: number
+): string {
+  const overflowing = scrollHeight - 1 > clientHeight;
+  const top = overflowing && scrollTop > 1;
+  const bottom = overflowing && scrollTop + clientHeight < scrollHeight - 1;
+  if (top && bottom) return " agent-notch-response-scroll-fade-both";
+  if (top) return " agent-notch-response-scroll-fade-top";
+  if (bottom) return " agent-notch-response-scroll-fade-bottom";
+  return "";
+}
+
+/**
+ * Tracks scroll position and container/content resizes to drive the top/bottom
+ * edge-fade mask classes on `VoiceOsAnswer`.
+ */
+export function useScrollEdgeFade(deps: DependencyList = []): {
+  scrollRef: RefObject<HTMLDivElement | null>;
+  fadeClass: string;
+} {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [fadeClass, setFadeClass] = useState("");
+
+  useIsomorphicLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setFadeClass((prev) => (prev === "" ? prev : ""));
+      return;
+    }
+
+    const update = (): void => {
+      const next = computeScrollFadeClass(
+        el.scrollHeight,
+        el.clientHeight,
+        el.scrollTop
+      );
+      setFadeClass((prev) => (prev === next ? prev : next));
+    };
+
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    observer?.observe(el);
+    if (el.firstElementChild) observer?.observe(el.firstElementChild);
+
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, deps);
+
+  return { scrollRef, fadeClass };
+}
+
 export interface VoiceOsAnswerProps {
   text: string;
   /** Max height of the scroll region, matching VoiceOS `answerMaxHeight`. */
   maxHeight?: number;
+  isError?: boolean;
 }
 
 /**
@@ -401,16 +475,20 @@ export interface VoiceOsAnswerProps {
  */
 export function VoiceOsAnswer({
   text,
-  maxHeight = 360
+  maxHeight = 360,
+  isError = false
 }: VoiceOsAnswerProps): ReactNode {
+  const { scrollRef, fadeClass } = useScrollEdgeFade([text, maxHeight, isError]);
+
   return (
     <div
-      className="agent-notch-response-scroll"
+      ref={scrollRef}
+      className={`agent-notch-response-scroll agent-notch-card-present${isError ? " agent-notch-response-error" : ""}${fadeClass}`}
       style={{
-        padding: "4px 14px 8px",
+        padding: isError ? "10px 16px 12px" : "4px 14px 8px",
         fontSize: 15,
         lineHeight: 1.5,
-        color: "rgba(255,255,255,0.95)",
+        color: "rgba(255, 255, 255, 0.95)",
         overflowY: "auto",
         overflowX: "hidden",
         maxHeight: `${Math.max(0, maxHeight)}px`,
@@ -419,7 +497,11 @@ export function VoiceOsAnswer({
     >
       <div
         className="ask-response-markdown vos-answer-reveal"
-        style={{ fontSize: 15, lineHeight: 1.5 }}
+        style={{
+          fontSize: 15,
+          lineHeight: isError ? "22px" : 1.5,
+          color: isError ? "rgba(255, 255, 255, 0.92)" : undefined
+        }}
       >
         <VoiceOsMarkdown text={text} />
       </div>
@@ -427,13 +509,58 @@ export function VoiceOsAnswer({
   );
 }
 
+/** Passive push-to-talk hint bar matching VoiceOS's bottom composer slot. */
+export function VoiceOsBottomHint({ keys }: { keys: string[] }): ReactNode {
+  return (
+    <div
+      className="agent-notch-composer"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 5,
+        height: 36,
+        padding: "6px 14px 4px",
+        fontSize: 15,
+        fontWeight: 450,
+        letterSpacing: "0.2px",
+        color: "rgba(236, 239, 247, 0.62)",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        pointerEvents: "none",
+        boxSizing: "border-box"
+      }}
+    >
+      <span>Hold</span>
+      {keys.map((key, index) => (
+        <kbd key={`${key}-${index}`} className="agent-notch-keycap">
+          {key}
+        </kbd>
+      ))}
+      <span>to speak</span>
+    </div>
+  );
+}
+
 /** The submitted prompt card (StagedPromptCard content, bundle 260512). */
 export function VoiceOsPrompt({ text }: { text: string }): ReactNode {
   return (
-    <div className="agent-notch-prompt-content">
-      <div className="agent-notch-prompt-markdown">
-        <VoiceOsMarkdown text={text} />
-      </div>
+    <div
+      className="agent-notch-card-present"
+      style={{
+        background: "rgba(255, 255, 255, 0.08)",
+        border: "1px solid rgba(255, 255, 255, 0.08)",
+        borderRadius: "14px",
+        padding: "10px 16px",
+        fontSize: 15,
+        lineHeight: "22px",
+        color: "rgba(255, 255, 255, 0.95)",
+        boxSizing: "border-box",
+        width: "100%",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word"
+      }}
+    >
+      <VoiceOsMarkdown text={text} />
     </div>
   );
 }

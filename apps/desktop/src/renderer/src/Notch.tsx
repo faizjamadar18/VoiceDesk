@@ -6,16 +6,32 @@ import {
   formatFileSize
 } from '../../shared/file-display'
 import { splitSpeechText } from '../../shared/speech'
-import type {
-  NotchCard,
-  NotchDecision,
-  NotchDecisionAction,
-  NotchFileResult,
-  NotchPhase,
-  NotchWeatherCard
+import {
+  HOTKEY_LABEL,
+  hotkeyLabel,
+  type NotchCard,
+  type NotchDecision,
+  type NotchDecisionAction,
+  type NotchFileResult,
+  type NotchPhase,
+  type NotchWeatherCard,
+  type SpeechChunkPayload,
+  type SpeechStreamDonePayload,
+  type SpeechStreamErrorPayload
 } from '../../shared/types'
-import VoiceOsNotch, { type VoiceOsNotchMode } from './voiceos-notch/VoiceOsNotch'
-import { VoiceOsAnswer, VoiceOsPrompt } from './voiceos-notch/markdown'
+import { SpeechPlayer } from './voice/speech-player'
+import { WebAudioSink } from './voice/web-audio-sink'
+import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
+import {
+  VoiceOsAnswer,
+  VoiceOsBottomHint,
+  VoiceOsPrompt
+} from './voiceos-notch/markdown'
+import {
+  createDismissAnimator,
+  deriveNotchPresentation,
+  type DismissAnimator
+} from './voiceos-notch/notch-ui'
 import {
   INITIAL_SOUND_GATE,
   playSound,
@@ -32,12 +48,61 @@ function formatAudioError(error: unknown): string {
 const SPEECH_WATCHDOG_MIN_MS = 4_000
 const SPEECH_WATCHDOG_MS_PER_WORD = 420
 const SPEECH_WATCHDOG_PAD_MS = 5_000
+/** How long to wait for the first streamed sentence before falling back. */
+const SPEECH_STREAM_START_MS = 10_000
+/** How long a gap between chunks is tolerated before giving up on the stream. */
+const SPEECH_STREAM_STALL_MS = 15_000
+/** Hard cap on waiting for the player to drain, in case onended never fires. */
+const SPEECH_STREAM_DRAIN_MS = 60_000
 
 let speechRun = 0
 let speechQueue: string[] = []
 const liveUtterances = new Set<SpeechSynthesisUtterance>()
 let speechWatchdog: ReturnType<typeof setTimeout> | null = null
 let preferredVoice: SpeechSynthesisVoice | null = null
+let currentAudio: HTMLAudioElement | null = null
+let currentAudioUrl: string | null = null
+
+let speechPlayer: SpeechPlayer | null = null
+let speechSink: WebAudioSink | null = null
+let speechRequestSeq = 0
+let activeSpeechStream: {
+  requestId: string
+  close: (cancelRemote: boolean) => void
+} | null = null
+
+function getSpeechPlayer(): SpeechPlayer {
+  if (speechSink === null) speechSink = new WebAudioSink()
+  if (speechPlayer === null) speechPlayer = new SpeechPlayer(speechSink)
+  return speechPlayer
+}
+
+/** Cancel the current player and drop it; a later answer gets a fresh one. */
+function resetSpeechPlayer(): void {
+  speechPlayer?.cancel()
+  speechPlayer = null
+}
+
+function createSpeechRequestId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch {
+    // Fall through to the counter below.
+  }
+  speechRequestSeq += 1
+  return `speech-${Date.now()}-${speechRequestSeq}`
+}
+
+function sendCancelSpeechStream(requestId: string): void {
+  try {
+    if (window.kestrel?.cancelSpeechStream) window.kestrel.cancelSpeechStream(requestId)
+    else window.api?.cancelSpeechStream(requestId)
+  } catch {
+    // The main process already tore the stream down.
+  }
+}
 
 function notifySpeech(speaking: boolean): void {
   try {
@@ -52,10 +117,35 @@ function clearSpeechWatchdog(): void {
   speechWatchdog = null
 }
 
+function cleanupAudio(): void {
+  if (currentAudio) {
+    try {
+      currentAudio.pause()
+      currentAudio.currentTime = 0
+    } catch {
+      // ignore
+    }
+    currentAudio = null
+  }
+  if (currentAudioUrl) {
+    try {
+      URL.revokeObjectURL(currentAudioUrl)
+    } catch {
+      // ignore
+    }
+    currentAudioUrl = null
+  }
+}
+
 function stopSpeech(): void {
   speechRun += 1
   speechQueue = []
   clearSpeechWatchdog()
+  const stream = activeSpeechStream
+  activeSpeechStream = null
+  if (stream !== null) stream.close(true)
+  resetSpeechPlayer()
+  cleanupAudio()
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     try {
       window.speechSynthesis.cancel()
@@ -74,22 +164,79 @@ function cancelSpeech(onEnd?: () => void): void {
   onEnd?.()
 }
 
-/**
- * Speak the whole answer as a short chain of sentence chunks. Keeping one
- * utterance alive at a time avoids Chromium's long-utterance cutoff, and the
- * main process waits for `notifyNotchSpeech(false)` before hiding the notch.
- */
-function playSpeech(
-  text: string | null | undefined,
+function playKokoroAudio(
+  audioBytes: Uint8Array,
+  run: number,
+  onEnd?: () => void
+): void {
+  try {
+    const bytes =
+      audioBytes instanceof Uint8Array ? audioBytes : new Uint8Array(audioBytes)
+    const blob = new Blob([bytes as unknown as BlobPart], { type: 'audio/wav' })
+    const url = URL.createObjectURL(blob)
+    currentAudioUrl = url
+    const audio = new Audio(url)
+    currentAudio = audio
+
+    let settled = false
+    const settle = (): void => {
+      if (settled || run !== speechRun) return
+      settled = true
+      clearSpeechWatchdog()
+      cleanupAudio()
+      notifySpeech(false)
+      onEnd?.()
+    }
+
+    audio.onended = settle
+    audio.onerror = () => {
+      console.warn('[notch] Kokoro audio playback error')
+      settle()
+    }
+
+    const byteLength = bytes.byteLength || bytes.length || 0
+    const watchdogMs = Math.max(
+      SPEECH_WATCHDOG_MIN_MS,
+      (byteLength / 48000) * 1000 + SPEECH_WATCHDOG_PAD_MS
+    )
+    clearSpeechWatchdog()
+    speechWatchdog = setTimeout(() => {
+      speechWatchdog = null
+      settle()
+    }, watchdogMs)
+
+    audio.play().catch((err) => {
+      console.warn('[notch] Audio play failed:', err)
+      settle()
+    })
+  } catch (err) {
+    console.warn('[notch] Failed to initialize audio element for Kokoro:', err)
+    if (run === speechRun) {
+      notifySpeech(false)
+      onEnd?.()
+    }
+  }
+}
+
+function fallbackSpeechSynthesis(
+  text: string,
+  run: number,
   onStart?: () => void,
   onEnd?: () => void
 ): void {
-  if (!text || typeof window === 'undefined' || !('speechSynthesis' in window)) return
-  const chunks = splitSpeechText(text)
-  if (chunks.length === 0) return
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    notifySpeech(false)
+    onEnd?.()
+    return
+  }
 
-  stopSpeech()
-  const run = ++speechRun
+  const chunks = splitSpeechText(text)
+  if (chunks.length === 0) {
+    notifySpeech(false)
+    onEnd?.()
+    return
+  }
+
   speechQueue = chunks
   let started = false
 
@@ -176,12 +323,299 @@ function playSpeech(
   speakNext()
 }
 
+/**
+ * Full-file path: synthesize the whole answer with Kokoro and play it through
+ * an HTMLAudioElement. Used when the streaming bridge is unavailable.
+ */
+function playFullSpeech(
+  text: string,
+  run: number,
+  onReady?: () => void,
+  onStart?: () => void,
+  onEnd?: () => void
+): void {
+  let readyCalled = false
+  const safeReady = (): void => {
+    if (readyCalled) return
+    readyCalled = true
+    if (synthSafetyTimer) {
+      clearTimeout(synthSafetyTimer)
+      synthSafetyTimer = null
+    }
+    onReady?.()
+  }
+
+  let synthSafetyTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+    synthSafetyTimer = null
+    safeReady()
+  }, 6000)
+
+  const synthFn =
+    window.api?.synthesizeSpeech ?? window.kestrel?.synthesizeSpeech
+
+  if (typeof synthFn === 'function') {
+    synthFn(text)
+      .then((audioBytes) => {
+        if (run !== speechRun) {
+          safeReady()
+          return
+        }
+        if (audioBytes && audioBytes.length > 0) {
+          safeReady()
+          onStart?.()
+          playKokoroAudio(audioBytes, run, onEnd)
+        } else {
+          safeReady()
+          fallbackSpeechSynthesis(text, run, onStart, onEnd)
+        }
+      })
+      .catch((err) => {
+        console.warn('[notch] Kokoro synthesis failed, falling back to speech-synthesis:', err)
+        if (run !== speechRun) {
+          safeReady()
+          return
+        }
+        safeReady()
+        fallbackSpeechSynthesis(text, run, onStart, onEnd)
+      })
+  } else {
+    safeReady()
+    fallbackSpeechSynthesis(text, run, onStart, onEnd)
+  }
+}
+
+interface SpeechStreamApi {
+  startSpeechStream: (requestId: string, text: string) => void
+  cancelSpeechStream: (requestId: string) => void
+  onSpeechChunk: (callback: (payload: SpeechChunkPayload) => void) => () => void
+  onSpeechStreamDone: (callback: (payload: SpeechStreamDonePayload) => void) => () => void
+  onSpeechStreamError: (
+    callback: (payload: SpeechStreamErrorPayload) => void
+  ) => () => void
+}
+
+function getSpeechStreamApi(): SpeechStreamApi | null {
+  const bridge = window.kestrel ?? window.api
+  if (!bridge) return null
+  const {
+    startSpeechStream,
+    cancelSpeechStream,
+    onSpeechChunk,
+    onSpeechStreamDone,
+    onSpeechStreamError
+  } = bridge
+  if (
+    typeof startSpeechStream !== 'function' ||
+    typeof cancelSpeechStream !== 'function' ||
+    typeof onSpeechChunk !== 'function' ||
+    typeof onSpeechStreamDone !== 'function' ||
+    typeof onSpeechStreamError !== 'function'
+  ) {
+    return null
+  }
+  return {
+    startSpeechStream,
+    cancelSpeechStream,
+    onSpeechChunk,
+    onSpeechStreamDone,
+    onSpeechStreamError
+  }
+}
+
+/**
+ * Streaming path: main synthesizes one sentence at a time and sends each WAV
+ * chunk here. The player schedules chunks back to back so the first sentence
+ * plays while the rest are still being synthesized.
+ */
+function streamSpeech(
+  text: string,
+  run: number,
+  onReady?: () => void,
+  onStart?: () => void,
+  onEnd?: () => void
+): void {
+  const api = getSpeechStreamApi()
+  if (api === null) {
+    playFullSpeech(text, run, onReady, onStart, onEnd)
+    return
+  }
+
+  const requestId = createSpeechRequestId()
+  const player = getSpeechPlayer()
+
+  let ready = false
+  let started = false
+  let settled = false
+  let doneSeen = false
+  let chunkCount = 0
+  let watchdog: ReturnType<typeof setTimeout> | null = null
+  let stallTimer: ReturnType<typeof setTimeout> | null = null
+  let drainTimer: ReturnType<typeof setTimeout> | null = null
+  let offChunk: () => void = () => undefined
+  let offDone: () => void = () => undefined
+  let offError: () => void = () => undefined
+
+  const safeReady = (): void => {
+    if (ready) return
+    ready = true
+    onReady?.()
+  }
+
+  const clearWatchdog = (): void => {
+    if (watchdog !== null) clearTimeout(watchdog)
+    watchdog = null
+  }
+
+  const clearStall = (): void => {
+    if (stallTimer !== null) clearTimeout(stallTimer)
+    stallTimer = null
+  }
+
+  const clearDrain = (): void => {
+    if (drainTimer !== null) clearTimeout(drainTimer)
+    drainTimer = null
+  }
+
+  const unsubscribe = (): void => {
+    clearWatchdog()
+    clearStall()
+    clearDrain()
+    offChunk()
+    offDone()
+    offError()
+    if (activeSpeechStream?.requestId === requestId) activeSpeechStream = null
+  }
+
+  const complete = (): void => {
+    if (settled || run !== speechRun) return
+    settled = true
+    unsubscribe()
+    safeReady()
+    notifySpeech(false)
+    onEnd?.()
+  }
+
+  const fallToWebSpeech = (reason: string): void => {
+    if (settled) return
+    settled = true
+    unsubscribe()
+    if (run !== speechRun) return
+    console.warn('[notch] speech stream failed, falling back to speech-synthesis:', reason)
+    sendCancelSpeechStream(requestId)
+    resetSpeechPlayer()
+    safeReady()
+    fallbackSpeechSynthesis(text, run, onStart, onEnd)
+  }
+
+  const finishPlayback = (): void => {
+    // Everything has been handed to the player; wait for it to drain.
+    const drain = (): void => {
+      clearDrain()
+      complete()
+    }
+    drainTimer = setTimeout(drain, SPEECH_STREAM_DRAIN_MS)
+    void player.finished().then(drain, drain)
+  }
+
+  const onStall = (): void => {
+    stallTimer = null
+    if (settled) return
+    console.warn('[notch] speech stream stalled, ending after the audio already received')
+    doneSeen = true
+    unsubscribe()
+    // Let the buffered tail play out, then end normally. complete() is idempotent.
+    finishPlayback()
+  }
+
+  const armStall = (): void => {
+    if (stallTimer !== null) clearTimeout(stallTimer)
+    stallTimer = setTimeout(onStall, SPEECH_STREAM_STALL_MS)
+  }
+
+  offChunk = api.onSpeechChunk((payload) => {
+    if (settled || doneSeen || run !== speechRun || payload.requestId !== requestId) return
+    clearWatchdog()
+    armStall()
+    safeReady()
+    if (!started) {
+      started = true
+      notifySpeech(true)
+      onStart?.()
+    }
+    chunkCount += 1
+    player.enqueue(payload.audio)
+  })
+
+  offDone = api.onSpeechStreamDone((payload) => {
+    if (settled || doneSeen || run !== speechRun || payload.requestId !== requestId) return
+    clearWatchdog()
+    clearStall()
+    doneSeen = true
+    if (chunkCount === 0) {
+      complete()
+      return
+    }
+    finishPlayback()
+  })
+
+  offError = api.onSpeechStreamError((payload) => {
+    if (settled || run !== speechRun || payload.requestId !== requestId) return
+    fallToWebSpeech(payload.message || 'speech stream error')
+  })
+
+  activeSpeechStream = {
+    requestId,
+    close: (cancelRemote: boolean): void => {
+      unsubscribe()
+      if (cancelRemote) sendCancelSpeechStream(requestId)
+    }
+  }
+
+  watchdog = setTimeout(() => {
+    watchdog = null
+    fallToWebSpeech(`no speech chunk within ${SPEECH_STREAM_START_MS / 1000}s`)
+  }, SPEECH_STREAM_START_MS)
+
+  try {
+    api.startSpeechStream(requestId, text)
+  } catch (error) {
+    fallToWebSpeech(error instanceof Error ? error.message : 'speech stream failed')
+  }
+}
+
+/**
+ * Speak the answer. Streams Kokoro audio sentence by sentence when the bridge
+ * supports it, falls back to a full-file synthesis, then to the Web Speech API.
+ */
+function playSpeech(
+  text: string | null | undefined,
+  onReady?: () => void,
+  onStart?: () => void,
+  onEnd?: () => void
+): void {
+  if (!text || typeof window === 'undefined') {
+    onReady?.()
+    return
+  }
+  const trimmed = text.trim()
+  if (!trimmed) {
+    onReady?.()
+    return
+  }
+
+  stopSpeech()
+  const run = ++speechRun
+
+  notifySpeech(true)
+  streamSpeech(trimmed, run, onReady, onStart, onEnd)
+}
+
 /** Mirrors MAX_SESSION_SECONDS in the main process (notch-controller.ts). */
 const NOTCH_RECORDING_CAP_SECONDS = 120
 /** VoiceOS sounds its "running out" alert during the final minute of the cap. */
 const NOTCH_WARNING_THRESHOLD_SECONDS = 60
 /** Longest the answer scroll region grows before it scrolls internally. */
-const NOTCH_ANSWER_MAX_HEIGHT_PX = 360
+const NOTCH_ANSWER_MAX_HEIGHT_PX = 340
 
 /**
  * Renderer side of the notch. All of Kestrel's audio capture, IPC and speech
@@ -202,6 +636,9 @@ export default function Notch(): JSX.Element {
   const [openingId, setOpeningId] = useState<number | null>(null)
   const [sessionKey, setSessionKey] = useState(0)
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const [isDismissing, setIsDismissing] = useState(false)
+  const [hotkeyKeys, setHotkeyKeys] = useState<string[]>(() => [...HOTKEY_LABEL])
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [surface, setSurface] = useState({ width: 0, height: 0 })
 
@@ -211,6 +648,7 @@ export default function Notch(): JSX.Element {
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const sinkRef = useRef<GainNode | null>(null)
   const sessionRef = useRef<number | null>(null)
+  const dismissAnimatorRef = useRef<DismissAnimator | null>(null)
   /**
    * VoiceOS drives the waveform and voice pulse from a ref so a changing mic
    * level never re-renders the notch (bundle ~201256, ~253784). We keep the
@@ -326,12 +764,11 @@ export default function Notch(): JSX.Element {
       setDecision(null)
       setRowError(null)
       setOpeningId(null)
+      setIsSynthesizing(false)
     }
 
-    const teardown = (sendEnd: boolean): void => {
+    const stopCaptureResources = (): void => {
       sessionRef.current = null
-      cancelSpeech(() => setIsSpeaking(false))
-      setIsSpeaking(false)
       audioLevelRef.current = 0
       clearCountdown()
       endSoundGate()
@@ -347,6 +784,16 @@ export default function Notch(): JSX.Element {
       sinkRef.current = null
 
       releaseStream()
+    }
+
+    const stopLocalMedia = (): void => {
+      cancelSpeech(() => setIsSpeaking(false))
+      setIsSynthesizing(false)
+      stopCaptureResources()
+    }
+
+    const teardown = (sendEnd: boolean): void => {
+      stopLocalMedia()
 
       if (sendEnd) window.kestrel?.sendNotchAudioEnd()
     }
@@ -423,8 +870,42 @@ export default function Notch(): JSX.Element {
       }
     })()
 
+    let disposed = false
     const api = window.kestrel
+    const dismissAnimator = createDismissAnimator({
+      onStart: () => {
+        stopLocalMedia()
+        window.kestrel?.cancelNotchActive()
+        setIsDismissing(true)
+      },
+      onFinish: () => {
+        setIsDismissing(false)
+        resetContent()
+        window.kestrel?.dismissNotchResult()
+      }
+    })
+    dismissAnimatorRef.current = dismissAnimator
+
+    const applyHotkey = (hotkey: string | undefined): void => {
+      if (!hotkey) return
+      const labels = hotkeyLabel(hotkey).filter(Boolean)
+      if (labels.length > 0) setHotkeyKeys(labels)
+    }
+
+    void api
+      ?.getSettings?.()
+      ?.then((loaded) => {
+        if (!disposed) applyHotkey(loaded?.hotkey)
+      })
+      .catch(() => undefined)
+
+    const offSettings = api?.onSettingsChanged?.((next) => {
+      applyHotkey(next?.hotkey)
+    })
+
     const offStart = api.onNotchStart(({ sessionId }) => {
+      dismissAnimator.cancel()
+      setIsDismissing(false)
       teardown(false)
       sessionRef.current = sessionId
       setSessionKey((key) => key + 1)
@@ -444,7 +925,9 @@ export default function Notch(): JSX.Element {
 
     const offCancel = api.onNotchCancel(() => {
       teardown(false)
-      resetContent()
+      if (!dismissAnimator.isActive()) {
+        resetContent()
+      }
     })
 
     const offState = api.onNotchState((state) => {
@@ -460,13 +943,17 @@ export default function Notch(): JSX.Element {
         setOpeningId(null)
       }
       if (state.spoken) {
+        setIsSynthesizing(true)
         playSpeech(
           state.spoken,
+          () => setIsSynthesizing(false),
           () => setIsSpeaking(true),
           () => setIsSpeaking(false)
         )
         // A spoken answer already signals completion; suppress the muted cue.
         completionSoundRef.current = true
+      } else {
+        setIsSynthesizing(false)
       }
       if (state.phase === 'result' && !completionSoundRef.current) {
         completionSoundRef.current = true
@@ -486,8 +973,10 @@ export default function Notch(): JSX.Element {
     })
 
     const offHide = api.onNotchHide(() => {
+      dismissAnimator.cancel()
+      setIsDismissing(false)
       cancelSpeech(() => setIsSpeaking(false))
-      setIsSpeaking(false)
+      setIsSynthesizing(false)
       clearCountdown()
       endSoundGate()
       setCard(null)
@@ -498,9 +987,27 @@ export default function Notch(): JSX.Element {
       setOpeningId(null)
     })
 
+    const offDismiss = api.onNotchDismiss(() => {
+      dismissAnimator.start()
+    })
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.repeat) return
+      event.preventDefault()
+      event.stopPropagation()
+      dismissAnimator.start()
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+
     api.notifyNotchReady()
 
     return () => {
+      disposed = true
+      window.removeEventListener('keydown', handleKeyDown, true)
+      offSettings?.()
+      offDismiss()
+      dismissAnimator.cancel()
+      dismissAnimatorRef.current = null
       offStart()
       offStop()
       offCancel()
@@ -534,14 +1041,8 @@ export default function Notch(): JSX.Element {
     })
   }, [surface])
 
-  const dismissNotch = (): void => {
-    cancelSpeech(() => setIsSpeaking(false))
-    setIsSpeaking(false)
-    window.kestrel?.dismissNotchResult()
-    setCard(null)
-    setResults(null)
-    setResultsLabel(null)
-    setDecision(null)
+  const startDismissAnimation = (): void => {
+    dismissAnimatorRef.current?.start()
   }
 
   const decide = (action: NotchDecisionAction): void => {
@@ -569,39 +1070,46 @@ export default function Notch(): JSX.Element {
     }
   }
 
-  const isWorking = phase === 'processing' || phase === 'acting'
   const answer = message?.trim() ?? ''
-  const showAnswer = (phase === 'result' || phase === 'error') && answer.length > 0
+  const showAnswer = !isSynthesizing && (phase === 'result' || phase === 'error') && answer.length > 0
   const hasWeatherCard = card?.kind === 'weather'
   const weather = hasWeatherCard ? (card as NotchWeatherCard) : null
+  const hasTranscript = transcript.trim().length > 0
   const hasExpandedContent =
-    showAnswer || results !== null || decision !== null || weather !== null
+    hasTranscript || showAnswer || results !== null || decision !== null || weather !== null
+  const showBottomHint =
+    phase !== 'listening' &&
+    decision === null &&
+    (showAnswer || results !== null || weather !== null)
 
-  const mode: VoiceOsNotchMode =
-    phase === 'listening'
-      ? 'listening'
-      : isWorking
-        ? 'thinking'
-        : phase === 'error'
-          ? 'error'
-          : 'responding'
+  const presentation = deriveNotchPresentation({
+    phase,
+    isSynthesizing,
+    isSpeaking,
+    hasExpandedContent,
+    isDismissing
+  })
 
   return (
     <VoiceOsNotch
       key={sessionKey}
-      mode={mode}
-      expanded={hasExpandedContent}
+      mode={presentation.mode}
+      expanded={presentation.expanded}
       volumeRef={audioLevelRef}
       speaking={isSpeaking}
-      showCancel={hasExpandedContent || isWorking}
-      onCancel={dismissNotch}
+      showCancel={presentation.showCancel}
+      onCancel={startDismissAnimation}
       remainingSeconds={remainingSeconds}
       onGeometryChange={setSurface}
     >
-      {transcript.trim().length > 0 && <VoiceOsPrompt text={transcript} />}
+      {hasTranscript && <VoiceOsPrompt text={transcript} />}
 
       {showAnswer && (
-        <VoiceOsAnswer text={answer} maxHeight={NOTCH_ANSWER_MAX_HEIGHT_PX} />
+        <VoiceOsAnswer
+          text={answer}
+          maxHeight={NOTCH_ANSWER_MAX_HEIGHT_PX}
+          isError={phase === 'error'}
+        />
       )}
 
       {weather && (
@@ -685,6 +1193,8 @@ export default function Notch(): JSX.Element {
           </div>
         </div>
       )}
+
+      {showBottomHint && <VoiceOsBottomHint keys={hotkeyKeys} />}
     </VoiceOsNotch>
   )
 }

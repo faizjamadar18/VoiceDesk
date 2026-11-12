@@ -47,6 +47,13 @@ import { captureDisplay, cursorScreenPoint, displayUnderCursor } from './screen-
 import { OverlayScreenService } from './screen-service'
 import { DEFAULT_SETTINGS, SettingsStore, type AsrMode } from './settings-store'
 import { NemoServer, resolveNemoPaths } from './nemo-server'
+import {
+  KokoroSynthesizerEngine,
+  SpeechSynthesizer,
+  type SpeechChunk
+} from './speech-synthesizer'
+import { WorkerSpeechEngine } from './speech-worker-engine'
+import { SpeechStreamBridge } from './speech-stream'
 
 const APP_ID = 'com.kestrel.desktop'
 const DEFAULT_API_URL = 'http://127.0.0.1:8765'
@@ -77,6 +84,9 @@ let transcriber: LiveTranscriber | null = null
 let authService: AuthService | null = null
 let assistantService: AssistantService | null = null
 let assistantServer: AssistantServer | null = null
+let speechSynthesizer: SpeechSynthesizer | null = null
+let speechEngine: WorkerSpeechEngine | null = null
+let speechStreamBridge: SpeechStreamBridge | null = null
 
 const PROTOCOL_SCHEME = 'voicedesk'
 
@@ -95,6 +105,9 @@ function resourcePath(...parts: string[]): string {
 function shellErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+
+/** Used when a stream request arrives before the synthesizer is ready. */
+async function* emptySpeechChunks(): AsyncIterable<SpeechChunk> {}
 
 /**
  * The controller's filesystem seam. Paths stay in this process; the renderer
@@ -301,7 +314,8 @@ async function ensureKeyHook(): Promise<boolean> {
     keyHook = await startKeyHook(chord, {
       onPress: () => pushToTalk?.press(),
       onRelease: () => pushToTalk?.release(),
-      onCancel: () => pushToTalk?.cancel()
+      onCancel: () => pushToTalk?.cancel(),
+      onEscape: () => notchController?.requestEscapeDismiss()
     })
     hookError = null
     console.log(`[hotkey] hook started for ${formatHotkey(chord)}`)
@@ -509,6 +523,9 @@ function registerIpc(): void {
   ipcMain.on(IPC.dismissNotchResult, () => {
     notchController?.dismissResults()
   })
+  ipcMain.on(IPC.notchCancelActive, () => {
+    notchController?.cancelActiveWork()
+  })
   ipcMain.on(IPC.notchDecide, (_event, action: unknown) => {
     if (action !== 'confirm' && action !== 'cancel' && action !== 'undo') return
     void notchController?.decide(action)
@@ -528,6 +545,26 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.authSetSession, async (_event, tokens: AuthTokens, user: AuthUser) => {
     await authService?.setSession(tokens, user)
+  })
+  ipcMain.handle(IPC.speechSynthesize, async (_event, text: unknown) => {
+    if (typeof text !== 'string') return null
+    return speechSynthesizer?.synthesize(text) ?? null
+  })
+
+  speechStreamBridge = new SpeechStreamBridge({
+    synthesizeStream: (text) => speechSynthesizer?.synthesizeStream(text) ?? emptySpeechChunks(),
+    send: (channel, payload) => notchPresenter?.sendToRenderer(channel, payload)
+  })
+
+  ipcMain.on(IPC.speechStreamStart, (_event, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return
+    const { requestId, text } = payload as { requestId?: unknown; text?: unknown }
+    if (typeof requestId !== 'string' || typeof text !== 'string') return
+    speechStreamBridge?.start(requestId, text)
+  })
+  ipcMain.on(IPC.speechStreamCancel, (_event, requestId: unknown) => {
+    if (typeof requestId !== 'string') return
+    speechStreamBridge?.cancel(requestId)
   })
 }
 
@@ -652,6 +689,10 @@ async function initialize(): Promise<void> {
 
   registerProtocolClient()
 
+  speechEngine = new WorkerSpeechEngine({ fallback: new KokoroSynthesizerEngine() })
+  speechSynthesizer = new SpeechSynthesizer({ engine: speechEngine })
+  speechSynthesizer.warmup()
+
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === 'media')
   })
@@ -740,6 +781,11 @@ if (!app.requestSingleInstanceLock()) {
     assistantService = null
     void nemoServer?.stop()
     nemoServer = null
+    speechStreamBridge?.cancelAll()
+    speechStreamBridge = null
+    void speechEngine?.terminate()
+    speechEngine = null
+    speechSynthesizer = null
     tray?.destroy()
     tray = null
   })

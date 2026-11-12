@@ -19,6 +19,8 @@ import {
 class FakePresenter implements NotchPresenter {
   shown = 0
   hidden = 0
+  dismisses = 0
+  speechStates: boolean[] = []
   startIds: number[] = []
   stops = 0
   cancels = 0
@@ -32,6 +34,14 @@ class FakePresenter implements NotchPresenter {
 
   hide(): void {
     this.hidden += 1
+  }
+
+  dismissWithAnimation(): void {
+    this.dismisses += 1
+  }
+
+  setSpeechActive(active: boolean): void {
+    this.speechStates.push(active)
   }
 
   startSession(sessionId: number): void {
@@ -230,6 +240,7 @@ function setup(options: {
   const paste = new FakePaste()
   const files = new FakeFileService()
   const activities: string[] = []
+  let turnCompletes = 0
   const controller = new NotchController({
     presenter,
     getTranscriber: () => transcriber,
@@ -239,7 +250,9 @@ function setup(options: {
     screen: options.screen,
     screenResultVisibleMs: options.screenResultVisibleMs,
     onActivity: (activity) => activities.push(activity.phase),
-    onTurnComplete: () => undefined,
+    onTurnComplete: () => {
+      turnCompletes += 1
+    },
     endFallbackMs: 700,
     resultVisibleMs: 2_000,
     errorVisibleMs: 3_500,
@@ -253,6 +266,7 @@ function setup(options: {
     files,
     screen: options.screen,
     activities,
+    turnCompletes: () => turnCompletes,
     controller
   }
 }
@@ -1481,5 +1495,164 @@ describe('NotchController screen questions', () => {
     context.controller.dispose()
 
     expect(screen.cancels).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('NotchController escape & cancel', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('is a no-op when requestEscapeDismiss is called while idle and hidden', () => {
+    const screen = new FakeScreenService()
+    const context = setup({ screen })
+
+    context.controller.requestEscapeDismiss()
+
+    expect(context.presenter.dismisses).toBe(0)
+    expect(context.presenter.hidden).toBe(0)
+    expect(screen.cancels).toBe(0)
+    expect(context.turnCompletes()).toBe(0)
+  })
+
+  it('cancels an active session, triggers dismissWithAnimation without immediate hide, ignores late responses, and hides after fallback timer', async () => {
+    const screen = new FakeScreenService()
+    const context = setup({ screen })
+    let resolveAct: ((value: ActionResponse) => void) | null = null
+    context.actionClient.act = () =>
+      new Promise<ActionResponse>((resolve) => {
+        resolveAct = resolve
+      })
+
+    context.controller.start()
+    context.controller.pushAudio(speech(1), 16_000)
+    context.controller.stop()
+    context.controller.audioEnded()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(context.presenter.payloads.at(-1)?.phase).toBe('acting')
+
+    context.controller.requestEscapeDismiss()
+
+    expect(context.controller.active).toBe(false)
+    expect(context.presenter.dismisses).toBe(1)
+    expect(context.presenter.hidden).toBe(0)
+    expect(screen.cancels).toBe(1)
+    expect(context.turnCompletes()).toBe(1)
+
+    resolveAct!({
+      status: 'ok',
+      action: 'open_app',
+      message: 'Late result',
+      dryRun: true
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(context.presenter.payloads.at(-1)?.phase).toBe('acting')
+
+    await vi.advanceTimersByTimeAsync(259)
+    expect(context.presenter.hidden).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(context.presenter.hidden).toBe(1)
+  })
+
+  it('clears the escape fallback timer when dismissResults completes first', async () => {
+    const context = setup()
+    await completeTurn(context)
+
+    context.controller.requestEscapeDismiss()
+    expect(context.presenter.dismisses).toBe(1)
+    expect(context.presenter.hidden).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(200)
+    context.controller.dismissResults()
+    expect(context.presenter.hidden).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(context.presenter.hidden).toBe(1)
+  })
+
+  it('falls back to presenter.hide() when dismissWithAnimation is not provided', () => {
+    let hidden = 0
+    const basicPresenter: NotchPresenter = {
+      show: () => undefined,
+      hide: () => {
+        hidden += 1
+      },
+      startSession: () => undefined,
+      stopSession: () => undefined,
+      cancelSession: () => undefined,
+      update: () => undefined,
+      partial: () => undefined
+    }
+
+    const controller = new NotchController({
+      presenter: basicPresenter,
+      getTranscriber: () => new FakeTranscriber(),
+      actionClient: new FakeActionClient(),
+      paste: new FakePaste(),
+      fileService: new FakeFileService()
+    })
+
+    controller.start()
+    controller.requestEscapeDismiss()
+
+    expect(hidden).toBe(1)
+    controller.dispose()
+  })
+
+  it('clears a pending escape fallback timer when start() begins a new turn', async () => {
+    const context = setup()
+    await completeTurn(context)
+
+    context.controller.requestEscapeDismiss()
+    await vi.advanceTimersByTimeAsync(100)
+
+    context.controller.start()
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(context.presenter.hidden).toBe(0)
+    expect(context.controller.active).toBe(true)
+    context.controller.dispose()
+  })
+
+  it('cancelActiveWork aborts active work and speech without calling hide()', () => {
+    const screen = new FakeScreenService()
+    const context = setup({ screen })
+
+    context.controller.start()
+    context.controller.pushAudio(speech(1), 16_000)
+    context.controller.setSpeechActive(true)
+    context.controller.cancelActiveWork()
+
+    expect(context.controller.active).toBe(false)
+    expect(context.transcriber.cancels).toBe(1)
+    expect(screen.cancels).toBe(1)
+    expect(context.presenter.speechStates.at(-1)).toBe(false)
+    expect(context.presenter.hidden).toBe(0)
+    expect(context.turnCompletes()).toBe(1)
+
+    context.controller.dismissResults()
+    expect(context.presenter.hidden).toBe(1)
+  })
+
+  it('dismissResults aborts an active session and hides', () => {
+    const screen = new FakeScreenService()
+    const context = setup({ screen })
+
+    context.controller.start()
+    context.controller.pushAudio(speech(1), 16_000)
+    context.controller.stop()
+    context.controller.dismissResults()
+
+    expect(context.controller.active).toBe(false)
+    expect(context.transcriber.cancels).toBe(1)
+    expect(screen.cancels).toBe(1)
+    expect(context.presenter.hidden).toBe(1)
+    expect(context.turnCompletes()).toBe(1)
   })
 })

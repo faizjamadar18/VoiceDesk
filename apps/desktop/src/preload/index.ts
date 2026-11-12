@@ -10,6 +10,9 @@ import {
   type NotchStartPayload,
   type NotchStatePayload,
   type SaveSettingsResult,
+  type SpeechChunkPayload,
+  type SpeechStreamDonePayload,
+  type SpeechStreamErrorPayload,
   type AuthState,
   type AuthTokens,
   type AuthUser
@@ -44,6 +47,7 @@ const api: KestrelApi = {
   onSettingsChanged: (callback) => subscribe(IPC.settingsChanged, callback),
   onNotchShow: (callback) => subscribeEvent(IPC.notchShow, callback),
   onNotchHide: (callback) => subscribeEvent(IPC.notchHide, callback),
+  onNotchDismiss: (callback) => subscribeEvent(IPC.notchDismiss, callback),
   onNotchStart: (callback) => subscribe<NotchStartPayload>(IPC.notchStart, callback),
   onNotchStop: (callback) => subscribeEvent(IPC.notchStop, callback),
   onNotchCancel: (callback) => subscribeEvent(IPC.notchCancel, callback),
@@ -61,6 +65,7 @@ const api: KestrelApi = {
   openNotchResult: (id) =>
     ipcRenderer.invoke(IPC.openNotchResult, id) as Promise<NotchOpenResult>,
   dismissNotchResult: () => ipcRenderer.send(IPC.dismissNotchResult),
+  cancelNotchActive: () => ipcRenderer.send(IPC.notchCancelActive),
   decideNotch: (action) => ipcRenderer.send(IPC.notchDecide, action),
   setNotchRegion: (region) => ipcRenderer.send(IPC.notchRegion, region),
   getAuthState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
@@ -68,7 +73,25 @@ const api: KestrelApi = {
   signOut: () => ipcRenderer.invoke(IPC.authSignOut) as Promise<void>,
   openOAuthUrl: (url) => ipcRenderer.invoke(IPC.authOpenOAuthUrl, url) as Promise<void>,
   setAuthSession: (tokens: AuthTokens, user: AuthUser) =>
-    ipcRenderer.invoke(IPC.authSetSession, tokens, user) as Promise<void>
+    ipcRenderer.invoke(IPC.authSetSession, tokens, user) as Promise<void>,
+  synthesizeSpeech: (text: string) =>
+    ipcRenderer.invoke(IPC.speechSynthesize, text) as Promise<Uint8Array | null>,
+  startSpeechStream: (requestId, text) =>
+    ipcRenderer.send(IPC.speechStreamStart, { requestId, text }),
+  cancelSpeechStream: (requestId) => ipcRenderer.send(IPC.speechStreamCancel, requestId),
+  onSpeechChunk: (callback) => subscribe<SpeechChunkPayload>(IPC.speechChunk, callback),
+  onSpeechStreamDone: (callback) =>
+    subscribe<SpeechStreamDonePayload>(IPC.speechStreamDone, callback),
+  onSpeechStreamError: (callback) =>
+    subscribe<SpeechStreamErrorPayload>(IPC.speechStreamError, callback)
 }
 
 contextBridge.exposeInMainWorld('kestrel', api)
+contextBridge.exposeInMainWorld('api', {
+  synthesizeSpeech: api.synthesizeSpeech,
+  startSpeechStream: api.startSpeechStream,
+  cancelSpeechStream: api.cancelSpeechStream,
+  onSpeechChunk: api.onSpeechChunk,
+  onSpeechStreamDone: api.onSpeechStreamDone,
+  onSpeechStreamError: api.onSpeechStreamError
+})

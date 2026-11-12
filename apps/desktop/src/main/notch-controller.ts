@@ -25,6 +25,8 @@ export interface NotchPresenter {
   cancelSession(): void
   update(state: NotchStatePayload): void
   partial(text: string): void
+  setSpeechActive?(active: boolean): void
+  dismissWithAnimation?(): void
 }
 
 /**
@@ -115,6 +117,8 @@ const DEFAULT_SCREEN_RESULT_VISIBLE_MS = 8_000
 const SPEECH_END_GRACE_MS = 1_200
 /** Safety cap if the renderer never reports the end of speech. */
 const SPEECH_SAFETY_MS = 120_000
+/** Safety deadline if the renderer does not complete its dismiss animation. */
+const ESCAPE_DISMISS_FALLBACK_MS = 260
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -160,7 +164,9 @@ export class NotchController {
   private readonly options: NotchControllerOptions
   private session: ActiveSession | null = null
   private nextSessionId = 1
+  private visible = false
   private hideTimer: NodeJS.Timeout | null = null
+  private escapeHideTimer: NodeJS.Timeout | null = null
   private pendingHide: (() => void) | null = null
   private speechActive = false
   private hideWhenSpeechEnds = false
@@ -183,6 +189,7 @@ export class NotchController {
     if (this.disposed) return
     if (this.session !== null) return
 
+    this.clearEscapeHideTimer()
     this.clearHideTimer()
     this.resetSpeechState()
     this.clearFileResults()
@@ -201,7 +208,7 @@ export class NotchController {
     }
     this.session = session
 
-    this.options.presenter.show()
+    this.showPresenter()
     this.options.presenter.startSession(session.id)
     this.emit('listening', null, null)
     this.beginScreen()
@@ -269,8 +276,9 @@ export class NotchController {
   audioError(message: string): void {
     const session = this.session
     if (!session) {
+      this.clearEscapeHideTimer()
       this.clearFileResults()
-      this.options.presenter.show()
+      this.showPresenter()
       this.emit('error', null, message, undefined, { spoken: message })
       this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
       this.options.onTurnComplete?.()
@@ -286,13 +294,16 @@ export class NotchController {
    */
   setSpeechActive(active: boolean): void {
     if (this.disposed) return
+    if (active && this.escapeHideTimer !== null) return
     this.speechActive = active
+    this.options.presenter.setSpeechActive?.(active)
 
     if (active) {
       this.clearSpeechSafety()
       this.speechSafetyTimer = setTimeout(() => {
         this.speechSafetyTimer = null
         this.speechActive = false
+        this.options.presenter.setSpeechActive?.(false)
         if (this.hideWhenSpeechEnds) {
           this.hideWhenSpeechEnds = false
           this.hideIfSpeechDone()
@@ -310,34 +321,43 @@ export class NotchController {
     }, SPEECH_END_GRACE_MS)
   }
 
-  cancel(): void {
-    const session = this.session
-    this.session = null
-    this.clearHideTimer()
-    this.resetSpeechState()
-    this.clearFileResults()
-    this.decision = null
-    this.cancelScreen()
-    if (session) {
-      this.clearSessionTimers(session)
-      session.turn?.cancel()
-      this.options.presenter.cancelSession()
-      console.log(`[notch] cancel session=${session.id}`)
+  /**
+   * Cancels any active turn, speech, or pending state without calling
+   * `presenter.hide()`, letting the renderer finish its collapse animation first.
+   */
+  cancelActiveWork(): void {
+    this.clearActiveState({ cancelPresenterSession: false, logLabel: 'cancel-active' })
+    this.options.onTurnComplete?.()
+  }
+
+  /** Global Escape handler: animates dismissal when visible or active, no-op when idle. */
+  requestEscapeDismiss(): void {
+    if (this.disposed) return
+    if (!this.visible && !this.hasActiveWork()) return
+    if (this.escapeHideTimer !== null) return
+
+    this.cancelActiveWork()
+    if (this.options.presenter.dismissWithAnimation) {
+      this.options.presenter.dismissWithAnimation()
+      this.escapeHideTimer = setTimeout(() => {
+        this.escapeHideTimer = null
+        this.hidePresenter()
+      }, ESCAPE_DISMISS_FALLBACK_MS)
+    } else {
+      this.hidePresenter()
     }
-    this.options.presenter.hide()
+  }
+
+  cancel(): void {
+    this.clearActiveState({ cancelPresenterSession: true, logLabel: 'cancel' })
+    this.hidePresenter()
     this.options.onTurnComplete?.()
   }
 
   dispose(): void {
     this.disposed = true
-    this.session?.turn?.cancel()
-    this.session = null
-    this.clearHideTimer()
-    this.resetSpeechState()
-    this.clearFileResults()
-    this.decision = null
-    this.cancelScreen()
-    this.options.presenter.hide()
+    this.clearActiveState({ cancelPresenterSession: false })
+    this.hidePresenter()
   }
 
   /**
@@ -374,11 +394,11 @@ export class NotchController {
 
   /** The X button: drop the allowlist and leave the screen immediately. */
   dismissResults(): void {
-    this.clearFileResults()
-    this.decision = null
-    this.clearHideTimer()
-    this.resetSpeechState()
-    this.options.presenter.hide()
+    this.clearEscapeHideTimer()
+    if (this.hasActiveWork()) {
+      this.cancelActiveWork()
+    }
+    this.hidePresenter()
   }
 
   /**
@@ -845,6 +865,48 @@ export class NotchController {
     })
   }
 
+  private showPresenter(): void {
+    this.visible = true
+    this.options.presenter.show()
+  }
+
+  private hidePresenter(): void {
+    this.clearEscapeHideTimer()
+    this.visible = false
+    this.options.presenter.hide()
+  }
+
+  private hasActiveWork(): boolean {
+    return (
+      this.session !== null ||
+      this.decision !== null ||
+      this.fileResultsShown ||
+      this.speechActive ||
+      this.hideWhenSpeechEnds ||
+      this.hideTimer !== null
+    )
+  }
+
+  private clearActiveState(options: { cancelPresenterSession: boolean; logLabel?: string }): void {
+    const session = this.session
+    this.session = null
+    this.clearHideTimer()
+    this.resetSpeechState()
+    this.clearFileResults()
+    this.decision = null
+    this.cancelScreen()
+    if (session) {
+      this.clearSessionTimers(session)
+      session.turn?.cancel()
+      if (options.cancelPresenterSession) {
+        this.options.presenter.cancelSession()
+      }
+      if (options.logLabel) {
+        console.log(`[notch] ${options.logLabel} session=${session.id}`)
+      }
+    }
+  }
+
   private scheduleHide(delayMs: number, onHide?: () => void): void {
     this.clearHideTimer()
     this.pendingHide = onHide ?? null
@@ -862,7 +924,7 @@ export class NotchController {
     const onHide = this.pendingHide
     this.pendingHide = null
     onHide?.()
-    this.options.presenter.hide()
+    this.hidePresenter()
   }
 
   private clearHideTimer(): void {
@@ -872,7 +934,15 @@ export class NotchController {
     this.pendingHide = null
   }
 
+  private clearEscapeHideTimer(): void {
+    if (this.escapeHideTimer !== null) clearTimeout(this.escapeHideTimer)
+    this.escapeHideTimer = null
+  }
+
   private resetSpeechState(): void {
+    if (this.speechActive) {
+      this.options.presenter.setSpeechActive?.(false)
+    }
     this.speechActive = false
     this.hideWhenSpeechEnds = false
     this.clearSpeechSafety()

@@ -39,6 +39,8 @@ export const IPC = {
   dictationReady: 'kestrel:dictation-ready',
   notchShow: 'kestrel:notch-show',
   notchHide: 'kestrel:notch-hide',
+  notchDismiss: 'kestrel:notch-dismiss',
+  notchCancelActive: 'kestrel:notch-cancel-active',
   notchStart: 'kestrel:notch-start',
   notchStop: 'kestrel:notch-stop',
   notchCancel: 'kestrel:notch-cancel',
@@ -58,7 +60,13 @@ export const IPC = {
   authSignOut: 'kestrel:auth-sign-out',
   authOpenOAuthUrl: 'kestrel:auth-open-oauth-url',
   authSetSession: 'kestrel:auth-set-session',
-  authStateChanged: 'kestrel:auth-state-changed'
+  authStateChanged: 'kestrel:auth-state-changed',
+  speechSynthesize: 'speech:synthesize',
+  speechStreamStart: 'speech:stream-start',
+  speechStreamCancel: 'speech:stream-cancel',
+  speechChunk: 'speech:chunk',
+  speechStreamDone: 'speech:stream-done',
+  speechStreamError: 'speech:stream-error'
 } as const
 
 /** Dedicated channels for the transparent screen overlay renderer. */
@@ -308,6 +316,22 @@ export type AuthState =
   | { status: 'authenticated'; user: AuthUser; tokens: AuthTokens }
   | { status: 'error'; message: string }
 
+export interface SpeechChunkPayload {
+  requestId: string
+  index: number
+  text: string
+  audio: Uint8Array
+}
+
+export interface SpeechStreamDonePayload {
+  requestId: string
+}
+
+export interface SpeechStreamErrorPayload {
+  requestId: string
+  message: string
+}
+
 export interface KestrelApi {
   getState: () => Promise<KestrelRuntimeState>
   retryHotkey: () => Promise<KestrelRuntimeState>
@@ -322,6 +346,7 @@ export interface KestrelApi {
   onSettingsChanged: (callback: (settings: KestrelSettings) => void) => () => void
   onNotchShow: (callback: () => void) => () => void
   onNotchHide: (callback: () => void) => () => void
+  onNotchDismiss: (callback: () => void) => () => void
   onNotchStart: (callback: (payload: NotchStartPayload) => void) => () => void
   onNotchStop: (callback: () => void) => () => void
   onNotchCancel: (callback: () => void) => () => void
@@ -335,6 +360,7 @@ export interface KestrelApi {
   notifyNotchReady: () => void
   openNotchResult: (id: number) => Promise<NotchOpenResult>
   dismissNotchResult: () => void
+  cancelNotchActive: () => void
   decideNotch: (action: NotchDecisionAction) => void
   setNotchRegion: (region: NotchInteractiveRegion | null) => void
   getAuthState: () => Promise<AuthState>
@@ -342,4 +368,10 @@ export interface KestrelApi {
   signOut: () => Promise<void>
   openOAuthUrl: (url: string) => Promise<void>
   setAuthSession: (tokens: AuthTokens, user: AuthUser) => Promise<void>
+  synthesizeSpeech: (text: string) => Promise<Uint8Array | null>
+  startSpeechStream: (requestId: string, text: string) => void
+  cancelSpeechStream: (requestId: string) => void
+  onSpeechChunk: (callback: (payload: SpeechChunkPayload) => void) => () => void
+  onSpeechStreamDone: (callback: (payload: SpeechStreamDonePayload) => void) => () => void
+  onSpeechStreamError: (callback: (payload: SpeechStreamErrorPayload) => void) => () => void
 }

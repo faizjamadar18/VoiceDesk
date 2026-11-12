@@ -6,6 +6,7 @@ export interface KeyHookCallbacks {
   onPress: () => void
   onRelease: () => void
   onCancel: () => void
+  onEscape?: () => void
 }
 
 export interface KeyHookHandle {
@@ -78,7 +79,8 @@ export async function startKeyHook(
   const tracker = new HotkeyChordTracker(binding, {
     onPress: safe(callbacks.onPress, 'press'),
     onRelease: safe(callbacks.onRelease, 'release'),
-    onCancel: safe(callbacks.onCancel, 'cancel')
+    onCancel: safe(callbacks.onCancel, 'cancel'),
+    onEscape: callbacks.onEscape ? safe(callbacks.onEscape, 'escape') : undefined
   })
 
   const onKeyDown = (event: UiohookKeyboardEvent): void => {

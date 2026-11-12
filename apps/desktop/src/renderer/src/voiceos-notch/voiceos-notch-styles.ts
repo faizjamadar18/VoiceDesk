@@ -81,6 +81,15 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
            inline style block because the AgentNotch is loaded in its
            own Electron BrowserWindow, separate from the Pill where the
            original keyframes are declared. */
+        .cloud-viewport {
+          background-position: 90% 100%;
+          background-repeat: no-repeat;
+          background-size: 120% 120%;
+          border-radius: 50%;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
         @keyframes cloud-sphere-drift {
           0%   { background-position: 10% 40%; }
           33%  { background-position: 90% 55%; }
@@ -324,6 +333,23 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
         .agent-notch-card-present {
           animation: agent-notch-card-present ${transitionMs}ms ${easing} both;
           transform-origin: top center;
+        }
+        .agent-notch-card-present > *:first-child,
+        .agent-notch-card-present p:first-child {
+          margin-top: 0 !important;
+        }
+        .agent-notch-card-present > *:last-child,
+        .agent-notch-card-present p:last-child {
+          margin-bottom: 0 !important;
+        }
+        .agent-notch-response-error {
+          padding: 10px 16px 12px !important;
+          color: rgba(255, 255, 255, 0.95);
+          font-size: 15px;
+          line-height: 22px;
+        }
+        .agent-notch-response-error .vos-answer-reveal {
+          color: rgba(255, 255, 255, 0.92);
         }
         /* Outgoing-turn exit: when a follow-up question displaces a still-visible
            previous result, the old prompt + answer are rendered in an absolute
@@ -841,6 +867,10 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
           }
         }
         .agent-notch-composer {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          box-sizing: border-box;
           transform-origin: top center;
           /* Enter on the SAME clock as the surface height growth
              (NOTCH_SIZE_TRANSITION_MS). A shorter duration here made the
@@ -863,6 +893,13 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
         .agent-notch-composer.is-restoring {
           animation: none;
         }
+        @media (prefers-reduced-motion: reduce) {
+          .agent-notch-composer {
+            animation: none;
+            opacity: 1;
+            transform: none;
+          }
+        }
         /* Squircle the input box corners (continuous curvature) to match the
            rest of the OS-native surfaces instead of a plain circular radius. */
         .agent-notch-composer-input {
@@ -874,6 +911,22 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
           color: rgba(236, 239, 247, 0.62);
           font-weight: 450;
           letter-spacing: 0.2px;
+        }
+        .agent-notch-keycap {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 2px 6px;
+          font-family: inherit;
+          font-size: 10px;
+          font-weight: 600;
+          line-height: 1.4;
+          color: rgba(255, 255, 255, 0.75);
+          user-select: none;
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
         }
         /* Scroll container for the agent response card — hides the
            scrollbar (matching the legacy bottom-screen panel) and

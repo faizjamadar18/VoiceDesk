@@ -94,6 +94,7 @@ export interface HotkeyTrackerCallbacks {
   onPress: () => void
   onRelease: () => void
   onCancel: () => void
+  onEscape?: () => void
 }
 
 /**
@@ -126,6 +127,8 @@ export class HotkeyChordTracker {
         this.active = false
         this.cancelledUntilRelease = true
         this.callbacks.onCancel()
+      } else {
+        this.callbacks.onEscape?.()
       }
       return
     }

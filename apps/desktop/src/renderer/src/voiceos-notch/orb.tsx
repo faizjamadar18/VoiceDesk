@@ -62,7 +62,9 @@ export function AgentThinkingOrb({
         position: "relative",
         width: `${size}px`,
         height: `${size}px`,
-        flexShrink: 0
+        flexShrink: 0,
+        borderRadius: "50%",
+        overflow: "hidden"
       }}
     >
       {customIcon ? (
@@ -87,7 +89,12 @@ export function AgentThinkingOrb({
             style={{
               position: "absolute",
               inset: 0,
+              borderRadius: "50%",
+              overflow: "hidden",
               backgroundImage: `url(${getAgentVoiceCloudImage(cloudTone)})`,
+              backgroundPosition: "90% 100%",
+              backgroundRepeat: "no-repeat",
+              backgroundSize: "120% 120%",
               boxShadow:
                 "0 2px 6px rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.2), inset 0 2px 3px rgba(255, 255, 255, 0.35), inset 0 -2px 3px rgba(0, 0, 0, 0.2)",
               animation
@@ -132,6 +139,8 @@ export function AgentThinkingOrb({
               inset: 0,
               width: "100%",
               height: "100%",
+              borderRadius: "50%",
+              overflow: "hidden",
               pointerEvents: "none"
             }}
           />

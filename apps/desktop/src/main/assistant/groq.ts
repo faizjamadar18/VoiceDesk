@@ -152,7 +152,9 @@ export class GroqClient implements LlmClient {
         {
           role: 'system',
           content:
-            'You are Kestrel, an executive assistant on Windows. ' +
+            'You are Kestrel, an executive voice assistant on Windows. ' +
+            'The user interacts with you via voice and your answers are spoken aloud. ' +
+            'Answer conversational questions concisely, warmly, and naturally. ' +
             'When the user asks to open an application, search files, check weather, ' +
             'type text, or perform any action, call the corresponding tool. ' +
             "Always call a tool if one fits the user's intent."

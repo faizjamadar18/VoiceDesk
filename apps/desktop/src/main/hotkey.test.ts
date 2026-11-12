@@ -9,7 +9,10 @@ const SPACE = 5
 const ESC = 6
 const F8 = 7
 
-function tracker(overrides: Partial<ConstructorParameters<typeof HotkeyChordTracker>[0]> = {}) {
+function tracker(
+  overrides: Partial<ConstructorParameters<typeof HotkeyChordTracker>[0]> = {},
+  callbackOverrides: Partial<ConstructorParameters<typeof HotkeyChordTracker>[1]> = {}
+) {
   const calls: string[] = []
   const instance = new HotkeyChordTracker(
     {
@@ -21,7 +24,8 @@ function tracker(overrides: Partial<ConstructorParameters<typeof HotkeyChordTrac
     {
       onPress: () => calls.push('press'),
       onRelease: () => calls.push('release'),
-      onCancel: () => calls.push('cancel')
+      onCancel: () => calls.push('cancel'),
+      ...callbackOverrides
     }
   )
   return { instance, calls }
@@ -157,6 +161,29 @@ describe('HotkeyChordTracker', () => {
     instance.keyUp(ESC)
 
     expect(calls).toEqual([])
+  })
+
+  it('calls onEscape when Escape is pressed while idle and ignores auto-repeat', () => {
+    const { instance, calls } = tracker({}, { onEscape: () => calls.push('escape') })
+
+    instance.keyDown(ESC)
+    instance.keyDown(ESC)
+    instance.keyUp(ESC)
+    instance.keyDown(ESC)
+    instance.keyUp(ESC)
+
+    expect(calls).toEqual(['escape', 'escape'])
+  })
+
+  it('calls onCancel rather than onEscape when Escape is pressed while active', () => {
+    const { instance, calls } = tracker({}, { onEscape: () => calls.push('escape') })
+
+    instance.keyDown(CTRL)
+    instance.keyDown(SPACE)
+    instance.keyDown(ESC)
+    instance.keyUp(ESC)
+
+    expect(calls).toEqual(['press', 'cancel'])
   })
 
   it('works with a function-key binding without modifiers', () => {
