@@ -177,6 +177,7 @@ export class NotchController {
   private decision: PendingDecision | null = null
   private lastTranscript = ''
   private submissionGeneration = 0
+  private acting = false
   private disposed = false
 
   constructor(options: NotchControllerOptions) {
@@ -185,6 +186,26 @@ export class NotchController {
 
   get active(): boolean {
     return this.session !== null
+  }
+
+  isActing(): boolean {
+    return this.acting
+  }
+
+  isBusy(): boolean {
+    return this.hasActiveWork() || this.isActing() || this.hideWhenSpeechEnds
+  }
+
+  hasActiveWork(): boolean {
+    return (
+      this.session !== null ||
+      this.acting ||
+      this.decision !== null ||
+      this.fileResultsShown ||
+      this.speechActive ||
+      this.hideWhenSpeechEnds ||
+      this.hideTimer !== null
+    )
   }
 
   start(): void {
@@ -196,6 +217,7 @@ export class NotchController {
     this.resetSpeechState()
     this.clearFileResults()
     this.decision = null
+    this.acting = false
     const session: ActiveSession = {
       id: this.nextSessionId++,
       turn: null,
@@ -355,6 +377,7 @@ export class NotchController {
     this.clearEscapeHideTimer()
     this.clearHideTimer()
     this.resetSpeechState()
+    this.acting = false
     if (this.session !== null) {
       const session = this.session
       this.session = null
@@ -394,6 +417,7 @@ export class NotchController {
 
     this.showPresenter()
     this.lastTranscript = trimmed
+    this.acting = true
     this.emit('acting', trimmed, 'Working on it…')
 
     try {
@@ -470,6 +494,10 @@ export class NotchController {
       console.log(`[notch] error phase=error chars=${errorMsg.length}`)
       this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
       this.options.onTurnComplete?.()
+    } finally {
+      if (generation === this.submissionGeneration) {
+        this.acting = false
+      }
     }
   }
 
@@ -704,6 +732,7 @@ export class NotchController {
       return
     }
 
+    this.acting = true
     this.emit('acting', transcript, 'Working on it…')
 
     try {
@@ -780,6 +809,8 @@ export class NotchController {
       }
     } catch (error) {
       await this.fail(session, `That didn't work: ${errorMessage(error)}`, transcript)
+    } finally {
+      this.acting = false
     }
   }
 
@@ -851,6 +882,7 @@ export class NotchController {
     input: ScreenAskInput
   ): Promise<void> {
     if (this.session !== session) return
+    this.acting = true
     this.emit('acting', displayTranscript, 'Reading your screen…')
 
     try {
@@ -878,6 +910,8 @@ export class NotchController {
       )
     } catch (error) {
       await this.fail(session, errorMessage(error), displayTranscript)
+    } finally {
+      this.acting = false
     }
   }
 
@@ -959,6 +993,7 @@ export class NotchController {
   ): Promise<void> {
     if (this.session !== session) return
     this.session = null
+    this.acting = false
     session.turn?.cancel()
     this.clearSessionTimers(session)
     this.clearFileResults()
@@ -1022,19 +1057,9 @@ export class NotchController {
     this.options.presenter.hide()
   }
 
-  private hasActiveWork(): boolean {
-    return (
-      this.session !== null ||
-      this.decision !== null ||
-      this.fileResultsShown ||
-      this.speechActive ||
-      this.hideWhenSpeechEnds ||
-      this.hideTimer !== null
-    )
-  }
-
   private clearActiveState(options: { cancelPresenterSession: boolean; logLabel?: string }): void {
     this.submissionGeneration += 1
+    this.acting = false
     const session = this.session
     this.session = null
     this.clearHideTimer()

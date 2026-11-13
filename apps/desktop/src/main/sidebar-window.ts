@@ -151,6 +151,10 @@ export class SidebarWindow {
     this.isSliverRevealed = revealed
   }
 
+  getSliverRevealed(): boolean {
+    return this.isSliverRevealed
+  }
+
   getRegion(): SidebarInteractiveRegion | null {
     return this.interactiveRegion
   }
@@ -213,14 +217,12 @@ export class SidebarWindow {
     const cursor = screen.getCursorScreenPoint()
     const localX = cursor.x - content.x
     const localY = cursor.y - content.y
-    const atLeftEdge = localX <= 8 && localY >= 0 && localY <= content.height
+    const atLeftEdge = localX <= 1 && localY >= 0 && localY <= content.height
     const insideInteractiveRegion =
       this.interactiveRegion !== null &&
       pointInInteractiveRegion(cursor, content, this.interactiveRegion)
-    const isSliverRevealed =
-      this.isSliverRevealed || (this.interactiveRegion !== null && !this.isExpanded())
 
-    if (atLeftEdge || insideInteractiveRegion || (isSliverRevealed && localX <= 40)) {
+    if (insideInteractiveRegion || atLeftEdge) {
       if (typeof this.win.moveTop === 'function') {
         this.win.moveTop()
       }

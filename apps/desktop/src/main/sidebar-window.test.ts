@@ -243,7 +243,7 @@ describe('SidebarWindow', () => {
     target.setAlwaysOnTop.mockClear()
 
     // Hover inside sliver
-    electronState.cursor = { x: 5, y: 300 }
+    electronState.cursor = { x: 0, y: 300 }
     sidebar.syncPointer()
     expect(target.moveTop).toHaveBeenCalled()
     expect(target.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
@@ -329,46 +329,51 @@ describe('SidebarWindow', () => {
     const target = fakeSidebarWindow()
     const sidebar = new SidebarWindow(target.win)
 
-    // Cursor at left edge (x=3 <= 8, or negative/subpixel clamped coordinates)
-    electronState.cursor = { x: 3, y: 400 }
+    // Cursor at extreme left edge (x=1 <= 1)
+    electronState.cursor = { x: 1, y: 400 }
     sidebar.syncPointer()
 
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
     expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
       atLeftEdge: true,
-      x: 3,
+      x: 1,
       y: 400
     })
 
-    // Cursor at x=8 (clamped boundary)
-    electronState.cursor = { x: 8, y: 400 }
+    // Cursor at extreme left edge (x=0)
+    electronState.cursor = { x: 0, y: 400 }
     sidebar.syncPointer()
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+    expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
+      atLeftEdge: true,
+      x: 0,
+      y: 400
+    })
 
     // Cursor at negative coordinate x=-2 (slammed against left edge)
     electronState.cursor = { x: -2, y: 400 }
     sidebar.syncPointer()
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
 
-    // Cursor outside left edge and outside region (x=20)
-    electronState.cursor = { x: 20, y: 400 }
+    // Cursor outside left edge and outside region (x=5)
+    electronState.cursor = { x: 5, y: 400 }
     sidebar.syncPointer()
 
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
     expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
       atLeftEdge: false,
-      x: 20,
+      x: 5,
       y: 400
     })
 
-    // When sliver is revealed, grace zone allows interaction up to x <= 40
-    sidebar.setSliverRevealed(true)
-    electronState.cursor = { x: 30, y: 400 }
+    // Interaction is enabled when cursor is inside interactive region
+    sidebar.setRegion({ left: 0, top: 350, width: 24, height: 100 })
+    electronState.cursor = { x: 10, y: 400 }
     sidebar.syncPointer()
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
 
-    // Beyond x > 40, interaction is ignored when outside region
-    electronState.cursor = { x: 45, y: 400 }
+    // Outside interactive region and not at left edge, click-through is enabled (no 40px corridor)
+    electronState.cursor = { x: 30, y: 400 }
     sidebar.syncPointer()
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
 

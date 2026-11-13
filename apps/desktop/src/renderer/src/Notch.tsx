@@ -1205,6 +1205,7 @@ export default function Notch(): JSX.Element {
     setIsEditingText(false)
     setTypedDraft('')
     setTranscript(newText)
+    setPhase('acting')
     setMessage(null)
     setCard(null)
     setResults(null)

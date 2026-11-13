@@ -320,24 +320,25 @@ describe('Sidebar Interactive Region & Shadow Filter', () => {
     const panelTopPx = (viewportHeight - NOTCH_EXPANDED_HEIGHT_PX) / 2 // 250
     const height = 48
     const topPx = sliverTop(0.5, height, NOTCH_EXPANDED_HEIGHT_PX, NOTCH_SHOULDER_PX) // 266
-    const sliverCenterY = panelTopPx + topPx + height / 2 // 250 + 266 + 24 = 540
+    const sliverY = panelTopPx + topPx // 516
+    const sliverCenterY = sliverY + height / 2 // 250 + 266 + 24 = 540
 
     // Collapsed default
-    const unhovered = {
+    const sliverRegion = {
       left: 0,
-      top: sliverCenterY - height / 2,
-      width: SLIVER_HOVER_WIDTH + 8,
+      top: Math.max(0, Math.round(sliverY)),
+      width: SLIVER_WIDTH + 4,
       height
     }
-    expect(unhovered.left).toBe(0)
-    expect(unhovered.top).toBe(516)
-    expect(unhovered.width).toBe(26)
-    expect(unhovered.height).toBe(48)
+    expect(sliverRegion.left).toBe(0)
+    expect(sliverRegion.top).toBe(516)
+    expect(sliverRegion.width).toBe(20)
+    expect(sliverRegion.height).toBe(48)
 
     // Collapsed hovered (popover expands width)
     const popoverTop = Math.max(8, Math.min(viewportHeight - 68 - 8, sliverCenterY - 34)) // 506
-    const top = Math.min(popoverTop, panelTopPx + topPx) // min(506, 516) = 506
-    const bottom = Math.max(popoverTop + 68, panelTopPx + topPx + height) // max(574, 564) = 574
+    const top = Math.min(popoverTop, sliverY) // min(506, 516) = 506
+    const bottom = Math.max(popoverTop + 68, sliverY + height) // max(574, 564) = 574
     const hovered = {
       left: 0,
       top,

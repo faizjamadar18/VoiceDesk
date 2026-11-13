@@ -337,7 +337,9 @@ async function ensureKeyHook(): Promise<boolean> {
         const insideNotch = notchPresenter?.isPointInside(cursor.x, cursor.y) ?? false
         const insideSidebar = sidebarWindow?.isPointInside(cursor.x, cursor.y) ?? false
         if (!insideNotch && !insideSidebar) {
-          notchController?.dismissResults()
+          if (!notchController?.hasActiveWork() && !notchController?.isBusy()) {
+            notchController?.dismissResults()
+          }
           if (sidebarWindow?.isExpanded()) {
             sidebarWindow.send(IPC.sidebarCollapse)
           }
@@ -704,12 +706,6 @@ function createNotch(): void {
     screen: screenService,
     onActivity: (activity: NotchActivity) => sendToMain(IPC.notchActivity, activity),
     onTurnComplete: () => pushToTalk?.reset()
-  })
-
-  win.on('blur', () => {
-    const cursor = screen.getCursorScreenPoint()
-    if (sidebarWindow?.isPointInside(cursor.x, cursor.y)) return
-    notchController?.dismissResults()
   })
 
   // The main window should also learn about turns even while hidden; the log is

@@ -78,6 +78,22 @@ describe('Notch history restore', () => {
         showCancel: false
       })
     })
+
+    it('produces mode=thinking, expanded=true, showCancel=true during acting phase after submitting text', () => {
+      const presentation = deriveNotchPresentation({
+        phase: 'acting',
+        isSynthesizing: false,
+        isSpeaking: false,
+        hasExpandedContent: true,
+        isDismissing: false
+      })
+
+      expect(presentation).toEqual({
+        mode: 'thinking',
+        expanded: true,
+        showCancel: true
+      })
+    })
   })
 
   describe('computeNotchRegion', () => {

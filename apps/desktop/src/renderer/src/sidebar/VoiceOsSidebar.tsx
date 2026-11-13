@@ -111,7 +111,7 @@ export function VoiceOsSidebar(): JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isPinned, setIsPinned] = useState(false)
   const [isCollapsedHovered, setIsCollapsedHovered] = useState(false)
-  const [isSliverRevealed, setIsSliverRevealed] = useState(false)
+  const [isLeftEdgeHovered, setIsLeftEdgeHovered] = useState(false)
   const [showPopover, setShowPopover] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [history, setHistory] = useState<HistoryRecord[]>([])
@@ -122,7 +122,6 @@ export function VoiceOsSidebar(): JSX.Element {
   const [isLoading, setIsLoading] = useState(true)
   const [shortcutLabel, setShortcutLabel] = useState('Ctrl+Space')
 
-  const sliverGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const popoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [viewportHeight, setViewportHeight] = useState<number>(() =>
@@ -212,7 +211,7 @@ export function VoiceOsSidebar(): JSX.Element {
     NOTCH_EXPANDED_HEIGHT_PX,
     NOTCH_SHOULDER_PX
   )
-  const isSliverVisible = isSliverRevealed || isCollapsedHovered || isDragging
+  const isSliverVisible = isExpanded || isCollapsedHovered || isLeftEdgeHovered || isDragging
   const collapsedWidthPx = isCollapsedHovered ? SLIVER_HOVER_WIDTH : SLIVER_WIDTH
   const collapsedRightRadiusPx = collapsedWidthPx - SLIVER_SHOULDER
 
@@ -279,20 +278,11 @@ export function VoiceOsSidebar(): JSX.Element {
       const overPopover =
         showPopover &&
         x >= SLIVER_POPOVER_LEFT &&
-        x <= SLIVER_POPOVER_LEFT + 180 &&
+        x <= SLIVER_POPOVER_LEFT + 220 &&
         y >= popoverTop &&
         y <= popoverTop + 68
 
-      const inside = overSliver || overPopover
-      if (inside) {
-        if (sliverGraceTimerRef.current) {
-          clearTimeout(sliverGraceTimerRef.current)
-          sliverGraceTimerRef.current = null
-        }
-        setIsCollapsedHovered(true)
-      } else {
-        setIsCollapsedHovered(false)
-      }
+      setIsCollapsedHovered(overSliver || overPopover)
     },
     [
       isExpanded,
@@ -309,24 +299,7 @@ export function VoiceOsSidebar(): JSX.Element {
   useEffect(() => {
     if (!window.kestrel?.onSidebarPointer) return undefined
     const unsubscribe = window.kestrel.onSidebarPointer((payload) => {
-      if (payload.atLeftEdge) {
-        setIsSliverRevealed(true)
-        if (sliverGraceTimerRef.current) {
-          clearTimeout(sliverGraceTimerRef.current)
-        }
-        sliverGraceTimerRef.current = setTimeout(() => {
-          setIsSliverRevealed(false)
-          sliverGraceTimerRef.current = null
-        }, 1500)
-      } else if (payload.x > 50) {
-        if (!dragPointerRef.current && !isCollapsedHovered) {
-          setIsSliverRevealed(false)
-          if (sliverGraceTimerRef.current) {
-            clearTimeout(sliverGraceTimerRef.current)
-            sliverGraceTimerRef.current = null
-          }
-        }
-      }
+      setIsLeftEdgeHovered(Boolean(payload.atLeftEdge || payload.x <= 1))
 
       if (!isExpanded) {
         reconcilePointer(payload.x, payload.y)
@@ -334,12 +307,8 @@ export function VoiceOsSidebar(): JSX.Element {
     })
     return () => {
       unsubscribe()
-      if (sliverGraceTimerRef.current) {
-        clearTimeout(sliverGraceTimerRef.current)
-        sliverGraceTimerRef.current = null
-      }
     }
-  }, [isExpanded, isCollapsedHovered, reconcilePointer])
+  }, [isExpanded, reconcilePointer])
 
   // Show popover after 800ms of hovering the sliver
   useEffect(() => {
@@ -371,6 +340,8 @@ export function VoiceOsSidebar(): JSX.Element {
   useEffect(() => {
     if (!window.kestrel?.setSidebarRegion) return
 
+    const sliverY = panelTopPx + collapsedTopPx
+
     if (isExpanded) {
       window.kestrel.setSidebarRegion({
         left: 0,
@@ -379,18 +350,15 @@ export function VoiceOsSidebar(): JSX.Element {
         height: NOTCH_EXPANDED_HEIGHT_PX
       })
     } else if (isSliverVisible) {
-      const top = showPopover
-        ? Math.min(popoverTop, panelTopPx + collapsedTopPx)
-        : sliverCenterY - collapsedHeightPx / 2
-      const bottom = showPopover
-        ? Math.max(popoverTop + 68, panelTopPx + collapsedTopPx + collapsedHeightPx)
-        : sliverCenterY + collapsedHeightPx / 2
-
       window.kestrel.setSidebarRegion({
         left: 0,
-        top: Math.max(0, Math.round(top)),
-        width: showPopover ? SLIVER_POPOVER_LEFT + 220 : SLIVER_HOVER_WIDTH + 8,
-        height: Math.round(bottom - top)
+        top: Math.max(0, Math.round(showPopover ? Math.min(popoverTop, sliverY) : sliverY)),
+        width: showPopover ? SLIVER_POPOVER_LEFT + 220 : collapsedWidthPx + 4,
+        height: Math.round(
+          showPopover
+            ? Math.max(popoverTop + 68, sliverY + collapsedHeightPx) - Math.min(popoverTop, sliverY)
+            : collapsedHeightPx
+        )
       })
     } else {
       window.kestrel.setSidebarRegion(null)
@@ -405,8 +373,8 @@ export function VoiceOsSidebar(): JSX.Element {
     showPopover,
     panelTopPx,
     collapsedTopPx,
+    collapsedWidthPx,
     collapsedHeightPx,
-    sliverCenterY,
     popoverTop
   ])
 
@@ -417,12 +385,8 @@ export function VoiceOsSidebar(): JSX.Element {
       if (!isPinned) {
         setIsExpanded(false)
         setIsCollapsedHovered(false)
-        setIsSliverRevealed(false)
+        setIsLeftEdgeHovered(false)
         setShowPopover(false)
-        if (sliverGraceTimerRef.current) {
-          clearTimeout(sliverGraceTimerRef.current)
-          sliverGraceTimerRef.current = null
-        }
         if (popoverTimerRef.current) {
           clearTimeout(popoverTimerRef.current)
           popoverTimerRef.current = null
@@ -441,7 +405,7 @@ export function VoiceOsSidebar(): JSX.Element {
       if (panel && !panel.contains(event.target as Node)) {
         setIsExpanded(false)
         setIsCollapsedHovered(false)
-        setIsSliverRevealed(false)
+        setIsLeftEdgeHovered(false)
         setShowPopover(false)
       }
     }
@@ -449,7 +413,7 @@ export function VoiceOsSidebar(): JSX.Element {
     const handleBlur = () => {
       setIsExpanded(false)
       setIsCollapsedHovered(false)
-      setIsSliverRevealed(false)
+      setIsLeftEdgeHovered(false)
       setShowPopover(false)
     }
 
@@ -518,7 +482,7 @@ export function VoiceOsSidebar(): JSX.Element {
     }
     if (cancelled) {
       setIsCollapsedHovered(false)
-      setIsSliverRevealed(false)
+      setIsLeftEdgeHovered(false)
       setShowPopover(false)
       window.kestrel?.setSidebarInteractive(false)
     } else if (!drag.moved) {
@@ -651,12 +615,8 @@ export function VoiceOsSidebar(): JSX.Element {
       onMouseLeave={() => {
         if (dragPointerRef.current) return
         setIsCollapsedHovered(false)
-        setIsSliverRevealed(false)
+        setIsLeftEdgeHovered(false)
         setShowPopover(false)
-        if (sliverGraceTimerRef.current) {
-          clearTimeout(sliverGraceTimerRef.current)
-          sliverGraceTimerRef.current = null
-        }
         if (popoverTimerRef.current) {
           clearTimeout(popoverTimerRef.current)
           popoverTimerRef.current = null

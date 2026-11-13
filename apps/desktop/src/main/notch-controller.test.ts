@@ -1754,5 +1754,36 @@ describe('NotchController escape & cancel', () => {
       expect(lastPayload?.message).toBe('4')
       expect(lastPayload?.spoken).toBeNull()
     })
+
+    it('sets isActing, hasActiveWork, and isBusy while submitText is in flight', async () => {
+      const context = setup()
+      let resolveAct!: (resp: { status: 'ok'; action: string; message: string; dryRun: boolean }) => void
+      context.actionClient.act = vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveAct = resolve
+          })
+      )
+
+      expect(context.controller.isActing()).toBe(false)
+      expect(context.controller.hasActiveWork()).toBe(false)
+      expect(context.controller.isBusy()).toBe(false)
+
+      const submissionPromise = context.controller.submitText('summarize this page')
+
+      expect(context.controller.isActing()).toBe(true)
+      expect(context.controller.hasActiveWork()).toBe(true)
+      expect(context.controller.isBusy()).toBe(true)
+
+      resolveAct({
+        status: 'ok',
+        action: 'none',
+        message: 'Summary complete.',
+        dryRun: false
+      })
+      await submissionPromise
+
+      expect(context.controller.isActing()).toBe(false)
+    })
   })
 })
