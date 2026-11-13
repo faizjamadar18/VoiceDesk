@@ -452,30 +452,18 @@ export function resolveEvent(
 // --- tool schemas ------------------------------------------------------
 
 const LIST_DESCRIPTION =
-  'List upcoming calendar events. Use for questions about the user\'s ' +
-  "schedule: 'what's on my calendar', 'what meetings do I have', 'my " +
-  "schedule today', 'am I busy tomorrow', 'next meeting', 'what's next', " +
-  "'any meetings this week'. Not for creating or changing events."
+  "List upcoming calendar events and meetings on the user's schedule."
 
 const CREATE_DESCRIPTION =
-  'Create a new calendar event, meeting, or appointment. Use for ' +
-  "'schedule', 'book', 'set up', 'add', 'put on my calendar', 'plan a " +
-  "meeting', 'fix a meeting at'. Convert every relative date the user says " +
-  '(tomorrow, next Tuesday, this Friday, in two hours) into an exact ISO ' +
-  '8601 local datetime such as 2026-11-13T15:00:00 before calling. Never ' +
-  'send a date word.'
+  'Create a calendar event from an exact ISO 8601 start time, never a ' +
+  'relative date.'
 
 const MOVE_DESCRIPTION =
-  'Change the time of an existing calendar event: move, reschedule, shift, ' +
-  "push back, postpone, or fix the time of a meeting. Use for 'move my 3pm " +
-  "to 4', 'push the standup back an hour', 'fix the meeting tomorrow'. " +
-  'Give the event as the user named it in `query`, and the new time as an ' +
-  'exact ISO 8601 local datetime in `new_start`.'
+  'Move or reschedule an existing calendar event to an exact ISO 8601 start ' +
+  'time.'
 
 const CANCEL_DESCRIPTION =
-  'Cancel or delete an existing calendar event. Use for \'cancel my 3pm\', ' +
-  "'delete the meeting', 'remove the standup', 'clear my afternoon'. Give " +
-  'the event as the user named it in `query`.'
+  'Cancel or delete an existing calendar event.'
 
 export function createCalendarTools(options: CalendarToolOptions): Tool[] {
   const callTool = options.callTool

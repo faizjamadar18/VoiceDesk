@@ -514,38 +514,19 @@ function ccFromArgs(args: Record<string, unknown>): {
 }
 
 const LIST_DESCRIPTION =
-  "List the newest emails in the user's inbox, newest first, showing the " +
-  "newest five. Use for 'what's new', 'my inbox', 'unread', 'any emails from " +
-  "Sam'. Set `unread_only` when the user says unread, and put the search " +
-  "words in `query` (a Gmail search such as 'from:sam' or 'subject:report'). " +
-  "Not for reading one email's body, sending, or replying."
+  "List the newest emails in the user's inbox, newest first, or only unread."
 
 const READ_DESCRIPTION =
-  'Read one email out loud. The newest matching email is `position` 1, so ' +
-  "'the second one' means `position` 2. Use for 'read me the email from Sam', " +
-  "'what does the latest message say', 'open the email about the invoice'. " +
-  'Put the email as the user described it in `query`, set `unread_only` for ' +
-  'unread mail, or pass `message_id` when it is already known.'
+  'Read one email aloud; the newest matching email is position 1.'
 
 const SEND_DESCRIPTION =
-  'Send a new email. Use for \'send an email to Sam\', \'email Sam about the ' +
-  "meeting', 'write to sam@example.com'. Requires the recipient's email " +
-  'address, a subject, and a body. If only a name is known, pass the name: ' +
-  'the tool asks the user for the address. An optional comma-separated `cc` ' +
-  'may be given.'
+  'Send a new email with a subject and body; pass an address or just a name.'
 
 const REPLY_DESCRIPTION =
-  "Reply to an existing email. Use for 'reply to Sam', 'reply to that " +
-  "email', 'tell them I'll be there'. Give the email to reply to in `query` " +
-  "(the newest is `position` 1, so 'the second one' means `position` 2), set " +
-  '`unread_only` for unread mail, and put the reply text in `message`. ' +
-  'Optionally override the reply address with `recipient`.'
+  'Reply to an existing email by search words or position, newest is 1.'
 
 const DRAFT_DESCRIPTION =
-  "Save an email draft without sending it. Use for 'draft an email to Sam', " +
-  "'save a draft', 'write it but don't send'. Requires the recipient's email " +
-  'address, a subject, and a body. If only a name is known, pass the name: ' +
-  'the tool asks the user for the address.'
+  'Save an email draft without sending it; pass an address or just a name.'
 
 export function createGmailTools(options: GmailToolOptions): Tool[] {
   const zone = options.timezone ?? hostZone

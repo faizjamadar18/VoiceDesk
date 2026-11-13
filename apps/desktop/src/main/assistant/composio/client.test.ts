@@ -17,7 +17,7 @@ const CALENDAR: readonly ComposioProviderSpec[] = COMPOSIO_PROVIDERS
 
 const SESSION_BODY = {
   user_id: 'user-1',
-  toolkits: { enable: ['googlecalendar', 'gmail'] },
+  toolkits: { enable: ['googlecalendar', 'gmail', 'googlesuper', 'notion'] },
   tools: {
     googlecalendar: {
       enable: [
@@ -34,6 +34,22 @@ const SESSION_BODY = {
         'GMAIL_SEND_EMAIL',
         'GMAIL_REPLY_TO_THREAD',
         'GMAIL_CREATE_EMAIL_DRAFT'
+      ]
+    },
+    googlesuper: {
+      enable: [
+        'GOOGLESUPER_FIND_FILE',
+        'GOOGLESUPER_CREATE_FILE_FROM_TEXT',
+        'GOOGLESUPER_CREATE_PERMISSION',
+        'GOOGLESUPER_GOOGLE_DRIVE_DELETE_FOLDER_OR_FILE_ACTION'
+      ]
+    },
+    notion: {
+      enable: [
+        'NOTION_SEARCH_NOTION_PAGE',
+        'NOTION_FETCH_BLOCK_CONTENTS',
+        'NOTION_QUERY_DATABASE',
+        'NOTION_CREATE_NOTION_PAGE'
       ]
     }
   },

@@ -707,16 +707,24 @@ export class AssistantService {
    */
   private applyIntegrationTools(): void {
     const integration = this.integrations
-    if (integration === null) return
+    if (integration === null) {
+      this.toolSelector?.setGroups([])
+      return
+    }
     for (const name of this.integrationToolNames) this.registry.delete(name)
     this.integrationToolNames = []
     for (const tool of integration.tools) {
       this.registry.register(tool)
       this.integrationToolNames.push(tool.spec.name)
     }
-    // A connected app's tools are always offered to the model, so they must not
-    // be filtered out by tool retrieval, which keeps only the top-ranked specs.
-    this.toolSelector?.pin(...this.integrationToolNames)
+    // Connected apps are not pinned. Each app's tools form a group, so retrieval
+    // ranks them but keeps at least one per app and caps how many it sends.
+    this.toolSelector?.setGroups(
+      integration.toolGroups().map((group) => ({
+        name: group.provider,
+        tools: group.tools
+      }))
+    )
   }
 
   async transcribe(

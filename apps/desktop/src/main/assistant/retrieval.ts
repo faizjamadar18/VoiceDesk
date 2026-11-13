@@ -15,7 +15,9 @@ import { builtinToolNames } from './tools'
 import type { ToolSpec } from './types'
 
 export const DEFAULT_EMBEDDING_MODEL = 'BAAI/bge-small-en-v1.5'
-export const DEFAULT_TOP_K = 10
+export const DEFAULT_TOP_K = 5
+export const DEFAULT_GROUP_CAP = 2
+export const DEFAULT_GROUP_FLOOR = 1
 
 // Values that turn retrieval off. Retrieval is enabled by default.
 const FALSY: ReadonlySet<string> = new Set(['0', 'false', 'off', 'no'])
@@ -134,34 +136,64 @@ function errorName(error: unknown): string {
   return typeof error
 }
 
+export interface ToolGroup {
+  readonly name: string
+  readonly tools: Iterable<string>
+}
+
 export interface ToolSelectorOptions {
   embedder?: Embedder | null
   topK?: number
   alwaysInclude?: Iterable<string>
+  /** Most tools one group may contribute. */
+  groupCap?: number
+  /** Fewest tools one group must contribute, when it has any. */
+  groupFloor?: number
 }
 
 export class ToolSelector {
   private embedder: Embedder | null
   readonly topK: number
+  private readonly groupCap: number
+  private readonly groupFloor: number
   private readonly alwaysInclude: Set<string>
+  private groups: Array<{ name: string; tools: Set<string> }> = []
   private readonly toolCache = new Map<string, number[]>()
 
   constructor(options: ToolSelectorOptions = {}) {
     this.embedder = options.embedder ?? null
     this.topK = options.topK ?? DEFAULT_TOP_K
+    this.groupCap = options.groupCap ?? DEFAULT_GROUP_CAP
+    this.groupFloor = options.groupFloor ?? DEFAULT_GROUP_FLOOR
     this.alwaysInclude = new Set(options.alwaysInclude ?? [])
   }
 
   /**
    * Always offer these tools, no matter the transcript or `topK`.
    *
-   * Used for tools that must never be filtered out — the built-ins, and every
-   * tool from a connected app the user has authorised. Empty names are ignored.
+   * Used for the built-ins, which core behaviour must never depend on
+   * retrieval for. Empty names are ignored.
    */
   pin(...names: string[]): void {
     for (const name of names) {
       if (name) this.alwaysInclude.add(name)
     }
+  }
+
+  /**
+   * Replace the current groups.
+   *
+   * A group stands for one connected app: ranking may drop its tools, but the
+   * cap keeps one app from flooding the request and the floor keeps every app
+   * present. Groups with no name are ignored.
+   */
+  setGroups(groups: Iterable<ToolGroup>): void {
+    const next: Array<{ name: string; tools: Set<string> }> = []
+    for (const group of groups) {
+      if (!group.name) continue
+      next.push({ name: group.name, tools: new Set(group.tools) })
+    }
+    this.groups = next
   }
 
   select(transcript: string, specs: ToolSpec[]): ToolSpec[] {
@@ -176,7 +208,7 @@ export class ToolSelector {
 
     let chosen: ToolSpec[] = []
     if (this.topK > 0 && candidates.length > 0) {
-      chosen = this.rank(transcript, candidates).slice(0, this.topK)
+      chosen = this.applyGroups(this.rank(transcript, candidates))
     }
 
     const selectedNames = new Set(pinned.map((spec) => spec.name))
@@ -184,6 +216,40 @@ export class ToolSelector {
       selectedNames.add(spec.name)
     }
     return specs.filter((spec) => selectedNames.has(spec.name))
+  }
+
+  /** Rank, take `topK`, then honour each group's cap and floor. */
+  private applyGroups(ranked: ToolSpec[]): ToolSpec[] {
+    let chosen = ranked.slice(0, this.topK)
+    if (this.groups.length === 0) {
+      return chosen
+    }
+
+    // Cap: keep only the best-ranked `groupCap` members of each group.
+    for (const group of this.groups) {
+      const members = chosen.filter((spec) => group.tools.has(spec.name))
+      if (members.length <= this.groupCap) continue
+      const dropped = new Set(
+        members.slice(this.groupCap).map((spec) => spec.name)
+      )
+      chosen = chosen.filter((spec) => !dropped.has(spec.name))
+    }
+
+    // Floor: every group with a present tool contributes at least one.
+    const selected = new Set(chosen.map((spec) => spec.name))
+    for (const group of this.groups) {
+      let count = chosen.filter((spec) => group.tools.has(spec.name)).length
+      if (count >= this.groupFloor) continue
+      for (const spec of ranked) {
+        if (count >= this.groupFloor) break
+        if (!group.tools.has(spec.name) || selected.has(spec.name)) continue
+        chosen.push(spec)
+        selected.add(spec.name)
+        count += 1
+      }
+    }
+
+    return chosen
   }
 
   private rank(transcript: string, candidates: ToolSpec[]): ToolSpec[] {

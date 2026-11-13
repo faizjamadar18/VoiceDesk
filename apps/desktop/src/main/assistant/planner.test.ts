@@ -398,6 +398,7 @@ describe('GroqPlanner', () => {
     expect(screenSpec?.description.toLowerCase()).toContain('screen')
     expect(screenSpec?.description.toLowerCase()).toContain('error')
     expect(screenSpec?.description.toLowerCase()).toContain('general knowledge')
+    expect(screenSpec?.description.length).toBeLessThanOrEqual(200)
     expect(screenSpec?.parameters).toEqual({
       type: 'object',
       properties: {},

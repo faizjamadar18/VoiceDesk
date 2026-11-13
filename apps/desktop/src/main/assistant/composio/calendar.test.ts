@@ -113,6 +113,14 @@ const STANDUP = event(
   '2026-11-07T15:30:00Z'
 )
 
+describe('calendar tool specs', () => {
+  it('keeps every description short', () => {
+    for (const tool of makeTools({}).tools) {
+      expect(tool.spec.description.length).toBeLessThanOrEqual(200)
+    }
+  })
+})
+
 describe('calendar_list_events', () => {
   it('lists events and defaults the window to now plus seven days', async () => {
     const items = [

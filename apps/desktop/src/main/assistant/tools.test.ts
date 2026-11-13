@@ -216,6 +216,12 @@ describe('built-in tool registry', () => {
     }
   })
 
+  it('keeps every built-in description short', () => {
+    for (const tool of builtinTools()) {
+      expect(tool.spec.description.length).toBeLessThanOrEqual(200)
+    }
+  })
+
   it('keeps the weather action label capitalised', () => {
     expect(specOf('get_weather').actionLabel).toBe('Weather')
   })

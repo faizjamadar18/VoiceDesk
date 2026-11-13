@@ -115,6 +115,14 @@ function email(partial: Partial<EmailMessage> & { id: string }): EmailMessage {
   }
 }
 
+describe('gmail tool specs', () => {
+  it('keeps every description short', () => {
+    for (const tool of makeTools({}).tools) {
+      expect(tool.spec.description.length).toBeLessThanOrEqual(200)
+    }
+  })
+})
+
 describe('gmail_list_emails', () => {
   it('asks for unread mail and sends the default search parameters', async () => {
     const { tools, calls } = makeTools({

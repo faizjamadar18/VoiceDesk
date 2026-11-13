@@ -31,6 +31,20 @@ const CALENDAR_SLUGS = [
   'GOOGLECALENDAR_DELETE_EVENT'
 ]
 
+const DRIVE_SLUGS = [
+  'GOOGLESUPER_FIND_FILE',
+  'GOOGLESUPER_CREATE_FILE_FROM_TEXT',
+  'GOOGLESUPER_CREATE_PERMISSION',
+  'GOOGLESUPER_GOOGLE_DRIVE_DELETE_FOLDER_OR_FILE_ACTION'
+]
+
+const NOTION_SLUGS = [
+  'NOTION_SEARCH_NOTION_PAGE',
+  'NOTION_FETCH_BLOCK_CONTENTS',
+  'NOTION_QUERY_DATABASE',
+  'NOTION_CREATE_NOTION_PAGE'
+]
+
 function mcpTool(name: string): McpTool {
   return {
     name,
@@ -283,6 +297,113 @@ describe('ComposioIntegration', () => {
     expect(harness.mcp.listToolsCalls).toBe(1)
   })
 
+  it('registers the drive tools when googlesuper is connected', async () => {
+    const harness = makeHarness()
+    harness.store.save('composio-secret')
+    harness.client.listConnected = () => ['googlesuper']
+    harness.mcp.tools = DRIVE_SLUGS.map(mcpTool)
+    harness.mcp.result = {
+      text: JSON.stringify({ successful: true, data: { files: [] } }),
+      isError: false
+    }
+
+    const status = await harness.integration.initialize()
+    const provider = status.providers.find((p) => p.id === 'googlesuper')
+    const names = harness.integration.tools.map((tool) => tool.spec.name)
+
+    expect(provider?.connected).toBe(true)
+    expect(provider?.toolCount).toBe(4)
+    expect(provider?.error).toBeNull()
+    expect(names).toHaveLength(4)
+    for (const name of [
+      'drive_find_files',
+      'drive_create_file',
+      'drive_share_file',
+      'drive_delete_file'
+    ]) {
+      expect(names).toContain(name)
+    }
+
+    const find = harness.integration.tools.find(
+      (tool) => tool.spec.name === 'drive_find_files'
+    )
+    expect(find).toBeDefined()
+    await find?.run({}, makeContext())
+
+    expect(harness.mcp.callToolCalls).toHaveLength(1)
+    expect(harness.mcp.callToolCalls[0].name).toBe('GOOGLESUPER_FIND_FILE')
+  })
+
+  it('registers the notion tools when notion is connected', async () => {
+    const harness = makeHarness()
+    harness.store.save('composio-secret')
+    harness.client.listConnected = () => ['notion']
+    harness.mcp.tools = NOTION_SLUGS.map(mcpTool)
+    harness.mcp.result = {
+      text: JSON.stringify({ successful: true, data: { results: [] } }),
+      isError: false
+    }
+
+    const status = await harness.integration.initialize()
+    const provider = status.providers.find((p) => p.id === 'notion')
+    const names = harness.integration.tools.map((tool) => tool.spec.name)
+
+    expect(provider?.connected).toBe(true)
+    expect(provider?.toolCount).toBe(4)
+    expect(provider?.error).toBeNull()
+    expect(names).toHaveLength(4)
+    for (const name of [
+      'notion_search',
+      'notion_read_page',
+      'notion_query_database',
+      'notion_create_page'
+    ]) {
+      expect(names).toContain(name)
+    }
+
+    const search = harness.integration.tools.find(
+      (tool) => tool.spec.name === 'notion_search'
+    )
+    expect(search).toBeDefined()
+    await search?.run({}, makeContext())
+
+    expect(harness.mcp.callToolCalls).toHaveLength(1)
+    expect(harness.mcp.callToolCalls[0].name).toBe('NOTION_SEARCH_NOTION_PAGE')
+  })
+
+  it('groups registered tool names by provider id', async () => {
+    const harness = makeHarness()
+    harness.store.save('composio-secret')
+    harness.client.listConnected = () => [
+      'googlecalendar',
+      'googlesuper',
+      'notion'
+    ]
+    harness.mcp.tools = [
+      ...CALENDAR_SLUGS,
+      ...DRIVE_SLUGS,
+      ...NOTION_SLUGS
+    ].map(mcpTool)
+
+    await harness.integration.initialize()
+
+    const groups = harness.integration.toolGroups()
+    expect(groups.map((group) => group.provider)).toEqual([
+      'googlecalendar',
+      'googlesuper',
+      'notion'
+    ])
+    const calendar = groups.find((group) => group.provider === 'googlecalendar')
+    expect(calendar?.tools).toContain('calendar_list_events')
+    expect(calendar?.tools).toHaveLength(4)
+    const drive = groups.find((group) => group.provider === 'googlesuper')
+    expect(drive?.tools).toContain('drive_find_files')
+    expect(drive?.tools).toHaveLength(4)
+    const notion = groups.find((group) => group.provider === 'notion')
+    expect(notion?.tools).toContain('notion_search')
+    expect(notion?.tools).toHaveLength(4)
+  })
+
   it('fails the whole provider when one required slug is missing', async () => {
     const harness = makeHarness()
     harness.store.save('composio-secret')
@@ -336,7 +457,8 @@ describe('ComposioIntegration', () => {
       DEFAULT_CALLBACK_URL
     )
 
-    const unsupported = await harness.integration.connect('notion')
+    const unsupported = await makeHarness([COMPOSIO_PROVIDERS[0]]).integration
+      .connect('notion')
     expect(unsupported.ok).toBe(false)
     expect(unsupported.url).toBeNull()
     expect(unsupported.message).toBe('That app is not supported yet.')

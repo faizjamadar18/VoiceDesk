@@ -2,9 +2,9 @@
  * The Composio providers Kestrel can drive by voice.
  *
  * Each entry names a Composio toolkit and the exact tool slugs Kestrel is
- * allowed to expose from it. Adding a provider means appending one entry to
- * `COMPOSIO_PROVIDERS` below and nothing else: Google Drive and Notion get
- * added later by appending entries here, nothing else.
+ * allowed to expose from it. A provider is added by appending one entry to
+ * `COMPOSIO_PROVIDERS` below, so the rest of the integration keeps working
+ * from this list alone.
  */
 
 import type { ComposioProviderId, ComposioProviderSpec } from './types'
@@ -36,6 +36,31 @@ export const COMPOSIO_PROVIDERS: readonly ComposioProviderSpec[] = [
     ],
     connectHint:
       'Connect Gmail to read, send, reply to, and draft emails by voice.'
+  },
+  {
+    id: 'googlesuper',
+    label: 'Google Drive',
+    toolkit: 'googlesuper',
+    tools: [
+      'GOOGLESUPER_FIND_FILE',
+      'GOOGLESUPER_CREATE_FILE_FROM_TEXT',
+      'GOOGLESUPER_CREATE_PERMISSION',
+      'GOOGLESUPER_GOOGLE_DRIVE_DELETE_FOLDER_OR_FILE_ACTION'
+    ],
+    connectHint:
+      'Connect Google Drive to find, create, share, and delete files by voice.'
+  },
+  {
+    id: 'notion',
+    label: 'Notion',
+    toolkit: 'notion',
+    tools: [
+      'NOTION_SEARCH_NOTION_PAGE',
+      'NOTION_FETCH_BLOCK_CONTENTS',
+      'NOTION_QUERY_DATABASE',
+      'NOTION_CREATE_NOTION_PAGE'
+    ],
+    connectHint: 'Connect Notion to find, read, and create pages by voice.'
   }
 ]
 

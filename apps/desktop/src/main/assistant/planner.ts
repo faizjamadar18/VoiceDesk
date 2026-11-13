@@ -86,10 +86,8 @@ export class RulePlanner implements Planner {
 export const LOOK_AT_SCREEN_SPEC: ToolSpec = {
   name: 'look_at_screen',
   description:
-    "Use for questions about what is visible on the user's screen, " +
-    "especially when they say 'this', 'that', or 'here', ask about an " +
-    'error, window, image, or text, or ask what is on the screen. ' +
-    'Do not use for commands or general knowledge.',
+    "Answer questions about what is on the user's screen, including errors, " +
+    'but not general knowledge.',
   parameters: {
     type: 'object',
     properties: {},

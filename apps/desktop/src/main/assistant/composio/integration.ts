@@ -22,9 +22,11 @@ import type { McpClient, McpServerConfig, McpTool } from '../mcp/types'
 import type { Tool } from '../types'
 import { createCalendarTools } from './calendar'
 import { ComposioAuthError, ComposioClient } from './client'
+import { createDriveTools } from './drive'
 import { createGmailTools } from './gmail'
 import type { ComposioKeyStore } from './key'
 import { keyProblem } from './key'
+import { createNotionTools } from './notion'
 import { COMPOSIO_PROVIDERS } from './providers'
 import type {
   ComposioProviderId,
@@ -37,6 +39,12 @@ import type {
 export const DEFAULT_CALLBACK_URL = 'voicedesk://composio/callback'
 export const CONNECT_POLL_INTERVAL_MS = 2000
 export const CONNECT_POLL_ATTEMPTS = 60
+
+/** The tool names one connected provider contributes. */
+export interface ComposioToolGroup {
+  readonly provider: ComposioProviderId
+  readonly tools: readonly string[]
+}
 
 /** Outcome of asking Composio for a provider's OAuth link. */
 export interface ComposioConnectResult {
@@ -77,7 +85,9 @@ type ToolFactory = (options: {
  */
 const TOOL_FACTORIES: Partial<Record<ComposioProviderId, ToolFactory>> = {
   googlecalendar: createCalendarTools,
-  gmail: createGmailTools
+  gmail: createGmailTools,
+  googlesuper: createDriveTools,
+  notion: createNotionTools
 }
 
 const UNSUPPORTED_MESSAGE = 'That app is not supported yet.'
@@ -102,6 +112,7 @@ export class ComposioIntegration {
   private session: ComposioSession | null = null
   private advertised: McpTool[] | null = null
   private registered: Tool[] = []
+  private groups: ComposioToolGroup[] = []
   private providerStatuses: ComposioProviderStatus[] = []
   private hasKey = false
   private keySource: 'stored' | 'env' | null = null
@@ -128,6 +139,14 @@ export class ComposioIntegration {
   /** Every voice tool the connected providers contribute. */
   get tools(): Tool[] {
     return [...this.registered]
+  }
+
+  /** The registered tool names, grouped by the provider that contributed them. */
+  toolGroups(): ComposioToolGroup[] {
+    return this.groups.map((group) => ({
+      provider: group.provider,
+      tools: [...group.tools]
+    }))
   }
 
   /** The current state, safe to push straight to the UI. */
@@ -362,6 +381,7 @@ export class ComposioIntegration {
    * does not re-handshake.
    */
   private async sync(): Promise<void> {
+    this.groups = []
     const session = this.session
     const client = this.client
     if (session === null || client === null) {
@@ -401,6 +421,7 @@ export class ComposioIntegration {
     }
 
     const tools: Tool[] = []
+    const groups: ComposioToolGroup[] = []
     const taken = new Set<string>()
     const statuses: ComposioProviderStatus[] = []
 
@@ -495,6 +516,10 @@ export class ComposioIntegration {
 
       for (const tool of built) taken.add(tool.spec.name)
       tools.push(...built)
+      groups.push({
+        provider: provider.id,
+        tools: built.map((tool) => tool.spec.name)
+      })
       statuses.push({
         ...base,
         connected: true,
@@ -505,6 +530,7 @@ export class ComposioIntegration {
 
     this.providerStatuses = statuses
     this.registered = tools
+    this.groups = groups
     this.error = advertisedError
     this.notify()
   }
@@ -551,6 +577,7 @@ export class ComposioIntegration {
   }
 
   private resetProviders(): void {
+    this.groups = []
     this.providerStatuses = this.providerSpecs.map((provider) => ({
       id: provider.id,
       label: provider.label,

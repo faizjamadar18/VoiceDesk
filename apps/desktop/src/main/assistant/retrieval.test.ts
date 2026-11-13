@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_EMBEDDING_MODEL,
+  DEFAULT_GROUP_CAP,
+  DEFAULT_GROUP_FLOOR,
   DEFAULT_TOP_K,
   Embedder,
   EmbedderUnavailable,
@@ -156,6 +158,75 @@ describe('ToolSelector', () => {
     expect(picked).toContain('notion_create_page')
     expect(picked).toContain('gmail_send_message')
     expect(picked.filter((name) => name !== 'notion_create_page')).toHaveLength(1)
+  })
+
+  it('adds one tool from a group that ranking alone would drop', () => {
+    const selector = new ToolSelector({ embedder: null, topK: 1 })
+    selector.setGroups([
+      { name: 'gmail', tools: ['gmail_send_message'] },
+      { name: 'notion', tools: ['notion_create_page'] }
+    ])
+
+    const picked = names(selector.select('send an email to alice', catalog()))
+
+    expect(picked).toContain('gmail_send_message')
+    // `notion_create_page` does not rank first, but its app must stay present.
+    expect(picked).toContain('notion_create_page')
+    expect(picked).toHaveLength(2)
+  })
+
+  it('caps how many tools one group contributes', () => {
+    const specs = [
+      spec('alpha_one', 'Alpha one thing'),
+      spec('alpha_two', 'Alpha two thing'),
+      spec('alpha_three', 'Alpha three thing'),
+      spec('alpha_four', 'Alpha four thing'),
+      spec('beta_one', 'Beta one thing'),
+      spec('gamma_one', 'Gamma one thing')
+    ]
+    const selector = new ToolSelector({ embedder: null, topK: 5, groupCap: 2 })
+    selector.setGroups([{ name: 'alpha', tools: specs.slice(0, 4).map((s) => s.name) }])
+
+    const picked = names(selector.select('alpha', specs))
+
+    expect(picked.filter((name) => name.startsWith('alpha_'))).toHaveLength(2)
+    expect(picked).toContain('beta_one')
+  })
+
+  it('ignores groups when topK is not positive', () => {
+    const selector = new ToolSelector({
+      embedder: null,
+      topK: 0,
+      alwaysInclude: BUILTINS
+    })
+    selector.setGroups([
+      { name: 'gmail', tools: ['gmail_send_message'] },
+      { name: 'notion', tools: ['notion_create_page'] }
+    ])
+
+    const picked = names(selector.select('send an email to alice', catalog()))
+
+    expect(new Set(picked)).toEqual(BUILTINS)
+  })
+
+  it('ignores empty and unknown groups and replaces prior groups', () => {
+    const selector = new ToolSelector({ embedder: null, topK: 1 })
+    selector.setGroups([
+      { name: '', tools: ['gmail_send_message'] },
+      { name: 'unknown', tools: ['not_a_tool'] }
+    ])
+
+    const onlyRanked = names(
+      selector.select('send an email to alice', catalog())
+    )
+    expect(onlyRanked).toEqual(['gmail_send_message'])
+
+    selector.setGroups([{ name: 'gmail', tools: ['gmail_send_message'] }])
+    selector.setGroups([{ name: 'notion', tools: ['notion_create_page'] }])
+
+    const replaced = names(selector.select('repo status', catalog()))
+    expect(replaced).toContain('notion_create_page')
+    expect(replaced).not.toContain('gmail_send_message')
   })
 
   it('keeps original order and does not mutate the input', () => {
@@ -318,7 +389,9 @@ describe('selectorFromEnv', () => {
 
   it('matches the option-a defaults', () => {
     expect(DEFAULT_EMBEDDING_MODEL).toBe('BAAI/bge-small-en-v1.5')
-    expect(DEFAULT_TOP_K).toBe(10)
+    expect(DEFAULT_TOP_K).toBe(5)
+    expect(DEFAULT_GROUP_CAP).toBe(2)
+    expect(DEFAULT_GROUP_FLOOR).toBe(1)
   })
 })
 

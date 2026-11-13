@@ -64,11 +64,8 @@ export class OpenAppTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'open_app',
     description:
-      "Open any application installed on the user's Windows PC, " +
-      'including Start menu, Microsoft Store, and desktop apps. Use the ' +
-      "name people say, such as 'Notion', 'WhatsApp', 'Visual Studio " +
-      "Code', or 'Calculator'. Do not use for websites, files, or " +
-      'folders.',
+      'Open an installed Windows app by its common name, such as Notion or ' +
+      'Calculator.',
     parameters: objectSchema(
       {
         app: {
@@ -205,8 +202,7 @@ export class SearchFilesTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'search_files',
     description:
-      "Search the user's local files by file name or folder path. " +
-      'Read only.',
+      "Search the user's local files by file name or folder path, read only.",
     parameters: objectSchema(
       {
         query: {
@@ -252,8 +248,7 @@ export class CreateFolderTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'create_folder',
     description:
-      'Create one new folder where the user says, or on the Desktop. ' +
-      'Fails if the folder already exists.',
+      'Create one new folder where the user says, or on the Desktop.',
     parameters: objectSchema(
       {
         name: { type: 'string', description: 'The new folder name.' },
@@ -312,8 +307,7 @@ export class CreateFileTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'create_file',
     description:
-      'Create one new, empty file where the user says, or on the ' +
-      'Desktop. Fails if the file already exists.',
+      'Create one new, empty file where the user says, or on the Desktop.',
     parameters: objectSchema(
       {
         name: {
@@ -375,8 +369,8 @@ export class DeleteFileTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'delete_file',
     description:
-      'Move one file the user names to the Windows Recycle Bin. Never ' +
-      'deletes permanently. Always asks for approval first.',
+      'Move one named file to the Windows Recycle Bin, never deleting it ' +
+      'permanently.',
     parameters: objectSchema(
       {
         query: {

@@ -307,12 +307,6 @@ export const APP_ACTIONS_CATALOG: Record<string, AppActionItem[]> = {
       "asksFirst": true
     },
     {
-      "id": "drive-create-folder",
-      "name": "Create a folder",
-      "description": "Make a new folder in Drive.",
-      "asksFirst": true
-    },
-    {
       "id": "drive-upload",
       "name": "Upload a file",
       "description": "Send a file from this computer up to Drive.",
@@ -328,12 +322,6 @@ export const APP_ACTIONS_CATALOG: Record<string, AppActionItem[]> = {
       "id": "drive-edit",
       "name": "Edit a file",
       "description": "Change the contents of a file already in Drive.",
-      "asksFirst": true
-    },
-    {
-      "id": "drive-move",
-      "name": "Move or copy a file",
-      "description": "Put it in another folder, or duplicate it.",
       "asksFirst": true
     },
     {
@@ -529,57 +517,21 @@ export const APP_ACTIONS_CATALOG: Record<string, AppActionItem[]> = {
   ],
   "notion": [
     {
-      "id": "page-create",
-      "name": "Create a page",
-      "description": "Start a new page under a parent you name.",
-      "asksFirst": true
-    },
-    {
-      "id": "page-append",
-      "name": "Add content to a page",
-      "description": "Append blocks of text to a page you already have.",
-      "asksFirst": true
-    },
-    {
-      "id": "page-update",
-      "name": "Update a page",
-      "description": "Change a page's title or its properties.",
-      "asksFirst": true
-    },
-    {
       "id": "read",
       "name": "Search and read",
       "description": "Find a page in your workspace and read what's on it.",
-      "asksFirst": true
+      "asksFirst": false
     },
     {
       "id": "database-read",
       "name": "Query a database",
       "description": "Filter and read rows out of a Notion database.",
-      "asksFirst": true
+      "asksFirst": false
     },
     {
-      "id": "database-write",
-      "name": "Add a database row",
-      "description": "Insert a new row with its properties filled in.",
-      "asksFirst": true
-    },
-    {
-      "id": "comment",
-      "name": "Comment on a page",
-      "description": "Leave a comment where the team will see it.",
-      "asksFirst": true
-    },
-    {
-      "id": "upload",
-      "name": "Upload a file",
-      "description": "Put a file into a page.",
-      "asksFirst": true
-    },
-    {
-      "id": "people",
-      "name": "Find people",
-      "description": "Resolve a name before setting a person property.",
+      "id": "page-create",
+      "name": "Create a page",
+      "description": "Start a new page under a parent you name.",
       "asksFirst": true
     }
   ],

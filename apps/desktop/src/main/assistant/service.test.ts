@@ -190,6 +190,16 @@ function makeFakeIntegration(initialTools: Tool[] = []) {
     async waitForConnection(): Promise<boolean> {
       return true
     },
+    toolGroups(): Array<{ provider: string; tools: string[] }> {
+      const groups = new Map<string, string[]>()
+      for (const tool of state.tools) {
+        const provider = tool.spec.name.split('_')[0]
+        const tools = groups.get(provider) ?? []
+        tools.push(tool.spec.name)
+        groups.set(provider, tools)
+      }
+      return [...groups].map(([provider, tools]) => ({ provider, tools }))
+    },
     async close(): Promise<void> {}
   }
 
@@ -285,7 +295,7 @@ describe('AssistantService integrations', () => {
     )
   })
 
-  it('pins integration tool names so retrieval never filters them out', async () => {
+  it('narrows integration tools with retrieval while keeping the app present', async () => {
     vi.stubEnv('KESTREL_GROQ_API_KEY', 'test-key')
     vi.stubEnv('KESTREL_TOOL_TOP_K', '1')
     const registry = new ToolRegistry()
@@ -301,8 +311,11 @@ describe('AssistantService integrations', () => {
     const selected = selector
       .select('hello there', registry.specs())
       .map((spec) => spec.name)
-    expect(selected).toContain('googlecalendar_create_event')
-    expect(selected).toContain('googlecalendar_list_events')
+    const calendar = selected.filter((name) =>
+      name.startsWith('googlecalendar_')
+    )
+    // Retrieval narrows the app's tools, and the group floor keeps one present.
+    expect(calendar).toHaveLength(1)
   })
 })
 
