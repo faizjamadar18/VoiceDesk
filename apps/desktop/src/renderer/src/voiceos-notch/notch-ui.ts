@@ -63,7 +63,9 @@ export function deriveNotchPresentation({
         ? 'thinking'
         : phase === 'error'
           ? 'error'
-          : 'responding'
+          : hasExpandedContent
+            ? 'responding'
+            : 'idle'
 
   return {
     mode,

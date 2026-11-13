@@ -1655,4 +1655,104 @@ describe('NotchController escape & cancel', () => {
     expect(context.presenter.hidden).toBe(1)
     expect(context.turnCompletes()).toBe(1)
   })
+
+  describe('text input', () => {
+    it('startTyping stops an active session and cancels speech without hiding', () => {
+      const screen = new FakeScreenService()
+      const context = setup({ screen })
+
+      context.controller.start()
+      context.controller.pushAudio(speech(1), 16_000)
+      context.controller.setSpeechActive(true)
+
+      context.controller.startTyping()
+
+      expect(context.controller.active).toBe(false)
+      expect(context.transcriber.cancels).toBe(1)
+      expect(screen.cancels).toBe(1)
+      expect(context.presenter.speechStates.at(-1)).toBe(false)
+      expect(context.presenter.stops).toBe(1)
+      expect(context.presenter.hidden).toBe(0)
+      expect(context.turnCompletes()).toBe(1)
+    })
+
+    it('submitText cancels active speech session, emits acting, calls actionClient.act, and emits result', async () => {
+      const context = setup()
+      context.controller.start()
+      context.controller.pushAudio(speech(1), 16_000)
+
+      context.actionClient.response = {
+        status: 'ok',
+        action: 'open_app',
+        message: 'Opening Calculator.',
+        dryRun: false,
+        spokenResponse: 'Opening Calculator.'
+      }
+
+      await context.controller.submitText('open calculator')
+
+      expect(context.controller.active).toBe(false)
+      expect(context.transcriber.cancels).toBe(1)
+      expect(context.actionClient.transcripts).toEqual(['open calculator'])
+
+      const states = context.presenter.states
+      const actingState = states.find((s) => s.phase === 'acting')
+      expect(actingState).toEqual({
+        phase: 'acting',
+        transcript: 'open calculator',
+        message: 'Working on it…'
+      })
+
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('result')
+      expect(lastPayload?.transcript).toBe('open calculator')
+      expect(lastPayload?.message).toBe('Opening Calculator.')
+      expect(lastPayload?.spoken).toBe('Opening Calculator.')
+    })
+
+    it('submitText handles actionClient error gracefully', async () => {
+      const context = setup()
+      context.actionClient.act = vi.fn().mockRejectedValue(new Error('Backend offline'))
+
+      await context.controller.submitText('check status')
+
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('error')
+      expect(lastPayload?.transcript).toBe('check status')
+      expect(lastPayload?.message).toBe("That didn't work: Backend offline")
+    })
+
+    it('submitText handles paste if response action is type', async () => {
+      const context = setup()
+      context.actionClient.response = {
+        status: 'ok',
+        action: 'type',
+        text: 'Hello typed world',
+        message: 'Typing text.',
+        dryRun: false
+      }
+
+      await context.controller.submitText('write hello')
+
+      expect(context.paste.pasted).toEqual(['Hello typed world'])
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('result')
+      expect(lastPayload?.message).toBe('Typing text.')
+    })
+
+    it('restores history item: clears active turn, shows presenter, sets transcript, emits result phase with prompt and reply', () => {
+      const context = setup()
+      context.controller.start()
+
+      context.controller.restoreHistory('What is 2+2?', '4')
+
+      expect(context.presenter.shown).toBeGreaterThan(0)
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('result')
+      expect(lastPayload?.status).toBe('ok')
+      expect(lastPayload?.transcript).toBe('What is 2+2?')
+      expect(lastPayload?.message).toBe('4')
+      expect(lastPayload?.spoken).toBeNull()
+    })
+  })
 })

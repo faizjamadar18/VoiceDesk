@@ -170,13 +170,15 @@ export class OverlayWindowPresenter implements ScreenOverlayController {
     win.on('closed', this.handleClosed)
   }
 
-  show(bounds: ScreenRect): void {
+  show(bounds: ScreenRect, initialCursor?: ScreenOverlayPoint): void {
     if (this.disposed || this.win.isDestroyed()) return
     this.applyBounds(bounds)
     this.pendingPoints = []
     const start: ScreenOverlayStart = {
       width: Math.max(1, Math.round(bounds.width)),
-      height: Math.max(1, Math.round(bounds.height))
+      height: Math.max(1, Math.round(bounds.height)),
+      cursor: initialCursor,
+      tagText: 'Point to show VoiceOS'
     }
     this.pendingStart = start
     if (this.ready) {

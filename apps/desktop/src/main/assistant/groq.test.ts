@@ -213,6 +213,40 @@ describe('GroqClient', () => {
     expect(calls[0].init.signal).toBeInstanceOf(AbortSignal)
   })
 
+  it('includes explicit Notion rules in the system prompt', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('summarize my DP notes', [])
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    const system = messages[0].content
+    expect(system).toContain(
+      'When the user asks to find, search, read, summarize, or query pages, ' +
+        'notes, or databases in Notion, call the matching Notion tool directly.'
+    )
+    expect(system).toContain(
+      "When the user asks to read, view, or summarize a page or note (e.g., 'summarize my DP notes', 'read the project page'), use `notion_read_page` passing the page name."
+    )
+    expect(system).toContain(
+      'When the user asks to read rows, tables, or a database, use `notion_query_database` passing the database name.'
+    )
+    expect(system).toContain(
+      'When the user asks to search or find pages or databases, use `notion_search`.'
+    )
+    expect(system).toContain(
+      'When the user asks to create a page, use `notion_create_page`.'
+    )
+    expect(system).toContain(
+      'Never invent Notion IDs or ask the user which app to use when a Notion tool fits.'
+    )
+  })
+
   it('sends the current date, time, and a relative-date resolution rule', async () => {
     const fixed = new Date(2026, 10, 12, 14, 32, 5)
     const { fetch, calls } = recordingFetch(() =>

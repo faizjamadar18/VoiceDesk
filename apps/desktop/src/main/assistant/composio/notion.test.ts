@@ -132,6 +132,46 @@ describe('notion tool specs', () => {
     }
   })
 
+  it('has updated voice-friendly descriptions matching requirements', () => {
+    const byName = new Map(
+      makeTools([]).tools.map((tool) => [tool.spec.name, tool.spec])
+    )
+
+    expect(byName.get('notion_search')?.description).toBe(
+      'Find Notion pages and databases by title, name, or keywords.'
+    )
+    expect(byName.get('notion_read_page')?.description).toBe(
+      'Read the text, notes, and content on a Notion page. Use this when the user asks to read, see, or summarize a page by name or id.'
+    )
+    expect(byName.get('notion_query_database')?.description).toBe(
+      'Read, search, and filter rows or entries from a Notion database or table.'
+    )
+    expect(byName.get('notion_create_page')?.description).toBe(
+      'Create a new Notion page under a parent page with a title and optional text.'
+    )
+
+    const readParams = byName.get('notion_read_page')?.parameters as {
+      properties: Record<string, { description: string }>
+    }
+    expect(readParams.properties.page.description).toBe(
+      "The page title or topic as the user named it (e.g. 'DP', 'Meeting Notes'), or its id."
+    )
+
+    const queryParams = byName.get('notion_query_database')?.parameters as {
+      properties: Record<string, { description: string }>
+    }
+    expect(queryParams.properties.database.description).toBe(
+      'The database or table as the user named it, or its id.'
+    )
+
+    const searchParams = byName.get('notion_search')?.parameters as {
+      properties: Record<string, { description: string }>
+    }
+    expect(searchParams.properties.query.description).toBe(
+      'What to search for; leave empty to list everything.'
+    )
+  })
+
   it('confirms only the write', () => {
     const byName = new Map(
       makeTools([]).tools.map((tool) => [tool.spec.name, tool.spec])
@@ -195,6 +235,32 @@ describe('notion_search', () => {
     expect(outcome.message).toContain(
       'I couldn\'t find anything in Notion matching "unicorn".'
     )
+  })
+
+  it('fetches page text when asked to read or summarize and search yields exactly 1 page', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([pageRecord(PAGE_ID, 'DP')]) },
+      {
+        text: resultsPayload([
+          {
+            type: 'paragraph',
+            paragraph: { rich_text: [{ plain_text: 'DP project details' }] }
+          }
+        ])
+      }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_search').run(
+      { query: 'DP' },
+      makeContext({ transcript: 'summarize my DP notes' })
+    )
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0].slug).toBe('NOTION_SEARCH_NOTION_PAGE')
+    expect(calls[1].slug).toBe('NOTION_FETCH_BLOCK_CONTENTS')
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toContain('DP')
+    expect(outcome.message).toContain('DP project details')
   })
 })
 
@@ -487,5 +553,13 @@ describe('matchItem', () => {
 
   it('returns null when several titles contain the query', () => {
     expect(matchItem([report, expense], 'report')).toBeNull()
+  })
+
+  it('matches when wanted contains the page title', () => {
+    expect(matchItem([budget], 'my budget notes')).toEqual(budget)
+  })
+
+  it('matches single item directly', () => {
+    expect(matchItem([budget], 'something else')).toEqual(budget)
   })
 })

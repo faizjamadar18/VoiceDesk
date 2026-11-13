@@ -37,7 +37,7 @@ export interface ScreenService {
 
 /** The pure seam over the Electron overlay window. */
 export interface ScreenOverlayController {
-  show(bounds: ScreenRect): void
+  show(bounds: ScreenRect, initialCursor?: ScreenOverlayPoint): void
   hide(): void
   point(point: ScreenOverlayPoint): void
   finish(): Promise<void>
@@ -139,8 +139,19 @@ export class OverlayScreenService implements ScreenService {
     this.lockedDisplay = display
     this.tracker.reset()
 
+    let initialCursor: ScreenOverlayPoint | undefined
     try {
-      this.options.overlay.show(display.bounds)
+      const rawCursor = this.options.cursorPoint()
+      initialCursor = {
+        x: rawCursor.x - display.bounds.x,
+        y: rawCursor.y - display.bounds.y
+      }
+    } catch {
+      // cursorPoint unavailable or failed
+    }
+
+    try {
+      this.options.overlay.show(display.bounds, initialCursor)
     } catch (error) {
       console.error('[screen] could not show the overlay', error)
       this.lockedDisplay = null

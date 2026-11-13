@@ -39,7 +39,8 @@ export default defineConfig({
         input: {
           index: resolve('src/renderer/index.html'),
           notch: resolve('src/renderer/notch.html'),
-          overlay: resolve('src/renderer/overlay.html')
+          overlay: resolve('src/renderer/overlay.html'),
+          sidebar: resolve('src/renderer/sidebar.html')
         }
       }
     },

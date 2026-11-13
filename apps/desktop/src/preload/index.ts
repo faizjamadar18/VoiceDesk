@@ -17,9 +17,11 @@ import {
   type AuthTokens,
   type AuthUser,
   type HistoryRecord,
+  type HistoryRestorePayload,
   type IntegrationConnectResult,
   type IntegrationId,
-  type IntegrationsStatus
+  type IntegrationsStatus,
+  type SidebarPointerPayload
 } from '../shared/types'
 
 function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
@@ -71,6 +73,9 @@ const api: KestrelApi = {
   dismissNotchResult: () => ipcRenderer.send(IPC.dismissNotchResult),
   cancelNotchActive: () => ipcRenderer.send(IPC.notchCancelActive),
   decideNotch: (action) => ipcRenderer.send(IPC.notchDecide, action),
+  submitNotchText: (text) => ipcRenderer.send(IPC.notchSubmitText, text),
+  setNotchFocusable: (focusable) => ipcRenderer.send(IPC.notchSetFocusable, focusable),
+  startNotchTyping: () => ipcRenderer.send(IPC.notchStartTyping),
   copyToClipboard: (text) => ipcRenderer.send(IPC.copyToClipboard, text),
   setNotchRegion: (region) => ipcRenderer.send(IPC.notchRegion, region),
   getAuthState: () => ipcRenderer.invoke(IPC.authGetState) as Promise<AuthState>,
@@ -94,6 +99,17 @@ const api: KestrelApi = {
   listHistory: () => ipcRenderer.invoke(IPC.historyList) as Promise<HistoryRecord[]>,
   deleteHistory: (id) => ipcRenderer.invoke(IPC.historyDelete, id) as Promise<HistoryRecord[]>,
   onHistoryChanged: (callback) => subscribeEvent(IPC.historyChanged, callback),
+  restoreHistoryInNotch: (payload) => ipcRenderer.send(IPC.sidebarRestoreHistory, payload),
+  sidebarRestoreHistory: (prompt: string, reply: string) =>
+    ipcRenderer.send(IPC.sidebarRestoreHistory, { prompt, reply }),
+  onNotchRestoreHistory: (callback) =>
+    subscribe<HistoryRestorePayload>(IPC.notchRestoreHistory, callback),
+  setSidebarInteractive: (interactive) =>
+    ipcRenderer.send(IPC.sidebarSetInteractive, interactive),
+  setSidebarRegion: (region) => ipcRenderer.send(IPC.sidebarRegion, region),
+  onSidebarCollapse: (callback) => subscribeEvent(IPC.sidebarCollapse, callback),
+  onSidebarPointer: (callback) =>
+    subscribe<SidebarPointerPayload>(IPC.sidebarPointer, callback),
   synthesizeSpeech: (text: string) =>
     ipcRenderer.invoke(IPC.speechSynthesize, text) as Promise<Uint8Array | null>,
   startSpeechStream: (requestId, text) =>

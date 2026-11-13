@@ -27,6 +27,7 @@ export interface NotchPresenter {
   partial(text: string): void
   setSpeechActive?(active: boolean): void
   dismissWithAnimation?(): void
+  reposition?(): void
 }
 
 /**
@@ -175,6 +176,7 @@ export class NotchController {
   private fileResultsShown = false
   private decision: PendingDecision | null = null
   private lastTranscript = ''
+  private submissionGeneration = 0
   private disposed = false
 
   constructor(options: NotchControllerOptions) {
@@ -346,6 +348,138 @@ export class NotchController {
     } else {
       this.hidePresenter()
     }
+  }
+
+  startTyping(): void {
+    if (this.disposed) return
+    this.clearEscapeHideTimer()
+    this.clearHideTimer()
+    this.resetSpeechState()
+    if (this.session !== null) {
+      const session = this.session
+      this.session = null
+      this.clearSessionTimers(session)
+      session.turn?.cancel()
+      this.cancelScreen()
+      this.options.presenter.stopSession()
+      this.options.onTurnComplete?.()
+      console.log(`[notch] startTyping session=${session.id}`)
+    }
+  }
+
+  async submitText(text: string): Promise<void> {
+    if (this.disposed) return
+
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    this.submissionGeneration += 1
+    const generation = this.submissionGeneration
+
+    this.clearEscapeHideTimer()
+    this.clearHideTimer()
+    this.resetSpeechState()
+    this.clearFileResults()
+    this.decision = null
+
+    if (this.session !== null) {
+      const session = this.session
+      this.session = null
+      this.clearSessionTimers(session)
+      session.turn?.cancel()
+      this.cancelScreen()
+      this.options.presenter.stopSession()
+      this.options.onTurnComplete?.()
+    }
+
+    this.showPresenter()
+    this.lastTranscript = trimmed
+    this.emit('acting', trimmed, 'Working on it…')
+
+    try {
+      const response: ActionResponse = await this.options.actionClient.act(trimmed)
+      if (this.disposed || generation !== this.submissionGeneration) return
+
+      console.log(
+        `[notch] action (submitted text) status=${response.status} action=${response.action} dryRun=${response.dryRun ?? false}`
+      )
+
+      if (response.text && response.action === 'type') {
+        await this.options.paste.paste(response.text)
+        if (this.disposed || generation !== this.submissionGeneration) return
+      }
+
+      if (response.status === 'error') {
+        this.clearFileResults()
+        this.decision = null
+        this.cancelScreen()
+        const errorMsg = response.message
+        const spoken = response.spokenResponse || errorMsg
+        this.emit('error', trimmed, errorMsg, 'error', { spoken })
+        console.log(`[notch] error phase=error chars=${errorMsg.length}`)
+        this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
+        this.options.onTurnComplete?.()
+        return
+      }
+
+      const fileResults = Array.isArray(response.results)
+        ? this.buildFileResults(response.results)
+        : null
+      const decision = this.pendingDecision(response)
+
+      this.lastTranscript = trimmed
+      this.decision = decision
+      this.emit('result', trimmed, response.message, response.status, {
+        spoken: response.spokenResponse || response.message,
+        card: response.card ?? null,
+        results: fileResults?.results ?? null,
+        resultsLabel: fileResults?.label ?? null,
+        decision: decision ? this.decisionPayload(decision, false) : null
+      })
+      console.log(
+        `[notch] result phase=result status=${response.status} results=${fileResults?.results.length ?? 0} decision=${decision?.kind ?? 'none'}`
+      )
+      this.options.onTurnComplete?.()
+
+      if (decision) {
+        return
+      }
+
+      if (fileResults) {
+        this.scheduleHide(this.options.fileResultsVisibleMs ?? FILE_RESULTS_SAFETY_MS, () =>
+          this.clearFileResults()
+        )
+      } else if (response.card) {
+        const kind =
+          typeof response.card['kind'] === 'string' ? response.card['kind'] : ''
+        this.scheduleHide(
+          kind === 'email_list'
+            ? this.options.fileResultsVisibleMs ?? FILE_RESULTS_SAFETY_MS
+            : this.options.resultVisibleMs ?? 6_000
+        )
+      } else {
+        this.scheduleHide(this.options.resultVisibleMs ?? 2_000)
+      }
+    } catch (error) {
+      if (this.disposed || generation !== this.submissionGeneration) return
+      this.clearFileResults()
+      this.decision = null
+      this.cancelScreen()
+      const errorMsg = `That didn't work: ${errorMessage(error)}`
+      this.emit('error', trimmed, errorMsg, 'error', { spoken: errorMsg })
+      console.log(`[notch] error phase=error chars=${errorMsg.length}`)
+      this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
+      this.options.onTurnComplete?.()
+    }
+  }
+
+  restoreHistory(prompt: string, reply: string): void {
+    if (this.disposed) return
+    this.clearEscapeHideTimer()
+    this.clearActiveState({ cancelPresenterSession: false, logLabel: 'restoreHistory' })
+    this.showPresenter()
+    this.lastTranscript = prompt
+    this.emit('result', prompt, reply, 'ok', { spoken: null })
   }
 
   cancel(): void {
@@ -900,6 +1034,7 @@ export class NotchController {
   }
 
   private clearActiveState(options: { cancelPresenterSession: boolean; logLabel?: string }): void {
+    this.submissionGeneration += 1
     const session = this.session
     this.session = null
     this.clearHideTimer()

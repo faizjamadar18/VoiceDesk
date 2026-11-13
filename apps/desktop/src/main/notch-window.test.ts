@@ -4,6 +4,7 @@ import { IPC, type NotchStatePayload } from '../shared/types'
 
 const electronState = vi.hoisted(() => ({
   workArea: { x: 0, y: 0, width: 1_920, height: 1_080 },
+  bounds: { x: 0, y: 0, width: 1_920, height: 1_080 },
   cursor: { x: 0, y: 0 },
   lastWindowOptions: null as Record<string, unknown> | null
 }))
@@ -17,12 +18,23 @@ vi.mock('electron', () => ({
     setAlwaysOnTop = vi.fn()
     setVisibleOnAllWorkspaces = vi.fn()
     setSkipTaskbar = vi.fn()
+    setFullScreenable = vi.fn()
+    moveTop = vi.fn()
     loadURL = vi.fn()
     loadFile = vi.fn().mockResolvedValue(undefined)
   },
   screen: {
-    getPrimaryDisplay: () => ({ workArea: electronState.workArea }),
-    getCursorScreenPoint: () => electronState.cursor
+    getPrimaryDisplay: () => ({
+      workArea: electronState.workArea,
+      bounds: electronState.bounds
+    }),
+    getDisplayNearestPoint: () => ({
+      workArea: electronState.workArea,
+      bounds: electronState.bounds
+    }),
+    getCursorScreenPoint: () => electronState.cursor,
+    on: vi.fn(),
+    removeListener: vi.fn()
   }
 }))
 
@@ -31,13 +43,16 @@ import {
   NOTCH_HEIGHT,
   NOTCH_RESULTS_HEIGHT,
   NotchWindowPresenter,
-  createNotchWindow
+  createNotchWindow,
+  notchBounds
 } from './notch-window'
 
 interface FakeWindow {
   win: BrowserWindow
   height: () => number
   setIgnoreMouseEvents: ReturnType<typeof vi.fn>
+  setAlwaysOnTop: ReturnType<typeof vi.fn>
+  moveTop: ReturnType<typeof vi.fn>
   blur: ReturnType<typeof vi.fn>
   hide: ReturnType<typeof vi.fn>
   send: ReturnType<typeof vi.fn>
@@ -46,6 +61,8 @@ interface FakeWindow {
 function fakeWindow(options: { focused?: boolean } = {}): FakeWindow {
   let bounds = { x: 630, y: 0, width: 660, height: NOTCH_HEIGHT }
   const setIgnoreMouseEvents = vi.fn()
+  const setAlwaysOnTop = vi.fn()
+  const moveTop = vi.fn()
   const blur = vi.fn()
   const hide = vi.fn()
   const send = vi.fn()
@@ -59,11 +76,16 @@ function fakeWindow(options: { focused?: boolean } = {}): FakeWindow {
     setBounds: (next: typeof bounds) => {
       bounds = { ...next }
     },
-    setAlwaysOnTop: vi.fn(),
+    setAlwaysOnTop,
     setVisibleOnAllWorkspaces: vi.fn(),
     setSkipTaskbar: vi.fn(),
+    setFullScreenable: vi.fn(),
+    setFocusable: vi.fn(),
+    focus: vi.fn(),
+    moveTop,
     setIgnoreMouseEvents,
     showInactive: vi.fn(),
+    show: vi.fn(),
     blur,
     hide,
     destroy: vi.fn(),
@@ -80,6 +102,8 @@ function fakeWindow(options: { focused?: boolean } = {}): FakeWindow {
     win: win as unknown as BrowserWindow,
     height: () => bounds.height,
     setIgnoreMouseEvents,
+    setAlwaysOnTop,
+    moveTop,
     blur,
     hide,
     send
@@ -148,6 +172,23 @@ describe('NotchWindowPresenter sizing', () => {
   })
 })
 
+describe('notchBounds', () => {
+  afterEach(() => {
+    electronState.bounds = { x: 0, y: 0, width: 1_920, height: 1_080 }
+  })
+
+  it('pins to physical top center of display based on display.bounds', () => {
+    electronState.bounds = { x: 100, y: 50, width: 1_920, height: 1_080 }
+    const bounds = notchBounds(300)
+    expect(bounds).toEqual({
+      x: 100 + Math.round((1_920 - 660) / 2),
+      y: 50,
+      width: 660,
+      height: 300
+    })
+  })
+})
+
 describe('createNotchWindow', () => {
   afterEach(() => {
     electronState.lastWindowOptions = null
@@ -155,12 +196,31 @@ describe('createNotchWindow', () => {
   })
 
   it('creates a focusable window with acceptFirstMouse enabled', () => {
-    createNotchWindow()
+    const win = createNotchWindow()
 
     expect(electronState.lastWindowOptions).toMatchObject({
+      transparent: true,
+      backgroundColor: '#00000000',
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      movable: false,
       focusable: true,
-      acceptFirstMouse: true
+      hasShadow: false,
+      fullscreenable: false,
+      enableLargerThanScreen: true,
+      acceptFirstMouse: true,
+      hiddenInMissionControl: true
     })
+
+    if (process.platform === 'darwin') {
+      expect(win.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, { visibleOnFullScreen: true })
+    } else {
+      expect(win.setVisibleOnAllWorkspaces).not.toHaveBeenCalled()
+    }
+    expect(win.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
   })
 })
 
@@ -268,6 +328,49 @@ describe('NotchWindowPresenter interaction & dismissal', () => {
     presenter.dismissWithAnimation()
 
     expect(target.send).toHaveBeenCalledWith(IPC.notchDismiss)
+    presenter.dispose()
+  })
+
+  it('determines whether a screen coordinate is inside the interactive region', () => {
+    const target = fakeWindow()
+    const presenter = new NotchWindowPresenter(target.win)
+    presenter.handleReady()
+    presenter.show()
+
+    // When region is null, isPointInside returns false
+    expect(presenter.isPointInside(650, 50)).toBe(false)
+
+    // Notch window bounds in fakeWindow: x: 630, y: 0, width: 660, height: 300
+    // Set interactive region at left: 20, top: 0, width: 520, height: 100
+    // Screen bounds of interactive region: x: 630 + 20 = 650 to 1170, y: 0 to 100
+    presenter.setRegion({ left: 20, top: 0, width: 520, height: 100 })
+
+    expect(presenter.isPointInside(700, 50)).toBe(true)
+    expect(presenter.isPointInside(640, 50)).toBe(false)
+    expect(presenter.isPointInside(700, 150)).toBe(false)
+
+    // When hidden, returns false
+    presenter.hide()
+    expect(presenter.isPointInside(700, 50)).toBe(false)
+
+    presenter.dispose()
+  })
+
+  it('re-asserts moveTop and setAlwaysOnTop on show and reposition', () => {
+    const target = fakeWindow()
+    const presenter = new NotchWindowPresenter(target.win)
+
+    presenter.show()
+    expect(target.moveTop).toHaveBeenCalled()
+    expect(target.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+
+    target.moveTop.mockClear()
+    target.setAlwaysOnTop.mockClear()
+
+    presenter.reposition()
+    expect(target.moveTop).toHaveBeenCalled()
+    expect(target.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+
     presenter.dispose()
   })
 })

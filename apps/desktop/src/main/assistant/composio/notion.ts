@@ -246,15 +246,27 @@ export function matchItem(
   )
   if (containing.length === 1) return containing[0]
 
+  const contained = items.filter((item) => {
+    const title = item.title.trim().toLowerCase()
+    return title !== '' && title !== '(untitled)' && lower.includes(title)
+  })
+  if (contained.length === 1) return contained[0]
+
+  if (items.length === 1) return items[0]
+
   return null
 }
 
 // --- tool schemas ------------------------------------------------------
 
-const SEARCH_DESCRIPTION = 'Find Notion pages and databases by name.'
-const READ_DESCRIPTION = 'Read the text on a Notion page.'
-const QUERY_DESCRIPTION = 'Read rows from a Notion database.'
-const CREATE_DESCRIPTION = 'Create a Notion page with a title and optional text.'
+const SEARCH_DESCRIPTION =
+  'Find Notion pages and databases by title, name, or keywords.'
+const READ_DESCRIPTION =
+  'Read the text, notes, and content on a Notion page. Use this when the user asks to read, see, or summarize a page by name or id.'
+const QUERY_DESCRIPTION =
+  'Read, search, and filter rows or entries from a Notion database or table.'
+const CREATE_DESCRIPTION =
+  'Create a new Notion page under a parent page with a title and optional text.'
 
 export function createNotionTools(options: NotionToolOptions): Tool[] {
   const callTool = options.callTool
@@ -355,6 +367,32 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
         return { status: 'ok', action, message, spokenResponse: message }
       }
 
+      const textToCheck = `${ctx.transcript ?? ''} ${query}`.toLowerCase()
+      const wantsContent =
+        /\b(summarize|summary|read|explain|tell me about|what is|what's)\b/i.test(
+          textToCheck
+        )
+      if (items.length === 1 && items[0].type === 'page' && wantsContent) {
+        const blocks = await invoke(
+          SLUG.blocks,
+          { block_id: items[0].id, page_size: BLOCK_PAGE_SIZE },
+          action
+        )
+        if (blocks.ok) {
+          const text = extractBlockText(blocks.data)
+          if (text !== '') {
+            const title = items[0].title
+            const message = `${title}\n\n${text}`
+            return {
+              status: 'ok',
+              action,
+              message: truncate(message, MESSAGE_LIMIT),
+              spokenResponse: truncate(`${title}: ${text}`, SPOKEN_LIMIT)
+            }
+          }
+        }
+      }
+
       const listed = items.map((item) => `- ${item.title} (${item.type})`)
       const titles = items
         .slice(0, SPOKEN_RESULT_LIMIT)
@@ -378,7 +416,8 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
         {
           page: {
             type: 'string',
-            description: 'The page as the user named it, or its id.'
+            description:
+              "The page title or topic as the user named it (e.g. 'DP', 'Meeting Notes'), or its id."
           }
         },
         ['page']
@@ -428,7 +467,7 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
         {
           database: {
             type: 'string',
-            description: 'The database as the user named it, or its id.'
+            description: 'The database or table as the user named it, or its id.'
           },
           limit: {
             type: 'integer',

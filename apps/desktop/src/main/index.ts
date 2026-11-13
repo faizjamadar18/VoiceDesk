@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  screen,
   session,
   shell,
   Tray
@@ -52,6 +53,7 @@ import { NativePasteService } from './native-paste'
 import { NotchController } from './notch-controller'
 import { NotchWindowPresenter, createNotchWindow } from './notch-window'
 import { OverlayWindowPresenter, createOverlayWindow } from './overlay-window'
+import { SidebarWindow, createSidebarWindow } from './sidebar-window'
 import { PushToTalk } from './push-to-talk'
 import { captureDisplay, cursorScreenPoint, displayUnderCursor } from './screen-capture'
 import { OverlayScreenService } from './screen-service'
@@ -71,9 +73,11 @@ const DEFAULT_FAKE_TRANSCRIPT = 'open notepad'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let notchWindow: BrowserWindow | null = null
 let notchPresenter: NotchWindowPresenter | null = null
 let notchController: NotchController | null = null
 let overlayPresenter: OverlayWindowPresenter | null = null
+let sidebarWindow: SidebarWindow | null = null
 let screenService: OverlayScreenService | null = null
 let keyHook: KeyHookHandle | null = null
 let pushToTalk: PushToTalk | null = null
@@ -327,7 +331,18 @@ async function ensureKeyHook(): Promise<boolean> {
       onPress: () => pushToTalk?.press(),
       onRelease: () => pushToTalk?.release(),
       onCancel: () => pushToTalk?.cancel(),
-      onEscape: () => notchController?.requestEscapeDismiss()
+      onEscape: () => notchController?.requestEscapeDismiss(),
+      onMouseDown: () => {
+        const cursor = screen.getCursorScreenPoint()
+        const insideNotch = notchPresenter?.isPointInside(cursor.x, cursor.y) ?? false
+        const insideSidebar = sidebarWindow?.isPointInside(cursor.x, cursor.y) ?? false
+        if (!insideNotch && !insideSidebar) {
+          notchController?.dismissResults()
+          if (sidebarWindow?.isExpanded()) {
+            sidebarWindow.send(IPC.sidebarCollapse)
+          }
+        }
+      }
     })
     hookError = null
     console.log(`[hotkey] hook started for ${formatHotkey(chord)}`)
@@ -542,6 +557,16 @@ function registerIpc(): void {
     if (action !== 'confirm' && action !== 'cancel' && action !== 'undo') return
     void notchController?.decide(action)
   })
+  ipcMain.on(IPC.notchSubmitText, (_event, text: unknown) => {
+    if (typeof text !== 'string') return
+    void notchController?.submitText(text)
+  })
+  ipcMain.on(IPC.notchStartTyping, () => {
+    notchController?.startTyping()
+  })
+  ipcMain.on(IPC.notchSetFocusable, (_event, focusable: unknown) => {
+    notchPresenter?.setKeyboardFocusable(focusable === true)
+  })
   ipcMain.on(IPC.copyToClipboard, (_event, text: unknown) => {
     if (typeof text !== 'string') return
     clipboard.writeText(text)
@@ -593,7 +618,26 @@ function registerIpc(): void {
   ipcMain.handle(IPC.historyList, () => historyStore?.list() ?? [])
   ipcMain.handle(IPC.historyDelete, (_event, id: unknown) => {
     if (typeof id === 'string') historyStore?.delete(id)
+    sendToMain(IPC.historyChanged)
+    sidebarWindow?.send(IPC.historyChanged)
     return historyStore?.list() ?? []
+  })
+  ipcMain.on(IPC.sidebarRestoreHistory, (_event, payload: unknown) => {
+    if (payload && typeof payload === 'object') {
+      const { prompt, reply } = payload as { prompt?: unknown; reply?: unknown }
+      const promptStr = typeof prompt === 'string' ? prompt : ''
+      const replyStr = typeof reply === 'string' ? reply : ''
+      if (notchWindow && !notchWindow.isDestroyed() && !notchWindow.webContents.isDestroyed()) {
+        notchWindow.webContents.send(IPC.notchRestoreHistory, { prompt: promptStr, reply: replyStr })
+      }
+      notchController?.restoreHistory(promptStr, replyStr)
+    }
+  })
+  ipcMain.on(IPC.sidebarSetInteractive, (_event, interactive: unknown) => {
+    sidebarWindow?.setIgnoreMouseEvents(interactive !== true, { forward: true })
+  })
+  ipcMain.on(IPC.sidebarRegion, (_event, region: unknown) => {
+    sidebarWindow?.setRegion(normalizeInteractiveRegion(region))
   })
   ipcMain.handle(IPC.speechSynthesize, async (_event, text: unknown) => {
     if (typeof text !== 'string') return null
@@ -638,6 +682,7 @@ function createPushToTalk(): void {
 
 function createNotch(): void {
   const win = createNotchWindow()
+  notchWindow = win
   notchPresenter = new NotchWindowPresenter(win)
 
   // The overlay is warm from startup: its renderer is loaded and ready before
@@ -659,6 +704,12 @@ function createNotch(): void {
     screen: screenService,
     onActivity: (activity: NotchActivity) => sendToMain(IPC.notchActivity, activity),
     onTurnComplete: () => pushToTalk?.reset()
+  })
+
+  win.on('blur', () => {
+    const cursor = screen.getCursorScreenPoint()
+    if (sidebarWindow?.isPointInside(cursor.x, cursor.y)) return
+    notchController?.dismissResults()
   })
 
   // The main window should also learn about turns even while hidden; the log is
@@ -732,7 +783,10 @@ async function initialize(): Promise<void> {
     mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json'),
     integrations: composioIntegration,
     history: historyStore,
-    onHistoryRecorded: () => sendToMain(IPC.historyChanged)
+    onHistoryRecorded: () => {
+      sendToMain(IPC.historyChanged)
+      sidebarWindow?.send(IPC.historyChanged)
+    }
   })
   await assistantService.initialize()
 
@@ -783,6 +837,8 @@ async function initialize(): Promise<void> {
   createMainWindow()
   createTray()
   createNotch()
+  sidebarWindow = createSidebarWindow()
+  sidebarWindow.show()
 
   const initialDeepLink = process.argv.find((arg) => arg.startsWith(`${PROTOCOL_SCHEME}://`))
   if (initialDeepLink) {
@@ -853,6 +909,9 @@ if (!app.requestSingleInstanceLock()) {
     overlayPresenter = null
     notchPresenter?.dispose()
     notchPresenter = null
+    notchWindow = null
+    sidebarWindow?.dispose()
+    sidebarWindow = null
     notchController = null
     void assistantServer?.close()
     assistantServer = null

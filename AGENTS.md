@@ -15,9 +15,11 @@ For a core change, work in a **red → green → refactor** loop:
 2. Run it and confirm it fails for the expected reason.
 3. Implement the minimum needed to pass.
 4. Refactor while the test stays green.
-5. Run the related test files (`npm test -- <path>`, from `apps/desktop`), before calling the work complete.
+5. Run only the test files created for that implementation (`npm test -- <path>`, from `apps/desktop`) before calling the work complete — never run the whole test suite.
 
 Tests assert public behavior, not implementation details. If no test runner exists when the first core feature starts, add one as part of that work.
+
+**Test cleanup.** If tests were created solely to verify that specific implementation, delete them once verified to keep the codebase clean.
 
 Use normal verification for cosmetic or low-risk changes — button colors, copy, layout polish, documentation, dependency bumps, throwaway spikes. Run the existing typecheck/build/manual checks; TDD is not required.
 
@@ -39,4 +41,4 @@ In build mode, do every task through subagents. The main session is a foreman: i
 
 **Checkpoints.** A subagent must stop and return a question — never a guess — at any point that needs the user: any product, UX, scope, or risk decision. The foreman relays that question, then resumes the same subagent with the answer, so no work is lost. No other task needs a stop.
 
-**Tests run once.** The subagent that changes the code runs the related tests and reports the exact command and result. The foreman reviews that report and does not re-run tests; it re-runs only a specific affected test file if the evidence looks wrong.
+**Tests run once.** The subagent that changes the code runs only the tests created for that implementation (never the full suite) and reports the exact command and result. The foreman reviews that report and does not re-run tests; it re-runs only a specific affected test file if the evidence looks wrong. If tests were created solely for that task, delete them after verification.

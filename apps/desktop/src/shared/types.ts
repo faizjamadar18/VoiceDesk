@@ -56,6 +56,9 @@ export const IPC = {
   dismissNotchResult: 'kestrel:dismiss-notch-result',
   notchRegion: 'kestrel:notch-region',
   notchDecide: 'kestrel:notch-decide',
+  notchSubmitText: 'kestrel:notch-submit-text',
+  notchSetFocusable: 'kestrel:notch-set-focusable',
+  notchStartTyping: 'kestrel:notch-start-typing',
   copyToClipboard: 'kestrel:copy-to-clipboard',
   authGetState: 'kestrel:auth-get-state',
   authSignOut: 'kestrel:auth-sign-out',
@@ -71,6 +74,13 @@ export const IPC = {
   historyList: 'kestrel:history-list',
   historyDelete: 'kestrel:history-delete',
   historyChanged: 'kestrel:history-changed',
+  sidebarRestoreHistory: 'kestrel:sidebar-restore-history',
+  sidebarSetInteractive: 'kestrel:sidebar-set-interactive',
+  sidebarTogglePin: 'kestrel:sidebar-toggle-pin',
+  sidebarRegion: 'kestrel:sidebar-region',
+  sidebarCollapse: 'kestrel:sidebar-collapse',
+  sidebarPointer: 'kestrel:sidebar-pointer',
+  notchRestoreHistory: 'kestrel:notch-restore-history',
   speechSynthesize: 'speech:synthesize',
   speechStreamStart: 'speech:stream-start',
   speechStreamCancel: 'speech:stream-cancel',
@@ -219,6 +229,15 @@ export interface NotchInteractiveRegion {
   height: number
 }
 
+/** The active clickable contour rectangle for the sidebar in window CSS pixels. */
+export type SidebarInteractiveRegion = NotchInteractiveRegion
+
+export interface SidebarPointerPayload {
+  atLeftEdge: boolean
+  x: number
+  y: number
+}
+
 /** Which card the user is looking at when a write needs a decision. */
 export type NotchDecisionKind = 'confirm' | 'undo'
 
@@ -290,6 +309,8 @@ export interface ScreenOverlayPoint {
 export interface ScreenOverlayStart {
   width: number
   height: number
+  cursor?: ScreenOverlayPoint
+  tagText?: string
 }
 
 export interface ScreenOverlayCompose {
@@ -411,6 +432,11 @@ export interface NewHistoryRecord {
   tool?: string | null
 }
 
+export interface HistoryRestorePayload {
+  prompt: string
+  reply: string
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken?: string
@@ -477,6 +503,9 @@ export interface KestrelApi {
   dismissNotchResult: () => void
   cancelNotchActive: () => void
   decideNotch: (action: NotchDecisionAction) => void
+  submitNotchText: (text: string) => void
+  setNotchFocusable: (focusable: boolean) => void
+  startNotchTyping: () => void
   copyToClipboard: (text: string) => void
   setNotchRegion: (region: NotchInteractiveRegion | null) => void
   getAuthState: () => Promise<AuthState>
@@ -493,6 +522,13 @@ export interface KestrelApi {
   listHistory: () => Promise<HistoryRecord[]>
   deleteHistory: (id: string) => Promise<HistoryRecord[]>
   onHistoryChanged: (callback: () => void) => () => void
+  restoreHistoryInNotch: (payload: HistoryRestorePayload) => void
+  sidebarRestoreHistory: (prompt: string, reply: string) => void
+  onNotchRestoreHistory: (callback: (payload: HistoryRestorePayload) => void) => () => void
+  setSidebarInteractive: (interactive: boolean) => void
+  setSidebarRegion: (region: SidebarInteractiveRegion | null) => void
+  onSidebarCollapse: (callback: () => void) => () => void
+  onSidebarPointer: (callback: (payload: SidebarPointerPayload) => void) => () => void
   synthesizeSpeech: (text: string) => Promise<Uint8Array | null>
   startSpeechStream: (requestId: string, text: string) => void
   cancelSpeechStream: (requestId: string) => void

@@ -9,6 +9,7 @@ import { splitSpeechText } from '../../shared/speech'
 import {
   HOTKEY_LABEL,
   hotkeyLabel,
+  type HistoryRestorePayload,
   type NotchCard,
   type NotchDecision,
   type NotchDecisionAction,
@@ -23,6 +24,7 @@ import {
 } from '../../shared/types'
 import { SpeechPlayer } from './voice/speech-player'
 import { WebAudioSink } from './voice/web-audio-sink'
+import { GmailComposeCard } from './components/GmailComposeCard'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
   VoiceOsAnswer,
@@ -617,7 +619,59 @@ const NOTCH_RECORDING_CAP_SECONDS = 120
 /** VoiceOS sounds its "running out" alert during the final minute of the cap. */
 const NOTCH_WARNING_THRESHOLD_SECONDS = 60
 /** Longest the answer scroll region grows before it scrolls internally. */
-const NOTCH_ANSWER_MAX_HEIGHT_PX = 340
+export const NOTCH_ANSWER_MAX_HEIGHT_PX = 340
+
+export interface NotchHistoryRestoreState {
+  isDismissing: boolean
+  isEditingText: boolean
+  typedDraft: string
+  isSpeaking: boolean
+  isSynthesizing: boolean
+  results: NotchFileResult[] | null
+  resultsLabel: string | null
+  decision: NotchDecision | null
+  card: NotchCard | null
+  rowError: string | null
+  openingId: number | null
+  transcript: string
+  message: string | null
+  phase: NotchPhase
+}
+
+export function applyNotchHistoryRestore(
+  payload: HistoryRestorePayload
+): NotchHistoryRestoreState {
+  return {
+    isDismissing: false,
+    isEditingText: false,
+    typedDraft: '',
+    isSpeaking: false,
+    isSynthesizing: false,
+    results: null,
+    resultsLabel: null,
+    decision: null,
+    card: null,
+    rowError: null,
+    openingId: null,
+    transcript: payload.prompt ?? '',
+    message: payload.reply ?? '',
+    phase: 'result'
+  }
+}
+
+export function computeNotchRegion(
+  surface: { width: number; height: number },
+  windowWidth: number
+): { left: number; top: number; width: number; height: number } | null {
+  if (surface.width <= 0 || surface.height <= 0) return null
+  const left = Math.max(0, (windowWidth - surface.width) / 2)
+  return {
+    left,
+    top: 0,
+    width: surface.width,
+    height: surface.height
+  }
+}
 
 /**
  * Renderer side of the notch. All of Kestrel's audio capture, IPC and speech
@@ -643,6 +697,12 @@ export default function Notch(): JSX.Element {
   const [hotkeyKeys, setHotkeyKeys] = useState<string[]>(() => [...HOTKEY_LABEL])
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null)
   const [surface, setSurface] = useState({ width: 0, height: 0 })
+  const [isEditingText, setIsEditingText] = useState(false)
+  const [typedDraft, setTypedDraft] = useState('')
+  const isEditingTextRef = useRef(false)
+  isEditingTextRef.current = isEditingText
+  const stopLocalMediaRef = useRef<(() => void) | null>(null)
+  const cancelEditRef = useRef<(() => void) | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -793,6 +853,7 @@ export default function Notch(): JSX.Element {
       setIsSynthesizing(false)
       stopCaptureResources()
     }
+    stopLocalMediaRef.current = stopLocalMedia
 
     const teardown = (sendEnd: boolean): void => {
       stopLocalMedia()
@@ -876,6 +937,9 @@ export default function Notch(): JSX.Element {
     const api = window.kestrel
     const dismissAnimator = createDismissAnimator({
       onStart: () => {
+        setIsEditingText(false)
+        setTypedDraft('')
+        window.kestrel?.setNotchFocusable(false)
         stopLocalMedia()
         window.kestrel?.cancelNotchActive()
         setIsDismissing(true)
@@ -908,6 +972,9 @@ export default function Notch(): JSX.Element {
     const offStart = api.onNotchStart(({ sessionId }) => {
       dismissAnimator.cancel()
       setIsDismissing(false)
+      setIsEditingText(false)
+      setTypedDraft('')
+      window.kestrel?.setNotchFocusable(false)
       teardown(false)
       sessionRef.current = sessionId
       setSessionKey((key) => key + 1)
@@ -933,6 +1000,18 @@ export default function Notch(): JSX.Element {
     })
 
     const offState = api.onNotchState((state) => {
+      if (
+        state.phase === 'result' ||
+        state.phase === 'error' ||
+        state.phase === 'acting' ||
+        state.phase === 'processing'
+      ) {
+        dismissAnimator.cancel()
+        setIsDismissing(false)
+        setIsEditingText(false)
+        setTypedDraft('')
+        window.kestrel?.setNotchFocusable(false)
+      }
       setPhase(state.phase)
       if (state.transcript !== null) setTranscript(state.transcript)
       setMessage(state.message)
@@ -977,6 +1056,9 @@ export default function Notch(): JSX.Element {
     const offHide = api.onNotchHide(() => {
       dismissAnimator.cancel()
       setIsDismissing(false)
+      setIsEditingText(false)
+      setTypedDraft('')
+      window.kestrel?.setNotchFocusable(false)
       cancelSpeech(() => setIsSpeaking(false))
       setIsSynthesizing(false)
       clearCountdown()
@@ -990,11 +1072,47 @@ export default function Notch(): JSX.Element {
     })
 
     const offDismiss = api.onNotchDismiss(() => {
+      setIsEditingText(false)
+      setTypedDraft('')
+      window.kestrel?.setNotchFocusable(false)
       dismissAnimator.start()
+    })
+
+    const offRestore = api?.onNotchRestoreHistory?.((payload) => {
+      dismissAnimator.cancel()
+      window.kestrel?.setNotchFocusable(false)
+      stopLocalMedia()
+
+      const restored = applyNotchHistoryRestore(payload)
+      setIsDismissing(restored.isDismissing)
+      setIsEditingText(restored.isEditingText)
+      setTypedDraft(restored.typedDraft)
+      setIsSpeaking(restored.isSpeaking)
+      setIsSynthesizing(restored.isSynthesizing)
+
+      setResults(restored.results)
+      setResultsLabel(restored.resultsLabel)
+      setDecision(restored.decision)
+      setCard(restored.card)
+      setRowError(restored.rowError)
+      setOpeningId(restored.openingId)
+
+      setTranscript(restored.transcript)
+      setMessage(restored.message)
+      setPhase(restored.phase)
+
+      completionSoundRef.current = true
+      errorSoundRef.current = false
     })
 
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.repeat) return
+      if (isEditingTextRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        cancelEditRef.current?.()
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       dismissAnimator.start()
@@ -1005,6 +1123,7 @@ export default function Notch(): JSX.Element {
 
     return () => {
       disposed = true
+      stopLocalMediaRef.current = null
       window.removeEventListener('keydown', handleKeyDown, true)
       offSettings?.()
       offDismiss()
@@ -1016,6 +1135,7 @@ export default function Notch(): JSX.Element {
       offState()
       offPartial()
       offHide()
+      offRestore?.()
       teardown(false)
       if (countdownRef.current !== null) {
         clearInterval(countdownRef.current)
@@ -1030,17 +1150,8 @@ export default function Notch(): JSX.Element {
   // Report the rendered surface rectangle so the main process can keep the
   // window click-through everywhere except the notch itself.
   useEffect(() => {
-    if (surface.width <= 0 || surface.height <= 0) {
-      window.kestrel?.setNotchRegion(null)
-      return
-    }
-    const left = Math.max(0, (window.innerWidth - surface.width) / 2)
-    window.kestrel?.setNotchRegion({
-      left,
-      top: 0,
-      width: surface.width,
-      height: surface.height
-    })
+    const region = computeNotchRegion(surface, window.innerWidth)
+    window.kestrel?.setNotchRegion(region)
   }, [surface])
 
   const startDismissAnimation = (): void => {
@@ -1072,6 +1183,47 @@ export default function Notch(): JSX.Element {
     }
   }
 
+  const handleStartEdit = (): void => {
+    stopLocalMediaRef.current?.()
+    window.kestrel?.startNotchTyping()
+    window.kestrel?.setNotchFocusable(true)
+    setTypedDraft(transcript)
+    setIsEditingText(true)
+  }
+
+  const handleStartTypingFromIdle = (): void => {
+    stopLocalMediaRef.current?.()
+    window.kestrel?.startNotchTyping()
+    window.kestrel?.setNotchFocusable(true)
+    setTranscript('')
+    setTypedDraft('')
+    setIsEditingText(true)
+  }
+
+  const handleSubmitText = (newText: string): void => {
+    window.kestrel?.setNotchFocusable(false)
+    setIsEditingText(false)
+    setTypedDraft('')
+    setTranscript(newText)
+    setMessage(null)
+    setCard(null)
+    setResults(null)
+    setResultsLabel(null)
+    setDecision(null)
+    window.kestrel?.submitNotchText(newText)
+  }
+
+  const handleCancelEdit = (): void => {
+    window.kestrel?.setNotchFocusable(false)
+    setIsEditingText(false)
+    setTypedDraft('')
+    if (!transcript.trim()) {
+      startDismissAnimation()
+    }
+  }
+
+  cancelEditRef.current = handleCancelEdit
+
   const answer = message?.trim() ?? ''
   const showAnswer = !isSynthesizing && (phase === 'result' || phase === 'error') && answer.length > 0
   const hasWeatherCard = card?.kind === 'weather'
@@ -1083,6 +1235,7 @@ export default function Notch(): JSX.Element {
     card?.kind === 'email_compose' ? (card as NotchEmailComposeCard) : null
   const hasTranscript = transcript.trim().length > 0
   const hasExpandedContent =
+    isEditingText ||
     hasTranscript ||
     showAnswer ||
     results !== null ||
@@ -1091,6 +1244,7 @@ export default function Notch(): JSX.Element {
     emailList !== null ||
     emailCompose !== null
   const showBottomHint =
+    !isEditingText &&
     phase !== 'listening' &&
     decision === null &&
     (showAnswer || results !== null || weather !== null) &&
@@ -1098,9 +1252,9 @@ export default function Notch(): JSX.Element {
     emailCompose === null
 
   const presentation = deriveNotchPresentation({
-    phase,
-    isSynthesizing,
-    isSpeaking,
+    phase: isEditingText ? 'result' : phase,
+    isSynthesizing: isEditingText ? false : isSynthesizing,
+    isSpeaking: isEditingText ? false : isSpeaking,
     hasExpandedContent,
     isDismissing
   })
@@ -1114,10 +1268,19 @@ export default function Notch(): JSX.Element {
       speaking={isSpeaking}
       showCancel={presentation.showCancel}
       onCancel={startDismissAnimation}
+      onActivate={handleStartTypingFromIdle}
       remainingSeconds={remainingSeconds}
       onGeometryChange={setSurface}
     >
-      {hasTranscript && <VoiceOsPrompt text={transcript} />}
+      {(hasTranscript || isEditingText) && (
+        <VoiceOsPrompt
+          text={isEditingText ? typedDraft : transcript}
+          isEditing={isEditingText}
+          onStartEdit={handleStartEdit}
+          onSubmitEdit={handleSubmitText}
+          onCancelEdit={handleCancelEdit}
+        />
+      )}
 
       {showAnswer && (
         <VoiceOsAnswer
@@ -1171,139 +1334,13 @@ export default function Notch(): JSX.Element {
       )}
 
       {emailCompose && (
-        <div className="kestrel-email-compose">
-          <div className="kestrel-email-compose-head">
-            <span className="kestrel-email-mark" aria-hidden="true">
-              M
-            </span>
-            <span className="kestrel-email-compose-title">{emailCompose.title}</span>
-            <button
-              type="button"
-              className="kestrel-email-compose-close"
-              aria-label="Close composer"
-              onClick={() => decide('cancel')}
-            >
-              ×
-            </button>
-          </div>
-
-          {emailCompose.mode === 'reply' && emailCompose.threadCount !== null && (
-            <div className="kestrel-email-thread">View thread ({emailCompose.threadCount})</div>
-          )}
-
-          <div className="kestrel-email-field">
-            <span className="kestrel-email-field-label">To</span>
-            <div className="kestrel-email-chips">
-              {emailCompose.to.map((address, index) => (
-                <span key={index} className="kestrel-email-chip">
-                  {address}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {emailCompose.cc.length > 0 && (
-            <div className="kestrel-email-field">
-              <span className="kestrel-email-field-label">Cc</span>
-              <div className="kestrel-email-chips">
-                {emailCompose.cc.map((address, index) => (
-                  <span key={index} className="kestrel-email-chip">
-                    {address}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {emailCompose.bcc.length > 0 && (
-            <div className="kestrel-email-field">
-              <span className="kestrel-email-field-label">Bcc</span>
-              <div className="kestrel-email-chips">
-                {emailCompose.bcc.map((address, index) => (
-                  <span key={index} className="kestrel-email-chip">
-                    {address}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {emailCompose.mode !== 'reply' && (
-            <div className="kestrel-email-field">
-              <span className="kestrel-email-field-label">Subject</span>
-              <span className="kestrel-email-subject">{emailCompose.subject}</span>
-              <button
-                type="button"
-                className="kestrel-email-copy"
-                aria-label="Copy subject"
-                onClick={() => window.kestrel?.copyToClipboard(emailCompose.subject)}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                  <rect
-                    x="9"
-                    y="9"
-                    width="11"
-                    height="11"
-                    rx="2"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-              </button>
-            </div>
-          )}
-
-          <div className="kestrel-email-body">
-            {emailCompose.body}
-            <button
-              type="button"
-              className="kestrel-email-copy"
-              aria-label="Copy body"
-              onClick={() => window.kestrel?.copyToClipboard(emailCompose.body)}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <rect
-                  x="9"
-                  y="9"
-                  width="11"
-                  height="11"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-              </svg>
-            </button>
-          </div>
-
-          <div className="kestrel-email-compose-foot">
-            <button
-              type="button"
-              className="kestrel-email-discard"
-              disabled={decision?.busy}
-              onClick={() => decide('cancel')}
-            >
-              Discard
-            </button>
-            <button
-              type="button"
-              className="kestrel-email-send"
-              disabled={decision?.busy}
-              onClick={() => decide('confirm')}
-            >
-              {emailCompose.mode === 'draft' ? 'Save draft' : 'Send'}
-            </button>
-          </div>
-        </div>
+        <GmailComposeCard
+          card={emailCompose}
+          busy={decision?.busy}
+          onSend={() => decide('confirm')}
+          onDiscard={() => decide('cancel')}
+          onCopy={(text) => window.kestrel?.copyToClipboard(text)}
+        />
       )}
 
       {results !== null && (

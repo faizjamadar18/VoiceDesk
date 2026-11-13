@@ -73,7 +73,12 @@ describe('OverlayWindowPresenter', () => {
     expect(state.sent).toEqual([
       {
         channel: SCREEN_OVERLAY_IPC.start,
-        payload: { width: 800, height: 600 }
+        payload: {
+          width: 800,
+          height: 600,
+          cursor: undefined,
+          tagText: 'Point to show VoiceOS'
+        }
       }
     ])
     presenter.dispose()
@@ -90,11 +95,37 @@ describe('OverlayWindowPresenter', () => {
     expect(state.sent).toEqual([
       {
         channel: SCREEN_OVERLAY_IPC.start,
-        payload: { width: 640, height: 480 }
+        payload: {
+          width: 640,
+          height: 480,
+          cursor: undefined,
+          tagText: 'Point to show VoiceOS'
+        }
       },
       {
         channel: SCREEN_OVERLAY_IPC.point,
         payload: { x: 12, y: 24 }
+      }
+    ])
+    presenter.dispose()
+  })
+
+  it('forwards initial cursor and tag text in start payload', () => {
+    const { win } = fakeWindow()
+    const presenter = new OverlayWindowPresenter(win)
+
+    state.ipcHandlers.get(SCREEN_OVERLAY_IPC.ready)?.()
+    presenter.show({ x: 0, y: 0, width: 800, height: 600 }, { x: 120, y: 240 })
+
+    expect(state.sent).toEqual([
+      {
+        channel: SCREEN_OVERLAY_IPC.start,
+        payload: {
+          width: 800,
+          height: 600,
+          cursor: { x: 120, y: 240 },
+          tagText: 'Point to show VoiceOS'
+        }
       }
     ])
     presenter.dispose()

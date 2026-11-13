@@ -1,0 +1,635 @@
+/*
+ * VoiceOS Side Notch styles.
+ * Extracted verbatim from VoiceOS 0.1.40 production bundle.
+ */
+
+html,
+body,
+#root {
+  background: transparent !important;
+  background-color: transparent !important;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.h-screen {
+  height: 100vh;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.w-3\.5 {
+  width: 0.875rem;
+}
+
+.h-3\.5 {
+  height: 0.875rem;
+}
+
+/* Hide scrollbars across the entire sidebar while maintaining scrolling */
+.agent-history-notch-list,
+.agent-history-notch-list-shell,
+.agent-history-notch-content,
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.agent-history-notch-list::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+.agent-history-side-notch {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  width: 232px;
+  height: 580px;
+  transform: translateY(-50%);
+  transform-origin: left center;
+  opacity: 1;
+  pointer-events: var(--side-notch-panel-pointer-events, none);
+  overflow: visible;
+}
+
+/* Fixed final-size compositor host. The contour is the only changing
+   geometry, so no layout work occurs during open/close. */
+.agent-history-notch-surface {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 232px;
+  height: 580px;
+  transform: translateY(-50%);
+  transform-origin: left center;
+  box-sizing: border-box;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.94);
+  background: transparent;
+  border: none;
+  overflow: visible;
+}
+
+.agent-history-notch-silhouette-shadow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.agent-history-notch-silhouette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: var(--side-notch-silhouette-filter, none);
+  transition:
+    clip-path var(--side-notch-transition-duration, 280ms) var(--side-notch-transition-easing, cubic-bezier(0.2, 0.8, 0.2, 1)),
+    -webkit-clip-path var(--side-notch-transition-duration, 280ms) var(--side-notch-transition-easing, cubic-bezier(0.2, 0.8, 0.2, 1)),
+    filter 220ms ease,
+    background-color 260ms ease;
+  will-change: clip-path;
+}
+
+.agent-history-notch-sliver-mask {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.agent-history-notch-sliver {
+  position: absolute;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    width var(--side-notch-transition-duration, 280ms) var(--side-notch-transition-easing, cubic-bezier(0.2, 0.8, 0.2, 1)),
+    transform var(--side-notch-transition-duration, 280ms) var(--side-notch-transition-easing, cubic-bezier(0.2, 0.8, 0.2, 1));
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  pointer-events: var(--side-notch-sliver-pointer-events, auto);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.agent-history-notch-sliver:focus-visible {
+  border-radius: 0 8px 8px 0;
+  box-shadow: inset -2px 0 rgba(255, 255, 255, 0.8);
+}
+
+.agent-history-notch-sliver-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.agent-history-notch-sliver-dots--overflow {
+  mask-image: linear-gradient(to bottom, #000 55%, rgba(0, 0, 0, 0.15) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, rgba(0, 0, 0, 0.15) 100%);
+}
+
+.agent-history-notch-sliver-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #383b42;
+}
+
+.agent-history-notch-sliver-dot--working {
+  background: #fff;
+  animation: agent-history-notch-sliver-working 1600ms ease-in-out infinite;
+}
+
+.agent-history-notch-sliver-dot--waiting {
+  background: #f4c64e;
+}
+
+.agent-history-notch-sliver-dot--error {
+  background: #f16c70;
+}
+
+.agent-history-notch-sliver-dot--completed {
+  background: #5faaff;
+}
+
+.agent-history-notch-sliver-dot--idle {
+  background: #383b42;
+}
+
+@keyframes agent-history-notch-sliver-working {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The fixed-size content is revealed inside the morphing body. It owns
+   no outer background, so a compositor timing difference cannot read
+   as a second surface. */
+.agent-history-notch-content-mask {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 232px;
+  height: 580px;
+  transform: translateY(-50%);
+  z-index: 1;
+  overflow: hidden;
+  opacity: 1;
+  will-change: clip-path;
+  pointer-events: var(--side-notch-panel-pointer-events, none);
+  isolation: isolate;
+}
+
+.agent-history-notch-content-mask::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--side-notch-content-background, rgba(0, 0, 6, 0.95));
+}
+
+.agent-history-notch-content {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 232px;
+  height: 580px;
+  transform: translateY(-50%);
+  opacity: 1;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.agent-history-notch-header {
+  display: flex;
+  align-items: center;
+  height: 91px;
+  padding: 49px 20px 6px 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.agent-history-notch-header-card {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  pointer-events: var(--side-notch-panel-pointer-events, none);
+}
+
+.agent-history-notch-search {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+  color: rgba(236, 239, 247, 0.62);
+  box-sizing: border-box;
+}
+
+.agent-history-notch-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  padding: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.95);
+  font: inherit;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.agent-history-notch-search input::placeholder {
+  color: rgba(236, 239, 247, 0.62);
+  font-weight: 450;
+  letter-spacing: 0.2px;
+}
+
+.agent-history-notch-lock {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.015),
+    0 1px 3px rgba(0, 0, 0, 0.14);
+  color: rgba(255, 255, 255, 0.6);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+.agent-history-notch-lock:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.agent-history-notch-lock:active {
+  transform: scale(0.94);
+}
+
+.agent-history-notch-lock--on {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 4px rgba(0, 0, 0, 0.28),
+    0 0 12px rgba(255, 255, 255, 0.1);
+  color: rgba(18, 20, 27, 0.92);
+}
+
+.agent-history-notch-lock--on:hover {
+  background: #fff;
+  color: rgba(10, 12, 18, 0.98);
+}
+
+.agent-history-notch-list-shell {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: var(--side-notch-list-bottom, 0px);
+  left: 0;
+  overflow: hidden;
+}
+
+.agent-history-notch-list {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-padding-top: 105px;
+  scroll-padding-bottom: 34px;
+  padding: 95px 13px 73px 7px;
+  box-sizing: border-box;
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 73px,
+    #000 105px,
+    #000 calc(100% - 34px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 73px,
+    #000 105px,
+    #000 calc(100% - 34px),
+    transparent 100%
+  );
+}
+
+.agent-history-notch-day-separator {
+  padding: 13px 12px 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.42);
+  user-select: none;
+  pointer-events: none;
+}
+
+.agent-history-notch-day-separator:first-child {
+  padding-top: 4px;
+}
+
+.agent-history-notch-row {
+  width: 100%;
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-sizing: border-box;
+  color: inherit;
+  text-align: left;
+  padding: 10px 12px 9px 10px;
+  min-height: 42px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  position: relative;
+  transition:
+    background 140ms ease,
+    transform 120ms ease;
+}
+
+.agent-history-notch-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.agent-history-notch-row:hover {
+  background: rgba(150, 160, 210, 0.06);
+}
+
+.agent-history-notch-row:active {
+  transform: scale(0.99);
+}
+
+.agent-history-notch-row:disabled {
+  cursor: default;
+}
+
+.agent-history-notch-row--selected {
+  background: rgba(150, 160, 210, 0.09);
+}
+
+.agent-history-notch-row--selected:hover:not(:disabled) {
+  background: rgba(150, 160, 210, 0.09);
+}
+
+.agent-history-notch-row-body {
+  min-width: 0;
+  flex: 1;
+  display: block;
+}
+
+.agent-history-notch-row-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-history-notch-row-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13.5px;
+  line-height: 1.25;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.agent-history-notch-row-unread-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  margin-left: 3px;
+  background: #3b82f6;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.agent-history-notch-row-unread-dot--completed {
+  background: #5faaff;
+}
+
+.agent-history-notch-row-unread-dot--attention {
+  background: #f59e0b;
+}
+
+.agent-history-notch-row-unread-dot--error {
+  background: #ef4444;
+}
+
+.agent-history-notch-row--processing .agent-history-notch-row-title {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.55) 35%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.55) 65%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: agent-history-title-shimmer 2.4s linear infinite;
+}
+
+@keyframes agent-history-orb-pulse {
+  0% {
+    opacity: 1;
+    filter: brightness(1.32);
+  }
+  28% {
+    opacity: 0.55;
+    filter: brightness(0.8);
+  }
+  60% {
+    opacity: 0.45;
+    filter: brightness(0.72);
+  }
+  82% {
+    opacity: 0.55;
+    filter: brightness(0.85);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1.32);
+  }
+}
+
+@keyframes agent-history-title-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.agent-history-notch-empty {
+  padding: 28px 18px 30px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* Sliver Popover styles */
+.side-notch-popover {
+  position: fixed;
+  z-index: 10;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: #0a0a0a;
+  color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.side-notch-popover button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.side-notch-popover button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.side-notch-popover button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: 2px solid #91c3ff;
+  outline-offset: -2px;
+}
+
+.side-notch-popover-controls {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 8px 10px;
+}
+
+.side-notch-popover-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 11px;
+}
+
+.side-notch-popover-shortcut kbd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.side-notch-popover-shortcut span {
+  flex-shrink: 0;
+}
+
+.side-notch-popover-drag {
+  box-sizing: border-box;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-history-notch-silhouette,
+  .agent-history-notch-sliver,
+  .agent-history-notch-sliver-dots {
+    transition: none !important;
+  }
+  .agent-history-notch-sliver-dots {
+    filter: none !important;
+  }
+  .agent-history-notch-sliver-dot--working {
+    animation: none;
+  }
+  .agent-history-notch-row--processing .agent-history-notch-row-title {
+    animation: none;
+  }
+}

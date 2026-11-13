@@ -372,7 +372,7 @@ export function VoiceOsNotch({
     maxHeight: "calc(100vh - 20px)",
     color: "rgba(255,255,255,0.92)",
     pointerEvents: "auto",
-    animation: "agent-notch-fade-in 160ms ease-out",
+    animation: "agent-notch-fade-in 160ms ease-out forwards",
     transition: rendererGeometryTransition,
     overflow: "visible"
   };

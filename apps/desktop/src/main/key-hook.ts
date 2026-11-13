@@ -1,4 +1,4 @@
-import type { UiohookKeyboardEvent } from 'uiohook-napi'
+import type { UiohookKeyboardEvent, UiohookMouseEvent } from 'uiohook-napi'
 import type { HotkeyBinding, HotkeyChord } from './hotkey'
 import { HotkeyChordTracker } from './hotkey'
 
@@ -7,6 +7,7 @@ export interface KeyHookCallbacks {
   onRelease: () => void
   onCancel: () => void
   onEscape?: () => void
+  onMouseDown?: (event: { x: number; y: number }) => void
 }
 
 export interface KeyHookHandle {
@@ -89,15 +90,30 @@ export async function startKeyHook(
   const onKeyUp = (event: UiohookKeyboardEvent): void => {
     tracker.keyUp(event.keycode)
   }
+  const onMouseDown = callbacks.onMouseDown
+    ? (event: UiohookMouseEvent): void => {
+        try {
+          callbacks.onMouseDown?.({ x: event.x, y: event.y })
+        } catch (error) {
+          console.error('[hotkey] mousedown handler failed', error)
+        }
+      }
+    : null
 
   uIOhook.on('keydown', onKeyDown)
   uIOhook.on('keyup', onKeyUp)
+  if (onMouseDown) {
+    uIOhook.on('mousedown', onMouseDown)
+  }
 
   try {
     uIOhook.start()
   } catch (error) {
     uIOhook.off('keydown', onKeyDown)
     uIOhook.off('keyup', onKeyUp)
+    if (onMouseDown) {
+      uIOhook.off('mousedown', onMouseDown)
+    }
     try {
       uIOhook.stop()
     } catch {
@@ -110,6 +126,9 @@ export async function startKeyHook(
     stop: () => {
       uIOhook.off('keydown', onKeyDown)
       uIOhook.off('keyup', onKeyUp)
+      if (onMouseDown) {
+        uIOhook.off('mousedown', onMouseDown)
+      }
       try {
         uIOhook.stop()
       } catch (error) {

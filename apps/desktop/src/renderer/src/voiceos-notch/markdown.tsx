@@ -541,14 +541,137 @@ export function VoiceOsBottomHint({ keys }: { keys: string[] }): ReactNode {
   );
 }
 
+export interface VoiceOsPromptProps {
+  text: string;
+  isEditing?: boolean;
+  onStartEdit?: () => void;
+  onSubmitEdit?: (text: string) => void;
+  onCancelEdit?: () => void;
+}
+
+function EditPencilIcon({ size = 12 }: { size?: number }): ReactNode {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+
 /** The submitted prompt card (StagedPromptCard content, bundle 260512). */
-export function VoiceOsPrompt({ text }: { text: string }): ReactNode {
+export function VoiceOsPrompt({
+  text,
+  isEditing = false,
+  onStartEdit,
+  onSubmitEdit,
+  onCancelEdit
+}: VoiceOsPromptProps): ReactNode {
+  const [draft, setDraft] = useState(text);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isPencilHovered, setIsPencilHovered] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(text);
+    }
+  }, [text, isEditing]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
+
+  useLayoutEffect(() => {
+    if (isEditing && textareaRef.current) {
+      const el = textareaRef.current;
+      el.style.height = "auto";
+      const scrollHeight = el.scrollHeight;
+      const clampedHeight = Math.min(Math.max(scrollHeight, 22), 66);
+      el.style.height = `${clampedHeight}px`;
+      el.style.overflowY = scrollHeight > 66 ? "auto" : "hidden";
+    }
+  }, [draft, isEditing]);
+
+  if (isEditing) {
+    return (
+      <div
+        className="agent-notch-card-present"
+        style={{
+          background: "rgba(255, 255, 255, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.18)",
+          borderRadius: "24px",
+          padding: "10px 16px",
+          fontSize: 15,
+          lineHeight: "22px",
+          color: "rgba(255, 255, 255, 0.95)",
+          boxSizing: "border-box",
+          width: "100%",
+          display: "flex",
+          alignItems: "center"
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <textarea
+          ref={textareaRef}
+          className="agent-notch-composer-input"
+          value={draft}
+          placeholder="Ask anything…"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (draft.trim()) {
+                onSubmitEdit?.(draft.trim());
+              }
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancelEdit?.();
+            }
+          }}
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            margin: 0,
+            padding: 0,
+            fontSize: 15,
+            lineHeight: "22px",
+            color: "rgba(255, 255, 255, 0.95)",
+            fontFamily: "inherit",
+            resize: "none",
+            boxSizing: "border-box",
+            caretColor: "#a9c8ff"
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="agent-notch-card-present"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onStartEdit?.()}
       style={{
+        position: "relative",
         background: "rgba(255, 255, 255, 0.08)",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
+        border: `1px solid ${isHovered && onStartEdit ? "rgba(255, 255, 255, 0.14)" : "rgba(255, 255, 255, 0.08)"}`,
         borderRadius: "14px",
         padding: "10px 16px",
         fontSize: 15,
@@ -557,10 +680,45 @@ export function VoiceOsPrompt({ text }: { text: string }): ReactNode {
         boxSizing: "border-box",
         width: "100%",
         whiteSpace: "pre-wrap",
-        wordBreak: "break-word"
+        wordBreak: "break-word",
+        cursor: onStartEdit ? "pointer" : "default",
+        transition: "border-color 160ms ease, background 160ms ease"
       }}
     >
       <VoiceOsMarkdown text={text} />
+      {onStartEdit && (
+        <button
+          type="button"
+          aria-label="Edit message"
+          title="Edit message"
+          onMouseEnter={() => setIsPencilHovered(true)}
+          onMouseLeave={() => setIsPencilHovered(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartEdit();
+          }}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 22,
+            height: 22,
+            borderRadius: "50%",
+            border: "none",
+            background: isPencilHovered ? "rgba(255, 255, 255, 0.22)" : "rgba(255, 255, 255, 0.12)",
+            color: "rgba(255, 255, 255, 0.85)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: isHovered ? 1 : 0,
+            transition: "opacity 150ms ease, background 150ms ease",
+            padding: 0
+          }}
+        >
+          <EditPencilIcon size={12} />
+        </button>
+      )}
     </div>
   );
 }

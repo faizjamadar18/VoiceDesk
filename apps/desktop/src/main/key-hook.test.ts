@@ -1,6 +1,37 @@
-import { describe, expect, it } from 'vitest'
-import { buildKeyBinding } from './key-hook'
+import { describe, expect, it, vi } from 'vitest'
+import { buildKeyBinding, startKeyHook } from './key-hook'
 import { parseHotkey } from './hotkey'
+
+const uiohookListeners: Record<string, Array<(...args: unknown[]) => void>> = {}
+vi.mock('uiohook-napi', () => ({
+  uIOhook: {
+    on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      if (!uiohookListeners[event]) uiohookListeners[event] = []
+      uiohookListeners[event].push(listener)
+    }),
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      if (uiohookListeners[event]) {
+        uiohookListeners[event] = uiohookListeners[event].filter((l) => l !== listener)
+      }
+    }),
+    start: vi.fn(),
+    stop: vi.fn()
+  },
+  UiohookKey: {
+    Ctrl: 29,
+    CtrlRight: 3613,
+    Alt: 56,
+    AltRight: 3640,
+    Shift: 42,
+    ShiftRight: 54,
+    Meta: 3675,
+    MetaRight: 3676,
+    Escape: 1,
+    Space: 57,
+    F8: 66,
+    K: 37
+  }
+}))
 
 const keys = {
   Ctrl: 29,
@@ -50,5 +81,26 @@ describe('buildKeyBinding', () => {
   it('returns null when the key is unknown to the hook', () => {
     const chord = parseHotkey('Control+Space')!
     expect(buildKeyBinding({ ...chord, key: 'F13' }, keys)).toBeNull()
+  })
+})
+
+describe('startKeyHook mousedown forwarding', () => {
+  it('registers onMouseDown and forwards global mouse click coordinates', async () => {
+    const onMouseDown = vi.fn()
+    const handle = await startKeyHook(parseHotkey('Control+Space')!, {
+      onPress: () => {},
+      onRelease: () => {},
+      onCancel: () => {},
+      onMouseDown
+    })
+
+    const mousedownListeners = uiohookListeners['mousedown'] ?? []
+    expect(mousedownListeners.length).toBeGreaterThan(0)
+
+    mousedownListeners[0]({ x: 350, y: 420 })
+    expect(onMouseDown).toHaveBeenCalledWith({ x: 350, y: 420 })
+
+    handle.stop()
+    expect(uiohookListeners['mousedown'] ?? []).toHaveLength(0)
   })
 })

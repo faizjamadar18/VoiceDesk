@@ -24,13 +24,25 @@ const INTERACTION_POLL_MS = 80
 export function notchBounds(
   height: number = NOTCH_HEIGHT
 ): { x: number; y: number; width: number; height: number } {
-  const display = screen.getPrimaryDisplay()
-  const { x, y, width, height: workHeight } = display.workArea
+  let display: Electron.Display | undefined
+  try {
+    if (
+      typeof screen.getCursorScreenPoint === 'function' &&
+      typeof screen.getDisplayNearestPoint === 'function'
+    ) {
+      display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    }
+  } catch {
+    // fallback to primary display if cursor point lookup fails
+  }
+  if (!display) {
+    display = screen.getPrimaryDisplay()
+  }
   return {
-    x: Math.round(x + (width - NOTCH_WIDTH) / 2),
-    y,
+    x: Math.round(display.bounds.x + (display.bounds.width - NOTCH_WIDTH) / 2),
+    y: display.bounds.y,
     width: NOTCH_WIDTH,
-    height: Math.min(height, workHeight)
+    height: Math.min(height, display.bounds.height)
   }
 }
 
@@ -42,16 +54,18 @@ export function createNotchWindow(): BrowserWindow {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
     alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    movable: false,
     focusable: true,
-    acceptFirstMouse: true,
     hasShadow: false,
+    fullscreenable: false,
+    enableLargerThanScreen: true,
+    acceptFirstMouse: true,
+    hiddenInMissionControl: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -62,9 +76,21 @@ export function createNotchWindow(): BrowserWindow {
     }
   })
 
-  win.setIgnoreMouseEvents(true, { forward: true })
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  if (process.platform === 'win32') {
+    win.setIgnoreMouseEvents(true)
+  } else {
+    win.setIgnoreMouseEvents(true, { forward: true })
+  }
+
+  if (process.platform === 'darwin') {
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.setFullScreenable(false)
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  } else if (process.platform === 'win32') {
+    win.setAlwaysOnTop(true, 'screen-saver')
+  } else {
+    win.setAlwaysOnTop(true, 'screen-saver')
+  }
   win.setSkipTaskbar(true)
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
@@ -95,9 +121,15 @@ export class NotchWindowPresenter implements NotchPresenter {
   private interactive = false
   private interactiveRegion: NotchInteractiveRegion | null = null
   private interactionTimer: NodeJS.Timeout | null = null
+  private readonly onDisplayMetricsChanged: () => void
 
   constructor(win: BrowserWindow) {
     this.win = win
+    this.onDisplayMetricsChanged = () => this.reposition()
+
+    screen.on?.('display-metrics-changed', this.onDisplayMetricsChanged)
+    screen.on?.('display-added', this.onDisplayMetricsChanged)
+    screen.on?.('display-removed', this.onDisplayMetricsChanged)
 
     win.webContents.on('did-start-loading', () => {
       this.ready = false
@@ -129,6 +161,24 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.clearInteraction()
     this.send(IPC.notchShow)
     this.win.showInactive()
+    if (typeof this.win.moveTop === 'function') {
+      this.win.moveTop()
+    }
+    if (typeof this.win.setAlwaysOnTop === 'function') {
+      this.win.setAlwaysOnTop(true, 'screen-saver')
+    }
+  }
+
+  reposition(): void {
+    this.applyBounds()
+    if (this.win.isVisible()) {
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
+      }
+      if (typeof this.win.setAlwaysOnTop === 'function') {
+        this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
+    }
   }
 
   hide(): void {
@@ -159,6 +209,50 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.applyInputEnabled(this.shouldEnableInput(this.lastState))
   }
 
+  setKeyboardFocusable(focusable: boolean): void {
+    if (this.disposed || this.win.isDestroyed()) return
+    if (focusable) {
+      if (!this.win.isVisible()) {
+        this.win.show()
+      }
+      this.setIgnoreMouseEvents(false)
+      this.win.setFocusable(true)
+      this.win.focus()
+      this.win.setSkipTaskbar(true)
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
+      }
+      if (typeof this.win.setAlwaysOnTop === 'function') {
+        this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
+    } else {
+      if (this.win.isFocused()) {
+        this.win.blur()
+      }
+      this.syncPointer()
+    }
+  }
+
+  isPointInside(screenX: number, screenY: number): boolean {
+    if (
+      this.disposed ||
+      this.win.isDestroyed() ||
+      !this.win.isVisible() ||
+      this.interactiveRegion === null
+    ) {
+      return false
+    }
+    const content: ScreenBounds =
+      typeof this.win.getContentBounds === 'function'
+        ? this.win.getContentBounds()
+        : this.win.getBounds()
+    return pointInInteractiveRegion(
+      { x: screenX, y: screenY },
+      content,
+      this.interactiveRegion
+    )
+  }
+
   /**
    * The notch is click-through by default. This is the only place that hands
    * mouse input to the window, and it does so only for the visible card.
@@ -168,10 +262,18 @@ export class NotchWindowPresenter implements NotchPresenter {
     const next = interactive && this.win.isVisible()
     if (next === this.interactive) return
     this.interactive = next
-    if (next) {
-      this.win.setIgnoreMouseEvents(false)
+    this.setIgnoreMouseEvents(!next)
+  }
+
+  private setIgnoreMouseEvents(ignore: boolean): void {
+    if (process.platform === 'win32') {
+      this.win.setIgnoreMouseEvents(ignore)
     } else {
-      this.win.setIgnoreMouseEvents(true, { forward: true })
+      if (ignore) {
+        this.win.setIgnoreMouseEvents(true, { forward: true })
+      } else {
+        this.win.setIgnoreMouseEvents(false)
+      }
     }
   }
 
@@ -284,6 +386,9 @@ export class NotchWindowPresenter implements NotchPresenter {
   dispose(): void {
     this.disposed = true
     this.stopInteractionPolling()
+    screen.removeListener?.('display-metrics-changed', this.onDisplayMetricsChanged)
+    screen.removeListener?.('display-added', this.onDisplayMetricsChanged)
+    screen.removeListener?.('display-removed', this.onDisplayMetricsChanged)
     if (!this.win.isDestroyed()) this.win.destroy()
   }
 
@@ -315,14 +420,24 @@ export class NotchWindowPresenter implements NotchPresenter {
       this.setInteractive(false)
       return
     }
-    const content: ScreenBounds = this.win.getContentBounds()
-    this.setInteractive(
-      pointInInteractiveRegion(
-        screen.getCursorScreenPoint(),
-        content,
-        this.interactiveRegion
-      )
+    const content: ScreenBounds =
+      typeof this.win.getContentBounds === 'function'
+        ? this.win.getContentBounds()
+        : this.win.getBounds()
+    const isInside = pointInInteractiveRegion(
+      screen.getCursorScreenPoint(),
+      content,
+      this.interactiveRegion
     )
+    this.setInteractive(isInside)
+    if (isInside && this.win.isVisible()) {
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
+      }
+      if (typeof this.win.setAlwaysOnTop === 'function') {
+        this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
+    }
   }
 
   private send(channel: string, payload?: unknown): void {
@@ -351,6 +466,14 @@ export class NotchWindowPresenter implements NotchPresenter {
       current.height !== next.height
     ) {
       this.win.setBounds(next)
+    }
+    if (this.win.isVisible()) {
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
+      }
+      if (typeof this.win.setAlwaysOnTop === 'function') {
+        this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
     }
   }
 }

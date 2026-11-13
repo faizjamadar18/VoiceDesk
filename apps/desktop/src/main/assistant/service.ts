@@ -50,6 +50,7 @@ import type {
   FileSearch,
   FileOpsLike,
   JsonSchema,
+  LlmClient,
   Planner,
   Tool,
   ToolContext,
@@ -111,6 +112,8 @@ export interface AssistantServiceOptions {
   actionExecutor?: ActionExecutor
   clock?: () => Date
   planner?: Planner
+  /** LLM client for tool synthesis; defaults to the planner's client or resilientFromEnv. */
+  client?: LlmClient
   /** Explicit file roots switch file search to a bounded direct scan. */
   fileRoots?: string[]
   pendingStore?: PendingStore
@@ -272,6 +275,7 @@ export class AssistantService {
   private readonly executor: ActionExecutor
   private readonly history: HistoryStore | null
   private readonly planner: Planner
+  private readonly client: LlmClient | null
   readonly plannerProvider: string
   private readonly integrations: ComposioIntegration | null
   private readonly toolSelector: ToolSelector | null
@@ -320,9 +324,14 @@ export class AssistantService {
       () =>
         this.history
           ? buildRecentContext(this.history.list(), this.clock())
-          : []
+          : [],
+      options.client
     )
     this.planner = prepared.planner
+    this.client =
+      options.client ??
+      extractLlmClient(this.planner) ??
+      (groqKeyPresent() ? resilientFromEnv() : null)
     this.toolSelector = prepared.selector
     this.plannerProvider = plannerProvider(this.planner)
   }
@@ -441,7 +450,7 @@ export class AssistantService {
       })
     }
 
-    const context = this.toolContext(dryRun)
+    const context = this.toolContext(dryRun, transcript)
     const prepared = await prepareTool(tool, call.arguments, context)
     if (prepared.outcome !== null && prepared.outcome !== undefined) {
       return outcomeResponse(prepared.outcome, dryRun)
@@ -465,12 +474,34 @@ export class AssistantService {
     }
 
     const outcome = await runTool(this.registry, spec.name, prepared.arguments, context)
-    let planId: string | null = null
-    if (outcome.canUndo && !dryRun) {
-      planId = this.pending.create(spec.name, prepared.arguments)
-      this.pending.markDone(planId, outcome)
+    let finalOutcome = outcome
+    if (
+      outcome.status === 'ok' &&
+      spec.risk === 'read' &&
+      !dryRun &&
+      this.shouldSynthesize(spec.name, transcript, outcome)
+    ) {
+      const toolOutput = outcome.text || outcome.message
+      const synthesized = await this.synthesizeReadResult(
+        transcript,
+        spec.name,
+        toolOutput
+      )
+      if (synthesized) {
+        finalOutcome = {
+          ...outcome,
+          message: synthesized,
+          spokenResponse: synthesized
+        }
+      }
     }
-    return outcomeResponse(outcome, dryRun, planId)
+
+    let planId: string | null = null
+    if (finalOutcome.canUndo && !dryRun) {
+      planId = this.pending.create(spec.name, prepared.arguments)
+      this.pending.markDone(planId, finalOutcome)
+    }
+    return outcomeResponse(finalOutcome, dryRun, planId)
   }
 
   async confirm(planId: string, approved: boolean): Promise<ActionResponse> {
@@ -774,7 +805,7 @@ export class AssistantService {
     return { text, provider, latencyMs }
   }
 
-  private toolContext(dryRun: boolean): ToolContext {
+  private toolContext(dryRun: boolean, transcript?: string): ToolContext {
     return {
       executor: this.executor,
       clock: this.clock,
@@ -782,9 +813,110 @@ export class AssistantService {
       dryRun,
       fileOps: this.ops,
       fileSearch: this.fileSearch,
-      weather: this.weather
+      weather: this.weather,
+      transcript
     }
   }
+
+  private shouldSynthesize(
+    toolName: string,
+    transcript: string,
+    outcome: ToolOutcome
+  ): boolean {
+    const output = (outcome.text || outcome.message || '').trim()
+    if (!output) return false
+
+    // Skip empty or not-found results
+    if (
+      output === 'That page looks empty.' ||
+      output === 'That database has no rows.' ||
+      output.startsWith("I couldn't find")
+    ) {
+      return false
+    }
+
+    // Skip web searches or weather cards which already format their spoken output
+    if (outcome.url || outcome.card?.type === 'weather') {
+      return false
+    }
+
+    const lower = transcript.toLowerCase()
+    const inquiryWords = [
+      'summarize',
+      'summary',
+      'what',
+      'explain',
+      'tell me',
+      'how',
+      'describe',
+      'brief',
+      'who',
+      'why',
+      'when',
+      'where',
+      'read'
+    ]
+    const hasInquiry =
+      inquiryWords.some((word) => lower.includes(word)) || lower.includes('?')
+
+    if (hasInquiry) {
+      return true
+    }
+
+    if (toolName === 'notion_read_page') {
+      return true
+    }
+
+    return false
+  }
+
+  private async synthesizeReadResult(
+    transcript: string,
+    toolName: string,
+    toolOutput: string
+  ): Promise<string | null> {
+    const prompt = `The user asked: ${transcript}. The tool '${toolName}' returned: ${toolOutput}. Provide a concise, clear spoken answer and response directly answering the user based on the tool result.`
+
+    if (this.client) {
+      try {
+        const reply = await this.client.choose(prompt, [])
+        const content = reply.content?.trim()
+        if (content) return content
+      } catch {
+        return null
+      }
+    } else if (this.planner) {
+      try {
+        const directive = await this.planner.plan(prompt)
+        if (directive.kind === 'answer' && directive.message.trim()) {
+          return directive.message.trim()
+        }
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+}
+
+function extractLlmClient(planner: Planner | undefined): LlmClient | null {
+  if (!planner) return null
+  if (planner instanceof GroqPlanner) {
+    return planner.client
+  }
+  if (
+    planner instanceof FallbackPlanner &&
+    planner.primary instanceof GroqPlanner
+  ) {
+    return planner.primary.client
+  }
+  if (
+    typeof (planner as { client?: unknown }).client === 'object' &&
+    (planner as { client?: unknown }).client !== null
+  ) {
+    return (planner as unknown as { client: LlmClient }).client
+  }
+  return null
 }
 
 /** The action executor used in production: launch apps and open URLs locally. */
@@ -792,18 +924,20 @@ function buildPlanner(
   injected: Planner | undefined,
   registry: ToolRegistry,
   clock: () => Date,
-  recentContext: () => ChatTurn[]
+  recentContext: () => ChatTurn[],
+  injectedClient?: LlmClient
 ): { planner: Planner; selector: ToolSelector | null } {
   if (injected !== undefined) {
     return { planner: injected, selector: null }
   }
-  if (groqKeyPresent()) {
+  if (injectedClient !== undefined || groqKeyPresent()) {
+    const client = injectedClient ?? resilientFromEnv()
     const selector = toolRetrievalEnabled() ? selectorFromEnv() : null
     return {
       planner: new FallbackPlanner(
         new GroqPlanner(
           registry,
-          resilientFromEnv(),
+          client,
           selector ?? undefined,
           recentContext
         ),

@@ -496,3 +496,91 @@ describe('AssistantService history', () => {
     expect(history.entries()).toEqual([])
   })
 })
+
+describe('AssistantService tool chaining and synthesis', () => {
+  it('synthesizes a concise spoken answer when a read tool returns content for a summary inquiry', async () => {
+    const registry = new ToolRegistry()
+    registry.register({
+      spec: {
+        name: 'notion_read_page',
+        description: 'read a Notion page',
+        parameters: { type: 'object', properties: {}, required: [] },
+        risk: 'read',
+        requiresConfirmation: false,
+        actionLabel: 'read a Notion page'
+      },
+      run: () => ({
+        status: 'ok',
+        action: 'read a Notion page',
+        message:
+          'DP\n\n- Project Alpha is launching on Monday\n- Beta testing starts Friday'
+      })
+    })
+
+    const fakeClient = {
+      choose: vi.fn().mockResolvedValue({
+        calls: [],
+        content:
+          'Your DP notes state that Project Alpha launches on Monday and Beta testing starts on Friday.'
+      })
+    }
+
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('notion_read_page'),
+      client: fakeClient
+    })
+
+    const response = await service.act('summarize my DP notes')
+
+    expect(fakeClient.choose).toHaveBeenCalledTimes(1)
+    expect(fakeClient.choose).toHaveBeenCalledWith(
+      "The user asked: summarize my DP notes. The tool 'notion_read_page' returned: DP\n\n- Project Alpha is launching on Monday\n- Beta testing starts Friday. Provide a concise, clear spoken answer and response directly answering the user based on the tool result.",
+      []
+    )
+    expect(response.status).toBe('ok')
+    expect(response.action).toBe('read a Notion page')
+    expect(response.message).toBe(
+      'Your DP notes state that Project Alpha launches on Monday and Beta testing starts on Friday.'
+    )
+    expect(response.spokenResponse).toBe(
+      'Your DP notes state that Project Alpha launches on Monday and Beta testing starts on Friday.'
+    )
+  })
+
+  it('falls back to the raw tool output if synthesis fails', async () => {
+    const registry = new ToolRegistry()
+    registry.register({
+      spec: {
+        name: 'notion_read_page',
+        description: 'read a Notion page',
+        parameters: { type: 'object', properties: {}, required: [] },
+        risk: 'read',
+        requiresConfirmation: false,
+        actionLabel: 'read a Notion page'
+      },
+      run: () => ({
+        status: 'ok',
+        action: 'read a Notion page',
+        message: 'Raw note content'
+      })
+    })
+
+    const fakeClient = {
+      choose: vi.fn().mockRejectedValue(new Error('LLM synthesis timeout'))
+    }
+
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('notion_read_page'),
+      client: fakeClient
+    })
+
+    const response = await service.act('summarize my DP notes')
+
+    expect(response.status).toBe('ok')
+    expect(response.action).toBe('read a Notion page')
+    expect(response.message).toBe('Raw note content')
+    expect(response.spokenResponse).toBe('Raw note content')
+  })
+})

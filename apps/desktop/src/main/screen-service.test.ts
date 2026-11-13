@@ -26,6 +26,7 @@ const ANNOTATED_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 4, 5, 6])
 
 class FakeOverlay implements ScreenOverlayController {
   readonly shown: ScreenRect[] = []
+  readonly shownCursors: Array<ScreenOverlayPoint | undefined> = []
   readonly points: ScreenOverlayPoint[] = []
   readonly composeInputs: Uint8Array[] = []
   hideCalls = 0
@@ -36,8 +37,9 @@ class FakeOverlay implements ScreenOverlayController {
   hangFinish = false
   composedImage = ANNOTATED_PNG
 
-  show(bounds: ScreenRect): void {
+  show(bounds: ScreenRect, initialCursor?: ScreenOverlayPoint): void {
     this.shown.push({ ...bounds })
+    this.shownCursors.push(initialCursor ? { ...initialCursor } : undefined)
   }
 
   hide(): void {
@@ -127,6 +129,7 @@ describe('OverlayScreenService', () => {
     target.service.begin()
 
     expect(target.overlay.shown).toEqual([DISPLAY.bounds])
+    expect(target.overlay.shownCursors).toEqual([{ x: 0, y: 0 }])
     expect(target.overlay.points).toEqual([{ x: 0, y: 0 }])
 
     target.moveCursor({ x: 140, y: 70 })

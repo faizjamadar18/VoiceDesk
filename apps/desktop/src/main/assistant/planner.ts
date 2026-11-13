@@ -99,7 +99,7 @@ export const LOOK_AT_SCREEN_SPEC: ToolSpec = {
 
 export class GroqPlanner implements Planner {
   private readonly registry: ToolRegistry
-  private readonly client: LlmClient
+  readonly client: LlmClient
   private readonly selector: ToolSelector | undefined
   private readonly recentContext: (() => ChatTurn[]) | undefined
 
@@ -140,8 +140,8 @@ export class GroqPlanner implements Planner {
 }
 
 export class FallbackPlanner implements Planner {
-  private readonly primary: Planner
-  private readonly fallback: Planner
+  readonly primary: Planner
+  readonly fallback: Planner
 
   constructor(primary: Planner, fallback: Planner) {
     this.primary = primary

@@ -193,6 +193,17 @@ export class GroqClient implements LlmClient {
             "user's own name only when they use one. Never invent an email " +
             'address. Results come back newest first, and only the newest few ' +
             'are shown or spoken. ' +
+            'When the user asks to find, search, read, summarize, or query pages, ' +
+            'notes, or databases in Notion, call the matching Notion tool directly. ' +
+            'When the user asks to read, view, or summarize a page or note ' +
+            "(e.g., 'summarize my DP notes', 'read the project page'), " +
+            'use `notion_read_page` passing the page name. ' +
+            'When the user asks to read rows, tables, or a database, ' +
+            'use `notion_query_database` passing the database name. ' +
+            'When the user asks to search or find pages or databases, ' +
+            'use `notion_search`. ' +
+            'When the user asks to create a page, use `notion_create_page`. ' +
+            'Never invent Notion IDs or ask the user which app to use when a Notion tool fits. ' +
             `Current date and time: ${formatLocalTimestamp(this.clock())} ` +
             `(${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` +
             'Whenever the user mentions a relative time (today, tomorrow, next Tuesday, ' +

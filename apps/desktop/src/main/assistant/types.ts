@@ -101,6 +101,7 @@ export interface ToolContext {
   fileOps: FileOpsLike
   fileSearch: FileSearch
   weather: WeatherClientLike
+  transcript?: string
 }
 
 export interface Tool {
