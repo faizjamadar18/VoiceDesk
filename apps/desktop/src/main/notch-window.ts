@@ -253,6 +253,14 @@ export class NotchWindowPresenter implements NotchPresenter {
     if (next === this.interactive) return
     this.interactive = next
     this.setIgnoreMouseEvents(!next)
+    if (next) {
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
+      }
+      if (typeof this.win.setAlwaysOnTop === 'function') {
+        this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
+    }
   }
 
   private setIgnoreMouseEvents(ignore: boolean): void {
@@ -420,14 +428,6 @@ export class NotchWindowPresenter implements NotchPresenter {
       this.interactiveRegion
     )
     this.setInteractive(isInside)
-    if (isInside && this.win.isVisible()) {
-      if (typeof this.win.moveTop === 'function') {
-        this.win.moveTop()
-      }
-      if (typeof this.win.setAlwaysOnTop === 'function') {
-        this.win.setAlwaysOnTop(true, 'screen-saver')
-      }
-    }
   }
 
   private send(channel: string, payload?: unknown): void {

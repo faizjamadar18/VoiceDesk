@@ -414,4 +414,41 @@ describe('NotchWindowPresenter interaction & dismissal', () => {
     expect(target.win.getBounds().x).toBe(1920 + Math.round((2560 - 660) / 2))
     presenter.dispose()
   })
+
+  it('only calls moveTop and setAlwaysOnTop once when transitioning to interactive, not on every poll tick', () => {
+    vi.useFakeTimers()
+    try {
+      electronState.cursor = { x: 700, y: 20 }
+      const target = fakeWindow()
+      const presenter = new NotchWindowPresenter(target.win)
+      presenter.handleReady()
+      presenter.show()
+      presenter.setRegion({ left: 20, top: 0, width: 520, height: 80 })
+
+      target.moveTop.mockClear()
+      target.setAlwaysOnTop.mockClear()
+
+      // Transition to interactive: cursor inside region
+      presenter.update({
+        phase: 'processing',
+        transcript: 'hi',
+        message: 'Transcribing locally…',
+        at: 2
+      })
+
+      expect(target.moveTop).toHaveBeenCalledTimes(1)
+      expect(target.setAlwaysOnTop).toHaveBeenCalledTimes(1)
+
+      // Advance timers across multiple poll ticks while cursor remains inside
+      vi.advanceTimersByTime(240) // 3 ticks of INTERACTION_POLL_MS (80ms)
+
+      // Must NOT call moveTop or setAlwaysOnTop on every poll tick!
+      expect(target.moveTop).toHaveBeenCalledTimes(1)
+      expect(target.setAlwaysOnTop).toHaveBeenCalledTimes(1)
+
+      presenter.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

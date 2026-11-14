@@ -355,6 +355,11 @@ describe('Insights Components Suite', () => {
       expect(html).toContain('Post to LinkedIn')
       expect(html).toContain('Post to Twitter')
       expect(html).toContain('-webkit-app-region:no-drag')
+      // Sizing and layout matching VoiceOS
+      expect(html).toContain('px-5 pt-5 pb-6 w-[480px] max-w-[calc(100vw-32px)]')
+      expect(html).toContain('top-8 right-8 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.12] text-white transition-colors hover:bg-white/[0.22] focus:outline-none cursor-pointer')
+      expect(html).toContain('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors focus:outline-none cursor-pointer')
+      expect(html).toContain('flex h-10 flex-shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-medium whitespace-nowrap transition-colors focus:outline-none cursor-pointer')
     })
   })
 })

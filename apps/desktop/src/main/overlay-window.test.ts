@@ -4,11 +4,23 @@ import { SCREEN_OVERLAY_IPC } from '../shared/types'
 
 const state = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (...args: unknown[]) => void>(),
-  sent: [] as Array<{ channel: string; payload?: unknown }>
+  sent: [] as Array<{ channel: string; payload?: unknown }>,
+  lastWindowInstance: null as Record<string, unknown> | null
 }))
 
 vi.mock('electron', () => ({
-  BrowserWindow: class {},
+  BrowserWindow: class {
+    setIgnoreMouseEvents = vi.fn()
+    setAlwaysOnTop = vi.fn()
+    setVisibleOnAllWorkspaces = vi.fn()
+    setSkipTaskbar = vi.fn()
+    loadURL = vi.fn()
+    loadFile = vi.fn().mockResolvedValue(undefined)
+    webContents = { on: vi.fn(), removeListener: vi.fn() }
+    constructor() {
+      state.lastWindowInstance = this as unknown as Record<string, unknown>
+    }
+  },
   ipcMain: {
     on: (channel: string, handler: (...args: unknown[]) => void) => {
       state.ipcHandlers.set(channel, handler)
@@ -19,7 +31,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { OverlayWindowPresenter } from './overlay-window'
+import { OverlayWindowPresenter, createOverlayWindow } from './overlay-window'
 
 function fakeWindow(): {
   win: BrowserWindow
@@ -129,5 +141,30 @@ describe('OverlayWindowPresenter', () => {
       }
     ])
     presenter.dispose()
+  })
+})
+
+describe('createOverlayWindow', () => {
+  it('does not pass { forward: true } to setIgnoreMouseEvents on win32', () => {
+    const originalPlatform = process.platform
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' })
+      const win = createOverlayWindow()
+      expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true)
+      expect(win.setIgnoreMouseEvents).not.toHaveBeenCalledWith(true, { forward: true })
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform })
+    }
+  })
+
+  it('passes { forward: true } to setIgnoreMouseEvents on darwin', () => {
+    const originalPlatform = process.platform
+    try {
+      Object.defineProperty(process, 'platform', { value: 'darwin' })
+      const win = createOverlayWindow()
+      expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true })
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform })
+    }
   })
 })

@@ -350,7 +350,8 @@ export interface ScreenOverlayStart {
 }
 
 export interface ScreenOverlayCompose {
-  image: Uint8Array
+  image: Uint8Array | string
+  mimeType?: 'image/jpeg' | 'image/png'
 }
 
 /** The narrow surface exposed to the dedicated overlay preload. */

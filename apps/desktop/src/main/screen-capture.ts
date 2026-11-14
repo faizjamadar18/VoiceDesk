@@ -3,7 +3,9 @@ import type { ScreenOverlayPoint } from '../shared/types'
 import type { ScreenDisplay } from './screen-service'
 
 /** Keep the captured bitmap bounded on high-DPI or very large displays. */
-const MAX_THUMBNAIL_EDGE = 2_560
+export const MAX_THUMBNAIL_EDGE = 1_600
+
+export const SCREEN_CAPTURE_MIME_TYPE = 'image/jpeg' as const
 
 export function cursorScreenPoint(): ScreenOverlayPoint {
   const point = screen.getCursorScreenPoint()
@@ -59,7 +61,7 @@ export async function captureDisplay(display: ScreenDisplay): Promise<Uint8Array
     throw new Error('The screen capture came back empty. Try again.')
   }
 
-  return new Uint8Array(source.thumbnail.toPNG())
+  return new Uint8Array(source.thumbnail.toJPEG(85))
 }
 
 function toScreenDisplay(display: Electron.Display): ScreenDisplay {

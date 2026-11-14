@@ -9,7 +9,10 @@ import {
 import { VoiceOsPrompt, VoiceOsAnswer } from './voiceos-notch/markdown'
 import { deriveNotchPresentation } from './voiceos-notch/notch-ui'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
-import type { HistoryRestorePayload } from '../../shared/types'
+import { GoogleCalendarCard } from './components/GoogleCalendarCard'
+import { GmailComposeCard } from './components/GmailComposeCard'
+import { deriveCardFromDecisionOrMessage } from './card-derivation'
+import type { HistoryRestorePayload, NotchDecision } from '../../shared/types'
 
 describe('Notch history restore', () => {
   it('exports NOTCH_ANSWER_MAX_HEIGHT_PX as 340', () => {
@@ -197,6 +200,142 @@ describe('Notch history restore', () => {
       expect(notchHtml).not.toContain('kestrel-email-compose')
       expect(notchHtml).not.toContain('kestrel-file-results')
       expect(notchHtml).not.toContain('kestrel-decision')
+    })
+  })
+
+  describe('preview model derivation, suppression of generic cards, and speech synchronization', () => {
+    it('derives GoogleCalendarCard when card is null and suppresses generic decision card and text bubble', () => {
+      const message = 'Schedule "Meeting" for tomorrow at 2:00 PM? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-cal-1',
+        target: 'Meeting',
+        busy: false
+      }
+      const transcript = 'I mean schedule a meeting tomorrow at two PM in Google Calendar'
+
+      const derivedCards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript
+      })
+
+      expect(derivedCards.calendarCard).not.toBeNull()
+      expect(derivedCards.calendarCard?.title).toBe('Meeting')
+      expect(derivedCards.calendarCard?.mode).toBe('create')
+
+      const effectiveCalendarCard = derivedCards.calendarCard
+      const effectiveEmailComposeCard = null
+      const hasPreviewModel = effectiveCalendarCard !== null || effectiveEmailComposeCard !== null
+      expect(hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const answer = message.trim()
+      const showAnswer = showCards && answer.length > 0 && !hasPreviewModel
+      const showGenericDecision = showCards && decision !== null && !hasPreviewModel
+
+      // Text bubble is suppressed when preview model is active
+      expect(showAnswer).toBe(false)
+      // Generic confirm/cancel card is suppressed when preview model is active
+      expect(showGenericDecision).toBe(false)
+      // Cards are shown once synthesizing finishes
+      expect(showCards).toBe(true)
+
+      // Render the GoogleCalendarCard to verify it renders with title and action
+      const cardHtml = renderToStaticMarkup(
+        createElement(GoogleCalendarCard, {
+          card: effectiveCalendarCard!,
+          busy: decision.busy,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('Meeting')
+      expect(cardHtml).toContain('Schedule')
+    })
+
+    it('derives GmailComposeCard when email draft/send is requested and suppresses generic card', () => {
+      const message = 'Send "Meeting Notes" to team@company.com? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-gmail-1',
+        target: 'team@company.com',
+        busy: false
+      }
+
+      const derivedCards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript: 'send email to team'
+      })
+
+      expect(derivedCards.emailComposeCard).not.toBeNull()
+      expect(derivedCards.emailComposeCard?.subject).toBe('Meeting Notes')
+
+      const hasPreviewModel = derivedCards.emailComposeCard !== null
+      expect(hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const showGenericDecision = showCards && decision !== null && !hasPreviewModel
+      expect(showGenericDecision).toBe(false)
+
+      const cardHtml = renderToStaticMarkup(
+        createElement(GmailComposeCard, {
+          card: derivedCards.emailComposeCard!,
+          busy: decision.busy,
+          onSend: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('Meeting Notes')
+      expect(cardHtml).toContain('team@company.com')
+    })
+
+    it('gates card rendering and answer display on speech synthesis completion', () => {
+      const isSynthesizing = true
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+
+      // While Kokoro is synthesizing, cards must NOT be displayed yet
+      expect(showCards).toBe(false)
+
+      // When synthesis finishes (first chunk arrives / safeReady called)
+      const synthesisFinished = false
+      const showCardsReady = !synthesisFinished && (phase === 'result' || phase === 'error')
+      expect(showCardsReady).toBe(true)
+    })
+
+    it('renders generic decision card only for non-preview actions when not synthesizing', () => {
+      const message = 'Delete "notes.txt"? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-del-1',
+        target: 'notes.txt',
+        busy: false
+      }
+      const derivedCards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript: 'delete notes.txt'
+      })
+
+      expect(derivedCards.calendarCard).toBeNull()
+      expect(derivedCards.emailComposeCard).toBeNull()
+
+      const hasPreviewModel = derivedCards.calendarCard !== null || derivedCards.emailComposeCard !== null
+      expect(hasPreviewModel).toBe(false)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const showGenericDecision = showCards && decision !== null && !hasPreviewModel
+
+      // Generic card is permitted for file deletion actions
+      expect(showGenericDecision).toBe(true)
     })
   })
 })

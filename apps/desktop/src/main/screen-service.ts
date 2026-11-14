@@ -19,7 +19,7 @@ export interface ScreenDisplay {
 
 export interface ScreenFrame {
   imageBase64: string
-  mimeType: 'image/png'
+  mimeType: 'image/jpeg' | 'image/png'
 }
 
 export interface ScreenTurn {
@@ -197,7 +197,7 @@ export class OverlayScreenService implements ScreenService {
         this.captureTimeoutMs,
         'Screen capture timed out. Try again.'
       )
-      return { imageBase64: toBase64(image), mimeType: 'image/png' }
+      return { imageBase64: toBase64(image), mimeType: 'image/jpeg' }
     } finally {
       this.lockedDisplay = null
     }
@@ -270,7 +270,7 @@ export class OverlayScreenService implements ScreenService {
 
       return {
         marked: true,
-        frame: { imageBase64: toBase64(annotated), mimeType: 'image/png' },
+        frame: { imageBase64: toBase64(annotated), mimeType: 'image/jpeg' },
         error: null
       }
     } catch (error) {

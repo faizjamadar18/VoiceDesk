@@ -27,6 +27,7 @@ import { SpeechPlayer } from './voice/speech-player'
 import { WebAudioSink } from './voice/web-audio-sink'
 import { GmailComposeCard } from './components/GmailComposeCard'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
+import { deriveCardFromDecisionOrMessage } from './card-derivation'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
   VoiceOsAnswer,
@@ -1228,35 +1229,46 @@ export default function Notch(): JSX.Element {
   cancelEditRef.current = handleCancelEdit
 
   const answer = message?.trim() ?? ''
-  const showAnswer = !isSynthesizing && (phase === 'result' || phase === 'error') && answer.length > 0
   const hasWeatherCard = card?.kind === 'weather'
   const weather = hasWeatherCard ? (card as NotchWeatherCard) : null
-  // WHY: the card union also allows Record<string, unknown>, so narrow by kind
-  // the same way the weather card does before touching typed fields.
   const emailList = card?.kind === 'email_list' ? (card as NotchEmailListCard) : null
+
+  const derivedCards = deriveCardFromDecisionOrMessage({
+    message,
+    decision,
+    transcript
+  })
   const emailCompose =
-    card?.kind === 'email_compose' ? (card as NotchEmailComposeCard) : null
+    card?.kind === 'email_compose'
+      ? (card as NotchEmailComposeCard)
+      : derivedCards.emailComposeCard
   const calendarEvent =
-    card?.kind === 'calendar_event' ? (card as NotchCalendarCard) : null
+    card?.kind === 'calendar_event'
+      ? (card as NotchCalendarCard)
+      : derivedCards.calendarCard
+  const hasPreviewModel = emailCompose !== null || calendarEvent !== null
+
+  const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+  const showAnswer = showCards && answer.length > 0 && !hasPreviewModel
   const hasTranscript = transcript.trim().length > 0
   const hasExpandedContent =
     isEditingText ||
     hasTranscript ||
     showAnswer ||
-    results !== null ||
-    decision !== null ||
-    weather !== null ||
-    emailList !== null ||
-    emailCompose !== null ||
-    calendarEvent !== null
+    (showCards &&
+      (results !== null ||
+        decision !== null ||
+        weather !== null ||
+        emailList !== null ||
+        hasPreviewModel))
   const showBottomHint =
     !isEditingText &&
     phase !== 'listening' &&
     decision === null &&
+    !hasPreviewModel &&
+    showCards &&
     (showAnswer || results !== null || weather !== null) &&
-    emailList === null &&
-    emailCompose === null &&
-    calendarEvent === null
+    emailList === null
 
   const presentation = deriveNotchPresentation({
     phase: isEditingText ? 'result' : phase,
@@ -1297,7 +1309,7 @@ export default function Notch(): JSX.Element {
         />
       )}
 
-      {weather && (
+      {showCards && weather && (
         <div className="kestrel-weather-card">
           <div className="kestrel-weather-row">
             <div className="kestrel-weather-left">
@@ -1323,7 +1335,7 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
-      {emailList && (
+      {showCards && emailList && (
         <div className="kestrel-email-list">
           <div className="kestrel-email-list-title">{emailList.title}</div>
           <ul className="kestrel-email-list-rows">
@@ -1340,7 +1352,7 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
-      {emailCompose && (
+      {showCards && emailCompose && (
         <GmailComposeCard
           card={emailCompose}
           busy={decision?.busy}
@@ -1350,7 +1362,7 @@ export default function Notch(): JSX.Element {
         />
       )}
 
-      {calendarEvent && (
+      {showCards && calendarEvent && (
         <GoogleCalendarCard
           card={calendarEvent}
           busy={decision?.busy}
@@ -1359,7 +1371,7 @@ export default function Notch(): JSX.Element {
         />
       )}
 
-      {results !== null && (
+      {showCards && results !== null && (
         <div className="kestrel-file-results">
           <span className="kestrel-file-results-label">
             {resultsLabel ?? `Files · ${results.length} items`}
@@ -1389,7 +1401,7 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
-      {decision !== null && emailCompose === null && calendarEvent === null && (
+      {showCards && decision !== null && !hasPreviewModel && (
         <div className="kestrel-decision">
           <p className="kestrel-decision-target">
             {decision.target || 'Action requires approval'}

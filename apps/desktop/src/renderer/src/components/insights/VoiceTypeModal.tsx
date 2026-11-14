@@ -148,16 +148,11 @@ export function UtilityChip({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:outline-none border cursor-pointer ${
+      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors focus:outline-none cursor-pointer ${
         isDarkMode
-          ? 'bg-white/10 hover:bg-white/15 text-gray-200 border-white/10'
-          : 'bg-black/[0.05] hover:bg-black/[0.09] text-gray-700 border-black/10'
+          ? 'bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]'
+          : 'bg-black/[0.05] text-gray-700 hover:bg-black/[0.09]'
       }`}
-      style={{
-        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        color: isDarkMode ? '#e5e7eb' : '#374151'
-      }}
     >
       {confirmed ? <CheckIcon size={17} /> : icon}
     </button>
@@ -179,31 +174,19 @@ export function PostButton({
   isDarkMode = true,
   onClick
 }: PostButtonProps): JSX.Element {
-  const toneClasses = primary
+  const tone = primary
     ? isDarkMode
-      ? 'bg-white text-gray-900 hover:bg-gray-100 shadow-sm font-semibold'
-      : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm font-semibold'
+      ? 'bg-white text-gray-900 hover:bg-gray-200'
+      : 'bg-gray-900 text-white hover:bg-gray-700'
     : isDarkMode
-      ? 'bg-white/10 hover:bg-white/15 text-gray-200 border border-white/10 font-medium'
-      : 'bg-black/[0.05] hover:bg-black/[0.09] text-gray-700 border border-black/10 font-medium'
-
-  const toneStyle: CSSProperties = primary
-    ? {
-        backgroundColor: isDarkMode ? '#ffffff' : '#111827',
-        color: isDarkMode ? '#111827' : '#ffffff'
-      }
-    : {
-        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        color: isDarkMode ? '#e5e7eb' : '#374151'
-      }
+      ? 'bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]'
+      : 'bg-black/[0.05] text-gray-700 hover:bg-black/[0.09]'
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13px] whitespace-nowrap transition-colors focus:outline-none cursor-pointer ${toneClasses}`}
-      style={toneStyle}
+      className={`flex h-10 flex-shrink-0 items-center gap-2 rounded-full px-4 text-[13px] font-medium whitespace-nowrap transition-colors focus:outline-none cursor-pointer ${tone}`}
     >
       {icon}
       <span>{label}</span>
@@ -326,7 +309,7 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
       style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
     >
       <div
-        className="relative z-[200] flex flex-col items-center overflow-hidden rounded-[30px] border border-white/10 p-6 sm:max-w-[488px] w-full"
+        className="relative z-[200] flex flex-col items-center overflow-hidden rounded-[30px] border border-white/10 px-5 pt-5 pb-6 w-[480px] max-w-[calc(100vw-32px)]"
         onClick={(e) => e.stopPropagation()}
         style={{
           WebkitAppRegion: 'no-drag',
@@ -340,7 +323,7 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.12] text-white transition-colors hover:bg-white/[0.22] focus:outline-none"
+          className="absolute top-8 right-8 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-white/[0.12] text-white transition-colors hover:bg-white/[0.22] focus:outline-none cursor-pointer"
           aria-label="Close"
         >
           <XIcon size={12} />

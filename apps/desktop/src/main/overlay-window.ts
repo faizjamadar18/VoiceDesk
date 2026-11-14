@@ -60,7 +60,11 @@ export function createOverlayWindow(): BrowserWindow {
     }
   })
 
-  win.setIgnoreMouseEvents(true, { forward: true })
+  if (process.platform === 'win32') {
+    win.setIgnoreMouseEvents(true)
+  } else {
+    win.setIgnoreMouseEvents(true, { forward: true })
+  }
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setSkipTaskbar(true)

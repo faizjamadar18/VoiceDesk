@@ -3,6 +3,12 @@ import type {
   ScreenOverlayPoint,
   ScreenOverlayStart
 } from '../../shared/types'
+import {
+  compositeScreenshotWithAnnotations,
+  canvasToJpeg,
+  drawRecordedStroke,
+  parseImageBlob
+} from './overlay-composite'
 import './overlay.css'
 
 const TAG_FADE_TRAVEL = 220
@@ -222,57 +228,6 @@ function startAnimationLoop(): void {
   animationFrameId = window.requestAnimationFrame(animationLoop)
 }
 
-function drawRecordedStroke(
-  target: CanvasRenderingContext2D,
-  stroke: readonly ScreenOverlayPoint[]
-): void {
-  if (stroke.length === 0) return
-
-  target.save()
-
-  if (stroke.length === 1) {
-    target.fillStyle = `hsl(${HUE}, 100%, 65%)`
-    target.beginPath()
-    target.arc(stroke[0].x, stroke[0].y, 7, 0, Math.PI * 2)
-    target.fill()
-    target.restore()
-    return
-  }
-
-  target.lineCap = 'round'
-  target.lineJoin = 'round'
-
-  function buildPath(): void {
-    target.beginPath()
-    target.moveTo(stroke[0].x, stroke[0].y)
-    for (let i = 1; i < stroke.length - 1; i += 1) {
-      const midX = (stroke[i].x + stroke[i + 1].x) / 2
-      const midY = (stroke[i].y + stroke[i + 1].y) / 2
-      target.quadraticCurveTo(stroke[i].x, stroke[i].y, midX, midY)
-    }
-    target.lineTo(stroke[stroke.length - 1].x, stroke[stroke.length - 1].y)
-  }
-
-  // Outer glow pass
-  target.strokeStyle = `hsla(${HUE}, 100%, 65%, 0.25)`
-  target.lineWidth = 18
-  buildPath()
-  target.stroke()
-
-  // Mid glow pass
-  target.strokeStyle = `hsla(${HUE}, 100%, 65%, 0.45)`
-  target.lineWidth = 10
-  buildPath()
-  target.stroke()
-
-  // Crisp core pass
-  target.strokeStyle = `hsl(${HUE}, 100%, 65%)`
-  target.lineWidth = 4
-  buildPath()
-  target.stroke()
-
-  target.restore()
-}
 
 function handleStart(payload: ScreenOverlayStart): void {
   if (animationFrameId !== null) {
@@ -339,18 +294,6 @@ function handleCancel(): void {
   context.clearRect(0, 0, frameWidth, frameHeight)
 }
 
-function canvasToPng(source: HTMLCanvasElement): Promise<Blob> {
-  return new Promise<Blob>((resolve, reject) => {
-    source.toBlob((blob) => {
-      if (blob) {
-        resolve(blob)
-      } else {
-        reject(new Error('Could not export the annotated screenshot.'))
-      }
-    }, 'image/png')
-  })
-}
-
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -358,32 +301,14 @@ function describeError(error: unknown): string {
 async function handleCompose(payload: ScreenOverlayCompose): Promise<void> {
   hideTagImmediately()
   try {
-    const png = new Uint8Array(payload.image)
-    const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }))
-    try {
-      const output = document.createElement('canvas')
-      output.width = bitmap.width
-      output.height = bitmap.height
-      const outputContext = output.getContext('2d')
-      if (!outputContext) {
-        throw new Error('Could not prepare the annotated screenshot.')
-      }
-
-      outputContext.drawImage(bitmap, 0, 0)
-      outputContext.save()
-      outputContext.scale(
-        bitmap.width / Math.max(1, frameWidth),
-        bitmap.height / Math.max(1, frameHeight)
-      )
-      drawRecordedStroke(outputContext, recordedPoints)
-      outputContext.restore()
-
-      const blob = await canvasToPng(output)
-      const buffer = await blob.arrayBuffer()
-      window.kestrelOverlay.sendComposed(buffer)
-    } finally {
-      bitmap.close()
-    }
+    const buffer = await compositeScreenshotWithAnnotations(
+      payload.image,
+      recordedPoints,
+      frameWidth,
+      frameHeight,
+      0.85
+    )
+    window.kestrelOverlay.sendComposed(buffer)
   } catch (error) {
     window.kestrelOverlay.sendComposeError(describeError(error))
   }
@@ -397,3 +322,10 @@ window.kestrelOverlay.onCompose((payload) => {
   void handleCompose(payload)
 })
 window.kestrelOverlay.notifyReady()
+
+export {
+  compositeScreenshotWithAnnotations,
+  parseImageBlob,
+  canvasToJpeg,
+  drawRecordedStroke
+}

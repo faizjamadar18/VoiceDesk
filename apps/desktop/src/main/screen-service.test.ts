@@ -165,7 +165,7 @@ describe('OverlayScreenService', () => {
     expect(turn.error).toBeNull()
     expect(turn.frame).toEqual({
       imageBase64: Buffer.from(ANNOTATED_PNG).toString('base64'),
-      mimeType: 'image/png'
+      mimeType: 'image/jpeg'
     })
     expect(target.overlay.finishCalls).toBe(1)
     expect(target.overlay.hideCalls).toBeGreaterThanOrEqual(1)
@@ -287,7 +287,7 @@ describe('OverlayScreenService', () => {
 
     const frame = await target.service.capture()
 
-    expect(frame.mimeType).toBe('image/png')
+    expect(frame.mimeType).toBe('image/jpeg')
     expect(frame.imageBase64).toBe(Buffer.from(CLEAN_PNG).toString('base64'))
     expect(target.captures.at(-1)).toEqual(DISPLAY)
     target.service.cancel()
