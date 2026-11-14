@@ -170,6 +170,7 @@ export type NotchCard =
   | NotchWeatherCard
   | NotchEmailListCard
   | NotchEmailComposeCard
+  | NotchCalendarCard
   | Record<string, unknown>
 
 /** One email row in {@link NotchEmailListCard}. Display-only. */
@@ -203,6 +204,40 @@ export interface NotchEmailComposeCard {
   body: string
   /** Messages in the thread, for "View thread (N)". Null when new. */
   threadCount: number | null
+}
+
+/** One calendar event shown on the timeline or in a preview list. */
+export interface NotchCalendarEvent {
+  id: string
+  summary: string
+  /** ISO 8601 string, e.g. "2026-11-14T19:00:00". */
+  start: string
+  /** ISO 8601 string, e.g. "2026-11-14T20:00:00", or null for open-ended. */
+  end: string | null
+  allDay?: boolean
+  backgroundColor?: string
+}
+
+/** A Google Calendar event preview / confirmation card in the notch. */
+export interface NotchCalendarCard {
+  kind: 'calendar_event'
+  mode: 'create' | 'patch' | 'delete'
+  /** Event title / summary, e.g. "Meeting" or "Lunch with Sarah". */
+  title: string
+  /** ISO 8601 start time. */
+  start: string
+  /** ISO 8601 end time. */
+  end: string
+  /** Event length in minutes, e.g. 60. */
+  durationMinutes: number
+  /** Connected Google account / email, e.g. "faizj18.work@gmail.com". */
+  account?: string
+  /** Calendar name / display name, e.g. "Primary". */
+  calendarName?: string
+  location?: string
+  description?: string
+  attendees?: string[]
+  existingEvents?: NotchCalendarEvent[]
 }
 
 /**

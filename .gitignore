@@ -26,3 +26,7 @@ __pycache__/
 .turbo/
 coverage/
 *.tsbuildinfo
+
+# Local agent skills and customizations
+skills/
+.agents/

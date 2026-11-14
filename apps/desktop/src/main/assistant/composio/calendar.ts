@@ -10,7 +10,8 @@
  * raw surface.
  */
 
-import type { Tool, ToolContext, ToolOutcome } from '../types'
+import type { Tool, ToolContext, ToolOutcome, ToolPreparation } from '../types'
+import type { NotchCalendarCard } from '../../../shared/types'
 import {
   EMAIL,
   MESSAGE_LIMIT,
@@ -656,6 +657,61 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
       true,
       'schedule a meeting'
     ),
+    async prepare(args, ctx): Promise<ToolPreparation> {
+      const action = 'schedule a meeting'
+      if (ctx.dryRun) return { arguments: { ...args } }
+
+      const title = optionalString(args, 'title') ?? 'New event'
+      const start = optionalString(args, 'start')
+      if (start === null || ISO_MOMENT.exec(start) === null) {
+        return {
+          arguments: { ...args },
+          outcome: { status: 'error', action, message: NEED_EXACT_TIME }
+        }
+      }
+      const duration = optionalInteger(args, 'duration_minutes') ?? 60
+      const end = addMinutes(start, duration)
+      if (end === null) {
+        return {
+          arguments: { ...args },
+          outcome: { status: 'error', action, message: NEED_EXACT_TIME }
+        }
+      }
+
+      const calendarId = optionalString(args, 'calendar_id') ?? 'primary'
+      const { valid: attendees } = partitionAttendees(
+        optionalString(args, 'attendees')
+      )
+      const location = optionalString(args, 'location') ?? undefined
+      const description = optionalString(args, 'description') ?? undefined
+      const when = describeWhen(start, currentTime(ctx), zone())
+
+      const card: NotchCalendarCard = {
+        kind: 'calendar_event',
+        mode: 'create',
+        title,
+        start,
+        end,
+        durationMinutes: duration,
+        calendarName: calendarId === 'primary' ? 'Primary' : calendarId,
+        location,
+        description,
+        attendees: attendees.length > 0 ? attendees : undefined
+      }
+
+      return {
+        arguments: {
+          ...args,
+          title,
+          start,
+          duration_minutes: duration,
+          calendar_id: calendarId
+        },
+        message: `Schedule "${title}" for ${when}? Approval needed.`,
+        display: title,
+        card: card as unknown as Record<string, unknown>
+      }
+    },
     async run(args, ctx) {
       const action = 'schedule a meeting'
       const skipped = dryRun(ctx, action, 'calendar_create_event')
@@ -742,6 +798,36 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
       true,
       'move a meeting'
     ),
+    async prepare(args, ctx): Promise<ToolPreparation> {
+      const action = 'move a meeting'
+      if (ctx.dryRun) return { arguments: { ...args } }
+      const query = optionalString(args, 'query') ?? ''
+      const newStart = optionalString(args, 'new_start')
+      if (newStart === null || ISO_MOMENT.exec(newStart) === null) {
+        return {
+          arguments: { ...args },
+          outcome: { status: 'error', action, message: NEED_EXACT_TIME }
+        }
+      }
+      const duration = optionalInteger(args, 'duration_minutes') ?? 60
+      const end = addMinutes(newStart, duration) ?? newStart
+      const when = describeWhen(newStart, currentTime(ctx), zone())
+      const card: NotchCalendarCard = {
+        kind: 'calendar_event',
+        mode: 'patch',
+        title: query || 'Meeting',
+        start: newStart,
+        end,
+        durationMinutes: duration,
+        calendarName: 'Primary'
+      }
+      return {
+        arguments: { ...args },
+        message: `Move "${query}" to ${when}? Approval needed.`,
+        display: query,
+        card: card as unknown as Record<string, unknown>
+      }
+    },
     async run(args, ctx) {
       const action = 'move a meeting'
       const skipped = dryRun(ctx, action, 'calendar_move_event')
@@ -808,6 +894,25 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
       true,
       'cancel a meeting'
     ),
+    async prepare(args, ctx): Promise<ToolPreparation> {
+      if (ctx.dryRun) return { arguments: { ...args } }
+      const query = optionalString(args, 'query') ?? ''
+      const card: NotchCalendarCard = {
+        kind: 'calendar_event',
+        mode: 'delete',
+        title: query || 'Meeting',
+        start: '',
+        end: '',
+        durationMinutes: 60,
+        calendarName: 'Primary'
+      }
+      return {
+        arguments: { ...args },
+        message: `Cancel "${query}"? Approval needed.`,
+        display: query,
+        card: card as unknown as Record<string, unknown>
+      }
+    },
     async run(args, ctx) {
       const action = 'cancel a meeting'
       const skipped = dryRun(ctx, action, 'calendar_cancel_event')

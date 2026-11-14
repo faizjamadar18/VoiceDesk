@@ -639,3 +639,437 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ---- Google Calendar Preview / Confirmation Modal ---- */
+.kestrel-calendar-card {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: #202124;
+  border: 1px solid rgba(232, 234, 237, 0.12);
+  border-radius: 26px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.15);
+  color: #e8eaed;
+  font-family: 'Google Sans', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.kestrel-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 42px;
+  padding: 0 12px 0 16px;
+  background: #292a2d;
+  border-bottom: 1px solid rgba(232, 234, 237, 0.08);
+  flex-shrink: 0;
+}
+
+.kestrel-calendar-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kestrel-calendar-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.kestrel-calendar-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ffffff;
+  min-width: 0;
+}
+
+.kestrel-calendar-account-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #4285f4;
+  flex-shrink: 0;
+}
+
+.kestrel-calendar-account-name {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kestrel-calendar-chevron {
+  color: #9aa0a6;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.kestrel-calendar-close-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  outline: none;
+  border-radius: 50%;
+  background: rgba(120, 120, 128, 0.32);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 150ms ease;
+}
+
+.kestrel-calendar-close-btn:hover:not(:disabled) {
+  background: rgba(120, 120, 128, 0.5);
+}
+
+.kestrel-calendar-close-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.kestrel-calendar-body {
+  display: flex;
+  flex-direction: row;
+  padding: 0 0 0 16px;
+  gap: 0;
+}
+
+.kestrel-calendar-form {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  padding-right: 6px;
+  padding-bottom: 16px;
+}
+
+.kestrel-calendar-title-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #4285f4;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 500;
+  padding: 4px 0 8px;
+  outline: none;
+  font-family: inherit;
+}
+
+.kestrel-calendar-title-input::placeholder {
+  color: #9aa0a6;
+}
+
+.kestrel-calendar-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.kestrel-calendar-field-icon {
+  color: #9aa0a6;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.kestrel-calendar-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8ab4f8;
+  background: rgba(138, 180, 248, 0.08);
+  border: 1px solid rgba(232, 234, 237, 0.08);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.kestrel-calendar-picker-btn:hover {
+  background: rgba(138, 180, 248, 0.12);
+}
+
+.kestrel-calendar-picker-btn.is-active {
+  border-color: #8ab4f8;
+}
+
+.kestrel-calendar-for-label {
+  color: #5f6368;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.kestrel-calendar-dropdown-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.kestrel-calendar-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: #292a2d;
+  border: 1px solid rgba(232, 234, 237, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.kestrel-calendar-dropdown-item {
+  width: 100%;
+  display: block;
+  padding: 6px 12px;
+  color: #e8eaed;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.kestrel-calendar-dropdown-item:hover {
+  background: #35363a;
+}
+
+.kestrel-calendar-dropdown-item.is-selected {
+  background: rgba(138, 180, 248, 0.14);
+  color: #8ab4f8;
+  font-weight: 500;
+}
+
+.kestrel-calendar-month-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 24px;
+  z-index: 20;
+  background: #292a2d;
+  border: 1px solid rgba(232, 234, 237, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  width: 220px;
+}
+
+.kestrel-calendar-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.kestrel-calendar-month-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.kestrel-calendar-month-nav {
+  background: transparent;
+  border: none;
+  color: #9aa0a6;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.kestrel-calendar-month-nav:hover {
+  background: #35363a;
+}
+
+.kestrel-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.kestrel-calendar-weekday {
+  font-size: 10px;
+  color: #5f6368;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.kestrel-calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.kestrel-calendar-day.is-pad {
+  width: 26px;
+  height: 26px;
+}
+
+.kestrel-calendar-day-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  color: #e8eaed;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 100ms ease;
+}
+
+.kestrel-calendar-day-btn:hover:not(.is-selected) {
+  background: #35363a;
+}
+
+.kestrel-calendar-day-btn.is-selected {
+  background: #8ab4f8;
+  color: #202124;
+  font-weight: 600;
+}
+
+.kestrel-calendar-timeline-col {
+  width: 160px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.kestrel-gcal-timeline {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 140px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kestrel-gcal-axis {
+  width: 36px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.kestrel-gcal-axis-hour {
+  position: absolute;
+  right: 4px;
+  font-size: 9px;
+  color: #5f6368;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.kestrel-gcal-grid {
+  flex: 1;
+  position: relative;
+  border-left: 1px solid rgba(232, 234, 237, 0.12);
+  overflow: hidden;
+}
+
+.kestrel-gcal-grid-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(232, 234, 237, 0.08);
+}
+
+.kestrel-gcal-event-block {
+  position: absolute;
+  left: 2px;
+  right: 4px;
+  border-radius: 4px;
+  padding: 2px 4px;
+  box-sizing: border-box;
+  border-left-width: 3px;
+  border-left-style: solid;
+  overflow: hidden;
+  z-index: 2;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.kestrel-gcal-event-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  line-height: 1.3;
+}
+
+.kestrel-calendar-action-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.kestrel-calendar-save-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 15px;
+  background: #8ab4f8;
+  color: #202124;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.kestrel-calendar-save-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
