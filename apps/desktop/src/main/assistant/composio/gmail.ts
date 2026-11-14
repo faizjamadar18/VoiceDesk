@@ -375,6 +375,127 @@ function normaliseForMatch(value: string): string {
     .trim()
 }
 
+/** Words that carry no search signal in a spoken email description. */
+const EMAIL_STOPWORDS: ReadonlySet<string> = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'the',
+  'for',
+  'from',
+  'to',
+  'of',
+  'in',
+  'on',
+  'at',
+  'my',
+  'mine',
+  'me',
+  'i',
+  'you',
+  'your',
+  'email',
+  'emails',
+  'mail',
+  'gmail',
+  'reply',
+  'respond',
+  'responding',
+  'regarding',
+  'about',
+  're',
+  'fwd',
+  'fw',
+  'please',
+  'can',
+  'could',
+  'would',
+  'just',
+  'latest',
+  'recent',
+  'new',
+  'message',
+  'messages',
+  'send',
+  'sent',
+  'wrote',
+  'says',
+  'saying',
+  'this',
+  'that',
+  'with'
+])
+
+/**
+ * Content terms from a spoken email description, lowercased, deduped, and in
+ * spoken order. Short words and search stopwords are dropped.
+ */
+export function emailSearchTerms(query: string): string[] {
+  const seen = new Set<string>()
+  const terms: string[] = []
+  for (const token of normaliseForMatch(query).split(' ')) {
+    if (token.length < 3 || EMAIL_STOPWORDS.has(token) || seen.has(token)) {
+      continue
+    }
+    seen.add(token)
+    terms.push(token)
+  }
+  return terms
+}
+
+/** `shortlisting` and `shortlisted` both stem to `shortlist`. */
+function stemTerm(term: string): string {
+  for (const suffix of ['ing', 'ed', 'es', 's']) {
+    if (!term.endsWith(suffix)) continue
+    const stem = term.slice(0, -suffix.length)
+    if (stem.length >= 4) return stem
+  }
+  return term
+}
+
+/** 2 points for an exact substring and 1 for a stemmed one. */
+function emailMatchScore(
+  message: EmailMessage,
+  terms: readonly string[]
+): number {
+  const fields = [message.sender, message.subject, message.snippet]
+  let score = 0
+  for (const rawTerm of terms) {
+    const term = rawTerm.toLowerCase()
+    const stem = stemTerm(term)
+    for (const field of fields) {
+      const lowered = field.toLowerCase()
+      if (lowered.includes(term)) {
+        score += 2
+      } else if (stem !== term && lowered.includes(stem)) {
+        score += 1
+      }
+    }
+  }
+  return score
+}
+
+/**
+ * Messages that overlap the search terms, best first: higher overlap wins,
+ * then newest-first. Messages with no overlap are dropped.
+ */
+export function rankEmailsForQuery(
+  messages: readonly EmailMessage[],
+  terms: readonly string[]
+): EmailMessage[] {
+  if (terms.length === 0) return []
+  return sortNewestFirst(messages)
+    .map((message, index) => ({
+      message,
+      index,
+      score: emailMatchScore(message, terms)
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.message)
+}
+
 /**
  * The email addresses in `messages` that belong to `name`: a candidate
  * matches when its display name contains the query, or its address (local
@@ -523,7 +644,7 @@ const SEND_DESCRIPTION =
   'Send a new email with a subject and body; pass an address or just a name.'
 
 const REPLY_DESCRIPTION =
-  'Reply to an existing email by search words or position, newest is 1.'
+  'Draft a reply to an existing email for the user to review and copy; never sends.'
 
 const DRAFT_DESCRIPTION =
   'Save an email draft without sending it; pass an address or just a name.'
@@ -537,20 +658,20 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
   )
 
   /**
-   * Resolve one email from the inbox: list with the built query, order newest
-   * first, collapse threads, then pick by 1-based position.
+   * One Gmail list call: build the query, order newest first, and collapse
+   * threads. A provider error is passed through untouched.
    */
-  async function locateMessage(
+  async function searchMessages(
     query: string | null,
+    maxResults: number,
     unreadOnly: boolean,
-    position: number,
     action: string
   ): Promise<
-    { ok: true; message: EmailMessage } | { ok: false; outcome: ToolOutcome }
+    { ok: true; messages: EmailMessage[] } | { ok: false; outcome: ToolOutcome }
   > {
     const callArgs: Record<string, unknown> = {
       user_id: 'me',
-      max_results: LIST_FETCH,
+      max_results: maxResults,
       verbose: true,
       include_payload: false
     }
@@ -560,9 +681,49 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
     const listed = await invoke(SLUG.list, callArgs, action)
     if (!listed.ok) return { ok: false, outcome: listed.outcome }
 
-    const messages = collapseThreads(
-      sortNewestFirst(extractEmails(listed.data))
-    )
+    return {
+      ok: true,
+      messages: collapseThreads(sortNewestFirst(extractEmails(listed.data)))
+    }
+  }
+
+  /**
+   * Resolve one email from the inbox. The first search uses the query exactly
+   * as before; when it finds nothing, its content words are searched and then
+   * a broad recent window is ranked client-side, so a spoken phrase still
+   * matches the written email.
+   */
+  async function locateMessage(
+    query: string | null,
+    unreadOnly: boolean,
+    position: number,
+    action: string
+  ): Promise<
+    { ok: true; message: EmailMessage } | { ok: false; outcome: ToolOutcome }
+  > {
+    const first = await searchMessages(query, LIST_FETCH, unreadOnly, action)
+    if (!first.ok) return first
+
+    let messages = first.messages
+    if (messages.length === 0 && query !== null) {
+      const terms = emailSearchTerms(query)
+      if (terms.length > 0) {
+        const second = await searchMessages(
+          terms.join(' '),
+          LIST_FETCH,
+          unreadOnly,
+          action
+        )
+        if (!second.ok) return second
+        messages = rankEmailsForQuery(second.messages, terms)
+        if (messages.length === 0) {
+          const broad = await searchMessages(null, 50, unreadOnly, action)
+          if (!broad.ok) return broad
+          messages = rankEmailsForQuery(broad.messages, terms)
+        }
+      }
+    }
+
     const selected = selectEmail(messages, position)
     if (selected === null) {
       const message =
@@ -579,11 +740,14 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
     return { ok: true, message: selected }
   }
 
-  /** Best-effort thread size; never fails the surrounding call. */
-  async function threadCount(
+  /**
+   * Best-effort thread size and newest readable body; never fails the
+   * surrounding call.
+   */
+  async function threadContents(
     threadId: string,
     action: string
-  ): Promise<number | null> {
+  ): Promise<{ count: number; body: string } | null> {
     try {
       const fetched = await invoke(
         SLUG.thread,
@@ -592,7 +756,16 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
       )
       if (!fetched.ok) return null
       const messages = messageArray(unwrap(fetched.data))
-      return messages === null ? null : messages.length
+      if (messages === null) return null
+      let body = ''
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const text = extractEmailBody(messages[index])
+        if (text.trim() !== '') {
+          body = text
+          break
+        }
+      }
+      return { count: messages.length, body }
     } catch {
       return null
     }
@@ -967,9 +1140,13 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
         {
           query: {
             type: 'string',
-            description: 'The email to reply to, as the user described it.'
+            description:
+              'Short identifying words: sender name, subject, or topic.'
           },
-          message: { type: 'string', description: 'The reply text.' },
+          message: {
+            type: 'string',
+            description: 'The reply text, when the user dictated one.'
+          },
           unread_only: {
             type: 'boolean',
             description: 'Only consider unread emails.'
@@ -977,26 +1154,21 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
           position: {
             type: 'integer',
             description: 'Which one, newest first. 1 is the newest.'
-          },
-          recipient: {
-            type: 'string',
-            description: 'Override the reply address, optional.'
           }
         },
-        ['message']
+        []
       ),
       'write',
       true,
-      'reply to an email'
+      'draft a reply'
     ),
     async prepare(args, ctx): Promise<ToolPreparation> {
-      const action = 'reply to an email'
+      const action = 'draft a reply'
       if (ctx.dryRun) return { arguments: { ...args } }
 
       const query = optionalString(args, 'query')
       const unreadOnly = flag(args, 'unread_only')
       const position = optionalInteger(args, 'position') ?? 1
-      const body = optionalString(args, 'message') ?? ''
 
       const located = await locateMessage(query, unreadOnly, position, action)
       if (!located.ok) return { arguments: { ...args }, outcome: located.outcome }
@@ -1026,19 +1198,32 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
         }
       }
 
-      const explicit = optionalString(args, 'recipient')
-      let recipient: string | null
-      if (explicit !== null) {
-        const resolved = await resolveRecipient(explicit, action)
-        if (!resolved.ok) {
-          return { arguments: { ...args }, outcome: resolved.outcome }
+      const thread = await threadContents(threadId, action)
+      const draft = optionalString(args, 'message') ?? ''
+      let written: string | null = null
+      if (ctx.composeEmailReply !== undefined) {
+        // The thread listing sometimes carries only ids and snippets; fetch
+        // the original message so the reply is grounded in real text.
+        let sourceBody = thread?.body ?? ''
+        if (sourceBody.trim() === '') {
+          const full = await invoke(
+            SLUG.read,
+            { message_id: original.id, user_id: 'me', format: 'full' },
+            action
+          )
+          if (full.ok) sourceBody = extractEmailBody(full.data)
         }
-        recipient = resolved.email
-      } else {
-        recipient = senderEmail(original)
+        written = await ctx.composeEmailReply({
+          sender: original.sender,
+          subject: original.subject,
+          body: sourceBody,
+          instruction: ctx.transcript ?? '',
+          draft
+        })
       }
-      if (recipient === null) {
-        const message = 'I need an email address to reply to.'
+      const body = (written ?? draft).trim()
+      if (body === '') {
+        const message = 'I need the reply text.'
         return {
           arguments: { ...args },
           outcome: {
@@ -1050,71 +1235,30 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
         }
       }
 
-      const count = await threadCount(threadId, action)
-      const subject = original.subject
-      const card: Record<string, unknown> = {
-        kind: 'email_compose',
-        mode: 'reply',
-        title: 'Reply',
-        to: [recipient],
-        cc: [],
-        bcc: [],
-        subject,
-        body,
-        threadCount: count
-      }
-      const sender = original.sender === '' ? 'them' : original.sender
+      // A reply is review-only: the card carries the drafted text so the user
+      // can edit and copy it. Nothing is sent from here.
       return {
-        arguments: {
-          ...args,
-          thread_id: threadId,
-          recipient_email: recipient,
-          message_body: body,
-          subject,
-          sender
-        },
-        message: `Reply to "${subject}" from ${sender}? Approval needed.`,
-        display: recipient,
-        card
+        arguments: { ...args },
+        outcome: {
+          status: 'ok',
+          action,
+          message: '',
+          spokenResponse: null,
+          card: {
+            kind: 'email_reply',
+            title: 'Reply drafted',
+            body,
+            threadCount: thread?.count ?? null
+          }
+        }
       }
     },
-    async run(args, ctx) {
-      const action = 'reply to an email'
+    async run(_args, ctx) {
+      const action = 'draft a reply'
       const skipped = dryRun(ctx, action, 'gmail_reply_email')
       if (skipped !== null) return skipped
-
-      const threadId = optionalString(args, 'thread_id')
-      const recipient = parseEmailAddress(optionalString(args, 'recipient_email'))
-      const body =
-        optionalString(args, 'message_body') ??
-        optionalString(args, 'message') ??
-        ''
-      if (threadId === null || recipient === null) {
-        const message = "I couldn't find that email."
-        return { status: 'error', action, message, spokenResponse: message }
-      }
-
-      const replied = await invoke(
-        SLUG.reply,
-        {
-          user_id: 'me',
-          thread_id: threadId,
-          recipient_email: recipient,
-          message_body: body
-        },
-        action
-      )
-      if (!replied.ok) return replied.outcome
-
-      const sender = optionalString(args, 'sender') ?? recipient
-      const subject = optionalString(args, 'subject') ?? 'no subject'
-      const message = `Replied to "${subject}" from ${sender}.`
-      return {
-        status: 'ok',
-        action,
-        message,
-        spokenResponse: truncate(message, SPOKEN_LIMIT)
-      }
+      const message = 'Replies are drafts; nothing was sent.'
+      return { status: 'error', action, message, spokenResponse: message }
     }
   }
 

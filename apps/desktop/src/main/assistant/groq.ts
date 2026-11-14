@@ -187,6 +187,9 @@ export class GroqClient implements LlmClient {
             'If the user names a person instead of an address, pass that ' +
             'name as the recipient and let the tool look it up; never ' +
             'invent, guess, or complete an email address yourself. ' +
+            'For email reply, read, or list searches, pass only identifying ' +
+            'keywords (sender, subject, or topic), never the full spoken ' +
+            'sentence. ' +
             'When the user does not dictate the text, write the subject and the ' +
             'whole body yourself in a short, natural, professional tone, ' +
             'greeting by name when it is known and signing off with the ' +

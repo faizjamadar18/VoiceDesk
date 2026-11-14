@@ -530,7 +530,7 @@ export function VoiceOsBottomHint({ keys }: { keys: string[] }): ReactNode {
         boxSizing: "border-box"
       }}
     >
-      <span>Hold</span>
+      <span>Type or hold</span>
       {keys.map((key, index) => (
         <kbd key={`${key}-${index}`} className="agent-notch-keycap">
           {key}

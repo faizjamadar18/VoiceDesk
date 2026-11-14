@@ -1,18 +1,28 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   NOTCH_ANSWER_MAX_HEIGHT_PX,
   applyNotchHistoryRestore,
-  computeNotchRegion
+  computeNotchRegion,
+  deriveNotchCards,
+  deriveShowBottomHint
 } from './Notch'
 import { VoiceOsPrompt, VoiceOsAnswer } from './voiceos-notch/markdown'
 import { deriveNotchPresentation } from './voiceos-notch/notch-ui'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GmailComposeCard } from './components/GmailComposeCard'
+import { EmailReplyCard } from './components/EmailReplyCard'
+import { GoogleDriveCard } from './components/GoogleDriveCard'
 import { deriveCardFromDecisionOrMessage } from './card-derivation'
-import type { HistoryRestorePayload, NotchDecision } from '../../shared/types'
+import type {
+  HistoryRestorePayload,
+  NotchDecision,
+  NotchDecisionAction,
+  NotchDriveCard,
+  NotchEmailReplyCard
+} from '../../shared/types'
 
 describe('Notch history restore', () => {
   it('exports NOTCH_ANSWER_MAX_HEIGHT_PX as 340', () => {
@@ -295,6 +305,178 @@ describe('Notch history restore', () => {
       expect(cardHtml).toContain('team@company.com')
     })
 
+    it('renders the reply draft card and suppresses the generic decision', () => {
+      const card: NotchEmailReplyCard = {
+        kind: 'email_reply',
+        title: 'Reply drafted',
+        body: 'Hi Faiz, thanks for the update.',
+        threadCount: 2
+      }
+      const emptyDerived = {
+        calendarCard: null,
+        emailComposeCard: null,
+        driveCard: null
+      }
+
+      const resolved = deriveNotchCards(card, emptyDerived)
+
+      expect(resolved.emailReply).toEqual(card)
+      expect(resolved.emailCompose).toBeNull()
+      expect(resolved.hasPreviewModel).toBe(true)
+
+      const cardHtml = renderToStaticMarkup(
+        createElement(EmailReplyCard, {
+          card: resolved.emailReply!,
+          onCopy: () => {}
+        })
+      )
+      expect(cardHtml).toContain('Reply drafted')
+      expect(cardHtml).toContain('Hi Faiz, thanks for the update.')
+      expect(cardHtml).toContain('Copy to Clipboard')
+    })
+
+    it('derives GoogleDriveCard when drive action is requested and suppresses generic card and text bubble', () => {
+      const message = 'Create "Quarterly Report" in Google Drive? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-drive-1',
+        target: 'Quarterly Report',
+        busy: false
+      }
+      const transcript = 'create a new document in google drive called Quarterly Report'
+
+      const derivedCards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript
+      })
+
+      expect(derivedCards.driveCard).not.toBeNull()
+      expect(derivedCards.driveCard?.name).toBe('Quarterly Report')
+
+      const resolved = deriveNotchCards(null, derivedCards)
+      expect(resolved.driveCard).not.toBeNull()
+      expect(resolved.driveCard?.name).toBe('Quarterly Report')
+      expect(resolved.hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const answer = message.trim()
+      const showAnswer = showCards && answer.length > 0 && !resolved.hasPreviewModel
+      const showGenericDecision = showCards && decision !== null && !resolved.hasPreviewModel
+
+      // Text bubble is suppressed when preview model is active
+      expect(showAnswer).toBe(false)
+      // Generic confirm/cancel card is suppressed when preview model is active
+      expect(showGenericDecision).toBe(false)
+      // Cards are shown once synthesizing finishes
+      expect(showCards).toBe(true)
+
+      // Render the GoogleDriveCard to verify it renders with title and action
+      const cardHtml = renderToStaticMarkup(
+        createElement(GoogleDriveCard, {
+          card: resolved.driveCard!,
+          busy: decision.busy,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('Quarterly Report')
+      expect(cardHtml).toContain('Create Document')
+    })
+
+    it('renders GoogleDriveCard when card is explicit NotchDriveCard and suppresses generic card', () => {
+      const card: NotchDriveCard = {
+        kind: 'drive_file',
+        mode: 'create',
+        format: 'spreadsheet',
+        name: 'Q3 Financials.xlsx',
+        folder: 'Finance'
+      }
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-drive-2',
+        target: 'Q3 Financials.xlsx',
+        busy: false
+      }
+
+      const emptyDerived = {
+        calendarCard: null,
+        emailComposeCard: null,
+        driveCard: null
+      }
+
+      const resolved = deriveNotchCards(card, emptyDerived)
+      expect(resolved.driveCard).toEqual(card)
+      expect(resolved.hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const showGenericDecision = showCards && decision !== null && !resolved.hasPreviewModel
+      expect(showGenericDecision).toBe(false)
+
+      const cardHtml = renderToStaticMarkup(
+        createElement(GoogleDriveCard, {
+          card: resolved.driveCard!,
+          busy: decision.busy,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('Q3 Financials.xlsx')
+      expect(cardHtml).toContain('Create Spreadsheet')
+    })
+
+    it('invokes appropriate decision callback when confirming or discarding GoogleDriveCard', () => {
+      const decide = vi.fn()
+      const card: NotchDriveCard = {
+        kind: 'drive_file',
+        mode: 'create',
+        format: 'document',
+        name: 'Meeting Minutes.gdoc',
+        content: '# Minutes'
+      }
+
+      // Handler wiring from Notch.tsx:
+      // onConfirm={() => decide('confirm')}
+      // onDiscard={() => decide('cancel')}
+      const onConfirm = (_data?: { name: string; content?: string }) => decide('confirm')
+      const onDiscard = () => decide('cancel')
+
+      onConfirm({ name: card.name, content: card.content })
+      expect(decide).toHaveBeenCalledTimes(1)
+      expect(decide).toHaveBeenCalledWith('confirm')
+
+      onDiscard()
+      expect(decide).toHaveBeenCalledTimes(2)
+      expect(decide).toHaveBeenCalledWith('cancel')
+    })
+
+    it('does not invoke decision callback when decision is busy', () => {
+      const decideNotch = vi.fn()
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-busy',
+        target: 'Doc.gdoc',
+        busy: true
+      }
+      const decide = (action: NotchDecisionAction): void => {
+        if (decision.busy) return
+        decideNotch(action)
+      }
+
+      const onConfirm = () => decide('confirm')
+      const onDiscard = () => decide('cancel')
+
+      onConfirm()
+      expect(decideNotch).not.toHaveBeenCalled()
+
+      onDiscard()
+      expect(decideNotch).not.toHaveBeenCalled()
+    })
+
     it('gates card rendering and answer display on speech synthesis completion', () => {
       const isSynthesizing = true
       const phase = 'result'
@@ -325,17 +507,33 @@ describe('Notch history restore', () => {
 
       expect(derivedCards.calendarCard).toBeNull()
       expect(derivedCards.emailComposeCard).toBeNull()
+      expect(derivedCards.driveCard).toBeNull()
 
-      const hasPreviewModel = derivedCards.calendarCard !== null || derivedCards.emailComposeCard !== null
-      expect(hasPreviewModel).toBe(false)
+      const resolved = deriveNotchCards(null, derivedCards)
+      expect(resolved.hasPreviewModel).toBe(false)
 
       const isSynthesizing = false
       const phase = 'result'
       const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
-      const showGenericDecision = showCards && decision !== null && !hasPreviewModel
+      const showGenericDecision = showCards && decision !== null && !resolved.hasPreviewModel
 
       // Generic card is permitted for file deletion actions
       expect(showGenericDecision).toBe(true)
+    })
+
+    it('returns true for showBottomHint when hasPreviewModel is true', () => {
+      expect(
+        deriveShowBottomHint({
+          isEditingText: false,
+          phase: 'result',
+          showCards: true,
+          showAnswer: false,
+          results: null,
+          weather: null,
+          emailList: null,
+          hasPreviewModel: true
+        })
+      ).toBe(true)
     })
   })
 })

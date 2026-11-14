@@ -83,13 +83,13 @@ describe('voiceos-notch UI', () => {
   })
 
   describe('VoiceOsBottomHint', () => {
-    it('renders Hold [Ctrl] [Space] to speak inside .agent-notch-composer', () => {
+    it('renders Type or hold [Ctrl] [Space] to speak inside .agent-notch-composer', () => {
       const html = renderToStaticMarkup(
         createElement(VoiceOsBottomHint, { keys: ['Ctrl', 'Space'] })
       )
 
       expect(html).toContain('class="agent-notch-composer"')
-      expect(html).toContain('Hold')
+      expect(html).toContain('Type or hold')
       expect(html).toContain('<kbd class="agent-notch-keycap">Ctrl</kbd>')
       expect(html).toContain('<kbd class="agent-notch-keycap">Space</kbd>')
       expect(html).toContain('to speak')

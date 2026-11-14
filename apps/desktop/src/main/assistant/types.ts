@@ -93,6 +93,15 @@ export interface WeatherClientLike {
   fetch(location: string): Promise<WeatherResult>
 }
 
+/** Everything the model needs to write a contextual email reply body. */
+export interface EmailReplyRequest {
+  sender: string
+  subject: string
+  body: string
+  instruction: string
+  draft: string
+}
+
 export interface ToolContext {
   executor: ActionExecutor
   clock: () => Date
@@ -102,6 +111,8 @@ export interface ToolContext {
   fileSearch: FileSearch
   weather: WeatherClientLike
   transcript?: string
+  /** Writes an email reply body, or null when the model is unavailable. */
+  composeEmailReply?: (input: EmailReplyRequest) => Promise<string | null>
 }
 
 export interface Tool {

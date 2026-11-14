@@ -640,6 +640,94 @@ body {
   cursor: default;
 }
 
+/* ---- Reply draft (VoiceOS editable review card) ---- */
+.kestrel-reply-draft {
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+  color: #f2f2f2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.kestrel-reply-draft-title {
+  padding: 10px 14px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #f5f5f7;
+}
+
+.kestrel-reply-draft-rule {
+  height: 1px;
+  margin: 0 14px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.kestrel-reply-draft-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
+  max-height: 260px;
+  padding: 12px 14px;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: #f2f2f2;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kestrel-reply-draft-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 12px;
+}
+
+.kestrel-reply-draft-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e5e7;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+
+.kestrel-reply-draft-copy:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.kestrel-reply-draft-copy.is-copied {
+  color: #8ab4f8;
+  border-color: rgba(138, 180, 248, 0.35);
+}
+
+.kestrel-reply-draft-copy:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* ---- Google Calendar Preview / Confirmation Modal ---- */
 .kestrel-calendar-card {
   position: relative;

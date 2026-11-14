@@ -59,7 +59,7 @@ interface FakeWindow {
 }
 
 function fakeWindow(options: { focused?: boolean } = {}): FakeWindow {
-  let bounds = { x: 630, y: 0, width: 660, height: NOTCH_HEIGHT }
+  let bounds = { x: 600, y: 0, width: 720, height: NOTCH_HEIGHT }
   const setIgnoreMouseEvents = vi.fn()
   const setAlwaysOnTop = vi.fn()
   const moveTop = vi.fn()
@@ -181,9 +181,9 @@ describe('notchBounds', () => {
     electronState.bounds = { x: 100, y: 50, width: 1_920, height: 1_080 }
     const bounds = notchBounds(300)
     expect(bounds).toEqual({
-      x: 100 + Math.round((1_920 - 660) / 2),
+      x: 100 + Math.round((1_920 - 720) / 2),
       y: 50,
-      width: 660,
+      width: 720,
       height: 300
     })
   })
@@ -193,9 +193,9 @@ describe('notchBounds', () => {
     electronState.cursor = { x: -500, y: 200 }
     const bounds = notchBounds(300)
     expect(bounds).toEqual({
-      x: Math.round((1_920 - 660) / 2),
+      x: Math.round((1_920 - 720) / 2),
       y: 0,
-      width: 660,
+      width: 720,
       height: 300
     })
   })
@@ -208,9 +208,9 @@ describe('notchBounds', () => {
     } as unknown as Electron.Display
     const bounds = notchBounds(300, secondaryDisplay)
     expect(bounds).toEqual({
-      x: 1920 + Math.round((2560 - 660) / 2),
+      x: 1920 + Math.round((2560 - 720) / 2),
       y: 0,
-      width: 660,
+      width: 720,
       height: 300
     })
   })
@@ -367,13 +367,13 @@ describe('NotchWindowPresenter interaction & dismissal', () => {
     // When region is null, isPointInside returns false
     expect(presenter.isPointInside(650, 50)).toBe(false)
 
-    // Notch window bounds in fakeWindow: x: 630, y: 0, width: 660, height: 300
+    // Notch window bounds in fakeWindow: x: 600, y: 0, width: 720, height: 300
     // Set interactive region at left: 20, top: 0, width: 520, height: 100
-    // Screen bounds of interactive region: x: 630 + 20 = 650 to 1170, y: 0 to 100
+    // Screen bounds of interactive region: x: 600 + 20 = 620 to 1140, y: 0 to 100
     presenter.setRegion({ left: 20, top: 0, width: 520, height: 100 })
 
     expect(presenter.isPointInside(700, 50)).toBe(true)
-    expect(presenter.isPointInside(640, 50)).toBe(false)
+    expect(presenter.isPointInside(610, 50)).toBe(false)
     expect(presenter.isPointInside(700, 150)).toBe(false)
 
     // When hidden, returns false
@@ -411,7 +411,7 @@ describe('NotchWindowPresenter interaction & dismissal', () => {
     } as unknown as Electron.Display
 
     presenter.reposition(secondaryDisplay)
-    expect(target.win.getBounds().x).toBe(1920 + Math.round((2560 - 660) / 2))
+    expect(target.win.getBounds().x).toBe(1920 + Math.round((2560 - 720) / 2))
     presenter.dispose()
   })
 

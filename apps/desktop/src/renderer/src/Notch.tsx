@@ -14,8 +14,10 @@ import {
   type NotchDecision,
   type NotchDecisionAction,
   type NotchEmailComposeCard,
+  type NotchEmailReplyCard,
   type NotchEmailListCard,
   type NotchCalendarCard,
+  type NotchDriveCard,
   type NotchFileResult,
   type NotchPhase,
   type NotchWeatherCard,
@@ -26,7 +28,9 @@ import {
 import { SpeechPlayer } from './voice/speech-player'
 import { WebAudioSink } from './voice/web-audio-sink'
 import { GmailComposeCard } from './components/GmailComposeCard'
+import { EmailReplyCard } from './components/EmailReplyCard'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
+import { GoogleDriveCard } from './components/GoogleDriveCard'
 import { deriveCardFromDecisionOrMessage } from './card-derivation'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
@@ -683,6 +687,63 @@ export function computeNotchRegion(
  * Kestrel's `NotchPhase` onto the VoiceOS notch modes and drops Kestrel's
  * content into the expanded body.
  */
+export function deriveShowBottomHint(params: {
+  isEditingText: boolean
+  phase: string
+  showCards: boolean
+  showAnswer: boolean
+  results: unknown
+  weather: unknown
+  emailList: unknown
+  hasPreviewModel: boolean
+}): boolean {
+  return (
+    !params.isEditingText &&
+    params.phase !== 'listening' &&
+    params.showCards &&
+    (params.showAnswer ||
+      params.results !== null ||
+      params.weather !== null ||
+      params.emailList !== null ||
+      params.hasPreviewModel)
+  )
+}
+
+export interface NotchResolvedCards {
+  emailCompose: NotchEmailComposeCard | null
+  emailReply: NotchEmailReplyCard | null
+  calendarEvent: NotchCalendarCard | null
+  driveCard: NotchDriveCard | null
+  hasPreviewModel: boolean
+}
+
+export function deriveNotchCards(
+  card: NotchCard | null,
+  derivedCards: ReturnType<typeof deriveCardFromDecisionOrMessage>
+): NotchResolvedCards {
+  const emailCompose =
+    card?.kind === 'email_compose'
+      ? (card as NotchEmailComposeCard)
+      : derivedCards.emailComposeCard
+  const emailReply =
+    card?.kind === 'email_reply' ? (card as NotchEmailReplyCard) : null
+  const calendarEvent =
+    card?.kind === 'calendar_event'
+      ? (card as NotchCalendarCard)
+      : derivedCards.calendarCard
+  const driveCard =
+    card?.kind === 'drive_file'
+      ? (card as NotchDriveCard)
+      : derivedCards.driveCard
+  const hasPreviewModel =
+    emailCompose !== null ||
+    emailReply !== null ||
+    calendarEvent !== null ||
+    driveCard !== null
+
+  return { emailCompose, emailReply, calendarEvent, driveCard, hasPreviewModel }
+}
+
 export default function Notch(): JSX.Element {
   const [phase, setPhase] = useState<NotchPhase>('listening')
   const [transcript, setTranscript] = useState('')
@@ -1238,15 +1299,8 @@ export default function Notch(): JSX.Element {
     decision,
     transcript
   })
-  const emailCompose =
-    card?.kind === 'email_compose'
-      ? (card as NotchEmailComposeCard)
-      : derivedCards.emailComposeCard
-  const calendarEvent =
-    card?.kind === 'calendar_event'
-      ? (card as NotchCalendarCard)
-      : derivedCards.calendarCard
-  const hasPreviewModel = emailCompose !== null || calendarEvent !== null
+  const { emailCompose, emailReply, calendarEvent, driveCard, hasPreviewModel } =
+    deriveNotchCards(card, derivedCards)
 
   const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
   const showAnswer = showCards && answer.length > 0 && !hasPreviewModel
@@ -1261,14 +1315,16 @@ export default function Notch(): JSX.Element {
         weather !== null ||
         emailList !== null ||
         hasPreviewModel))
-  const showBottomHint =
-    !isEditingText &&
-    phase !== 'listening' &&
-    decision === null &&
-    !hasPreviewModel &&
-    showCards &&
-    (showAnswer || results !== null || weather !== null) &&
-    emailList === null
+  const showBottomHint = deriveShowBottomHint({
+    isEditingText,
+    phase,
+    showCards,
+    showAnswer,
+    results,
+    weather,
+    emailList,
+    hasPreviewModel
+  })
 
   const presentation = deriveNotchPresentation({
     phase: isEditingText ? 'result' : phase,
@@ -1352,6 +1408,13 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
+      {showCards && emailReply && (
+        <EmailReplyCard
+          card={emailReply}
+          onCopy={(text) => window.kestrel?.copyToClipboard(text)}
+        />
+      )}
+
       {showCards && emailCompose && (
         <GmailComposeCard
           card={emailCompose}
@@ -1365,6 +1428,15 @@ export default function Notch(): JSX.Element {
       {showCards && calendarEvent && (
         <GoogleCalendarCard
           card={calendarEvent}
+          busy={decision?.busy}
+          onConfirm={() => decide('confirm')}
+          onDiscard={() => decide('cancel')}
+        />
+      )}
+
+      {showCards && driveCard && (
+        <GoogleDriveCard
+          card={driveCard}
           busy={decision?.busy}
           onConfirm={() => decide('confirm')}
           onDiscard={() => decide('cancel')}

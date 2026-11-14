@@ -626,3 +626,57 @@ describe('AssistantService tool chaining and synthesis', () => {
     expect(response.spokenResponse).toBe('Raw note content')
   })
 })
+
+describe('AssistantService email reply composition', () => {
+  it('gives a tool prepare the LLM-written reply body', async () => {
+    const registry = new ToolRegistry()
+    const tool = makeWriteTool('gmail_reply_email', async (args, ctx) => {
+      const written = await ctx.composeEmailReply!({
+        sender: 'Sam',
+        subject: 'Meeting',
+        body: 'Can you make it?',
+        instruction: 'reply and say yes',
+        draft: ''
+      })
+      const body = written ?? ''
+      return {
+        arguments: { ...args },
+        outcome: {
+          status: 'ok',
+          action: 'draft a reply',
+          message: '',
+          spokenResponse: null,
+          card: { kind: 'email_reply', title: 'Reply drafted', body }
+        }
+      }
+    })
+    registry.register(tool)
+
+    const fakeClient = {
+      choose: vi.fn().mockResolvedValue({
+        calls: [],
+        content: 'Yes, I will be there.'
+      })
+    }
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('gmail_reply_email'),
+      client: fakeClient
+    })
+
+    const response = await service.act('reply saying yes')
+
+    expect(fakeClient.choose).toHaveBeenCalledTimes(1)
+    const [prompt, specs] = fakeClient.choose.mock.calls[0]
+    expect(specs).toEqual([])
+    expect(prompt).toContain('Can you make it?')
+    expect(prompt).toContain('reply and say yes')
+    expect(response.status).toBe('ok')
+    expect(response.planId).toBeNull()
+    expect(response.card).toMatchObject({
+      kind: 'email_reply',
+      title: 'Reply drafted',
+      body: 'Yes, I will be there.'
+    })
+  })
+})

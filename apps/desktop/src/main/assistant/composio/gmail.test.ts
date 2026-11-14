@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import type { Tool, ToolContext } from '../types'
+import { describe, expect, it, vi } from 'vitest'
+import type { EmailReplyRequest, Tool, ToolContext } from '../types'
 import {
   collapseThreads,
   createGmailTools,
+  emailSearchTerms,
   extractEmailBody,
   messageTime,
+  rankEmailsForQuery,
   selectEmail,
   sortNewestFirst
 } from './gmail'
@@ -341,6 +343,62 @@ describe('email ordering helpers', () => {
   })
 })
 
+describe('email search helpers', () => {
+  it('keeps content terms in order and drops stopwords', () => {
+    expect(
+      emailSearchTerms('Can you reply to the congratulations for shortlisting email?')
+    ).toEqual(['congratulations', 'shortlisting'])
+    expect(emailSearchTerms('re: re: the a an')).toEqual([])
+  })
+
+  it('ranks stemmed matches and drops unrelated mail', () => {
+    const unrelated = email({
+      id: 'unrelated',
+      subject: 'Lunch tomorrow',
+      snippet: 'want to grab food',
+      timestamp: '2026-11-07T00:00:00Z'
+    })
+    const strong = email({
+      id: 'strong',
+      subject: 'Congratulations',
+      snippet: 'You have been shortlisted',
+      timestamp: '2026-11-05T00:00:00Z'
+    })
+    const weak = email({
+      id: 'weak',
+      subject: 'Update',
+      snippet: 'The congratulations page is live',
+      timestamp: '2026-11-06T00:00:00Z'
+    })
+
+    const ranked = rankEmailsForQuery(
+      [unrelated, weak, strong],
+      ['congratulation', 'shortlisting']
+    )
+
+    expect(ranked.map((item) => item.id)).toEqual(['strong', 'weak'])
+  })
+
+  it('keeps newest-first order when scores tie', () => {
+    const older = email({
+      id: 'older',
+      subject: 'Congratulations',
+      timestamp: '2026-11-05T00:00:00Z'
+    })
+    const newer = email({
+      id: 'newer',
+      subject: 'Congratulations',
+      timestamp: '2026-11-06T00:00:00Z'
+    })
+
+    expect(
+      rankEmailsForQuery([older, newer], ['congratulation']).map(
+        (item) => item.id
+      )
+    ).toEqual(['newer', 'older'])
+  })
+})
+
 describe('gmail_read_email', () => {
   it('fetches a message by id and decodes its body', async () => {
     const body = Buffer.from('The full report body.', 'utf8').toString(
@@ -600,7 +658,7 @@ describe('gmail_send_email', () => {
 })
 
 describe('gmail_reply_email', () => {
-  it('resolves the thread, builds a reply card, and sends without re-listing', async () => {
+  it('resolves the email and builds a reply draft card without sending', async () => {
     const { tools, calls } = makeTools({
       GMAIL_FETCH_EMAILS: () => ({
         text: listPayload([
@@ -618,8 +676,7 @@ describe('gmail_reply_email', () => {
         text: okPayload({
           messages: [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
         })
-      }),
-      GMAIL_REPLY_TO_THREAD: () => ({ text: okPayload({ id: 'reply' }) })
+      })
     })
     const tool = toolNamed(tools, 'gmail_reply_email')
 
@@ -628,36 +685,22 @@ describe('gmail_reply_email', () => {
       makeContext()
     )
 
-    expect(prepared.card).toMatchObject({
-      kind: 'email_compose',
-      mode: 'reply',
-      title: 'Reply',
-      to: ['sam@example.com'],
-      cc: [],
-      bcc: [],
-      subject: 'Meeting',
-      body: "I'll be there",
-      threadCount: 3
+    expect(prepared.outcome).toMatchObject({
+      status: 'ok',
+      action: 'draft a reply',
+      message: '',
+      spokenResponse: null,
+      card: {
+        kind: 'email_reply',
+        title: 'Reply drafted',
+        body: "I'll be there",
+        threadCount: 3
+      }
     })
-    expect(prepared.arguments).toMatchObject({
-      thread_id: 'thread-9',
-      recipient_email: 'sam@example.com',
-      message_body: "I'll be there",
-      subject: 'Meeting'
-    })
-
-    calls.length = 0
-    const outcome = await tool.run(prepared.arguments, makeContext())
-
-    expect(calls.map((call) => call.slug)).toEqual(['GMAIL_REPLY_TO_THREAD'])
-    expect(calls[0].args).toMatchObject({
-      user_id: 'me',
-      thread_id: 'thread-9',
-      recipient_email: 'sam@example.com',
-      message_body: "I'll be there"
-    })
-    expect(outcome.status).toBe('ok')
-    expect(outcome.message).toBe('Replied to "Meeting" from Sam.')
+    expect(prepared.arguments).toEqual({ query: 'from:sam', message: "I'll be there" })
+    expect(
+      calls.some((call) => call.slug === 'GMAIL_REPLY_TO_THREAD')
+    ).toBe(false)
   })
 
   it('reports when nothing matches the query', async () => {
@@ -673,6 +716,222 @@ describe('gmail_reply_email', () => {
     expect(prepared.card).toBeUndefined()
     expect(prepared.outcome?.status).toBe('error')
     expect(prepared.outcome?.message).toContain("couldn't find")
+    expect(
+      calls.some((call) => call.slug === 'GMAIL_REPLY_TO_THREAD')
+    ).toBe(false)
+  })
+
+  it('falls back from a spoken sentence to content words for the reply search', async () => {
+    const { tools, calls } = makeTools({
+      GMAIL_FETCH_EMAILS: (args) => {
+        if (args['query'] === 'congratulation for shortlisting') {
+          return { text: listPayload([]) }
+        }
+        return {
+          text: listPayload([
+            message(
+              'm1',
+              'Acme Talent <talent@acme.com>',
+              'Congratulations!',
+              'You have been shortlisted for the role',
+              'thread-7',
+              '2026-11-05T00:00:00Z'
+            )
+          ])
+        }
+      },
+      GMAIL_FETCH_MESSAGE_BY_THREAD_ID: () => ({
+        text: okPayload({
+          messages: [
+            { messageId: 'm1', messageText: 'You have been shortlisted.' }
+          ]
+        })
+      })
+    })
+
+    const prepared = await toolNamed(tools, 'gmail_reply_email').prepare!(
+      { query: 'congratulation for shortlisting', message: 'Thank you!' },
+      makeContext()
+    )
+
+    expect(calls[0].args).toMatchObject({
+      query: 'congratulation for shortlisting',
+      max_results: 10
+    })
+    expect(calls[1].args).toMatchObject({
+      query: 'congratulation shortlisting',
+      max_results: 10
+    })
+    expect(prepared.outcome?.card).toMatchObject({
+      kind: 'email_reply',
+      title: 'Reply drafted',
+      body: 'Thank you!',
+      threadCount: 1
+    })
+  })
+
+  it('writes the reply from the thread body and uses it in the card and arguments', async () => {
+    const compose = vi.fn(
+      async (_input: EmailReplyRequest): Promise<string | null> =>
+        'Thanks for the update!'
+    )
+    const { tools } = makeTools({
+      GMAIL_FETCH_EMAILS: () => ({
+        text: listPayload([
+          message(
+            'm2',
+            'Sam <sam@example.com>',
+            'Meeting',
+            'sure',
+            'thread-9',
+            '2026-11-05T00:00:00Z'
+          )
+        ])
+      }),
+      GMAIL_FETCH_MESSAGE_BY_THREAD_ID: () => ({
+        text: okPayload({
+          messages: [
+            { messageId: 'm1', messageText: 'Older message.' },
+            { messageId: 'm2', messageText: 'Newest message.' }
+          ]
+        })
+      })
+    })
+
+    const prepared = await toolNamed(tools, 'gmail_reply_email').prepare!(
+      { query: 'meeting', message: 'Original draft' },
+      makeContext({
+        composeEmailReply: compose,
+        transcript: 'reply and say thanks'
+      })
+    )
+
+    expect(compose).toHaveBeenCalledTimes(1)
+    expect(compose).toHaveBeenCalledWith({
+      sender: 'Sam',
+      subject: 'Meeting',
+      body: 'Newest message.',
+      instruction: 'reply and say thanks',
+      draft: 'Original draft'
+    })
+    expect(prepared.outcome?.card).toMatchObject({
+      kind: 'email_reply',
+      title: 'Reply drafted',
+      body: 'Thanks for the update!'
+    })
+  })
+
+  it('falls back to the original message body when the thread has none', async () => {
+    const compose = vi.fn(
+      async (_input: EmailReplyRequest): Promise<string | null> =>
+        'Thank you for the opportunity!'
+    )
+    const { tools, calls } = makeTools({
+      GMAIL_FETCH_EMAILS: () => ({
+        text: listPayload([
+          message(
+            'm2',
+            'Sam <sam@example.com>',
+            'Meeting',
+            'sure',
+            'thread-9',
+            '2026-11-05T00:00:00Z'
+          )
+        ])
+      }),
+      GMAIL_FETCH_MESSAGE_BY_THREAD_ID: () => ({
+        text: okPayload({ messages: [{ messageId: 'm2' }] })
+      }),
+      GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID: () => ({
+        text: okPayload({
+          messageId: 'm2',
+          messageText: 'You have been shortlisted.'
+        })
+      })
+    })
+
+    await toolNamed(tools, 'gmail_reply_email').prepare!(
+      { query: 'meeting' },
+      makeContext({ composeEmailReply: compose })
+    )
+
+    expect(calls.map((call) => call.slug)).toContain(
+      'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID'
+    )
+    expect(compose).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'You have been shortlisted.' })
+    )
+  })
+
+  it('keeps the planner draft when the composer returns null', async () => {
+    const compose = vi.fn(
+      async (_input: EmailReplyRequest): Promise<string | null> => null
+    )
+    const { tools } = makeTools({
+      GMAIL_FETCH_EMAILS: () => ({
+        text: listPayload([
+          message(
+            'm2',
+            'Sam <sam@example.com>',
+            'Meeting',
+            'sure',
+            'thread-9',
+            '2026-11-05T00:00:00Z'
+          )
+        ])
+      }),
+      GMAIL_FETCH_MESSAGE_BY_THREAD_ID: () => ({
+        text: okPayload({
+          messages: [{ messageId: 'm2', messageText: 'Newest message.' }]
+        })
+      })
+    })
+
+    const prepared = await toolNamed(tools, 'gmail_reply_email').prepare!(
+      { query: 'meeting', message: 'Sounds good' },
+      makeContext({ composeEmailReply: compose })
+    )
+
+    expect(prepared.outcome?.card).toMatchObject({
+      kind: 'email_reply',
+      body: 'Sounds good'
+    })
+  })
+
+  it('asks for reply text when both the composer and the draft are empty', async () => {
+    const compose = vi.fn(
+      async (_input: EmailReplyRequest): Promise<string | null> => null
+    )
+    const { tools, calls } = makeTools({
+      GMAIL_FETCH_EMAILS: () => ({
+        text: listPayload([
+          message(
+            'm2',
+            'Sam <sam@example.com>',
+            'Meeting',
+            'sure',
+            'thread-9',
+            '2026-11-05T00:00:00Z'
+          )
+        ])
+      }),
+      GMAIL_FETCH_MESSAGE_BY_THREAD_ID: () => ({
+        text: okPayload({
+          messages: [{ messageId: 'm2', messageText: 'Newest message.' }]
+        })
+      })
+    })
+
+    const prepared = await toolNamed(tools, 'gmail_reply_email').prepare!(
+      { query: 'meeting' },
+      makeContext({ composeEmailReply: compose })
+    )
+
+    expect(prepared.card).toBeUndefined()
+    expect(prepared.outcome).toMatchObject({
+      status: 'error',
+      message: 'I need the reply text.'
+    })
     expect(
       calls.some((call) => call.slug === 'GMAIL_REPLY_TO_THREAD')
     ).toBe(false)

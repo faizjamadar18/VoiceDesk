@@ -1,6 +1,8 @@
 import type {
   NotchCalendarCard,
   NotchEmailComposeCard,
+  NotchDriveCard,
+  NotchDriveFormat,
   NotchDecision
 } from '../../shared/types'
 
@@ -14,6 +16,7 @@ export interface CardDerivationInput {
 export interface DerivedCards {
   calendarCard: NotchCalendarCard | null
   emailComposeCard: NotchEmailComposeCard | null
+  driveCard: NotchDriveCard | null
 }
 
 const SCHEDULE_PATTERN =
@@ -28,6 +31,9 @@ const DRAFT_EMAIL_PATTERN =
   /(?:Save a draft to)\s+([^]+?)\s+with subject\s+"?([^"?]*)"?\s*\?\s*Approval needed/i
 const REPLY_EMAIL_PATTERN =
   /(?:Reply to)\s+"?([^"]*)"?\s+from\s+([^?]+)\?\s*Approval needed/i
+
+const CREATE_DRIVE_PATTERN =
+  /(?:Create)\s+"([^"]+)"\s+in\s+Google\s+Drive(?:\s+inside\s+"?([^"?]+)"?)?\?(?:\s*Approval needed)?/i
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -187,12 +193,109 @@ export function deriveEmailComposeCard(input: CardDerivationInput): NotchEmailCo
   }
 }
 
+export function deriveDriveCard(input: CardDerivationInput): NotchDriveCard | null {
+  const message = input.message?.trim() ?? ''
+  const transcript = input.transcript?.toLowerCase() ?? ''
+  const decisionTarget = input.decision?.target ?? ''
+
+  let name = ''
+  let folder: string | null = null
+
+  const createMatch = message.match(CREATE_DRIVE_PATTERN)
+  if (createMatch) {
+    name = createMatch[1]
+    folder = createMatch[2]?.trim() || null
+  } else if (
+    input.decision !== null &&
+    (transcript.includes('google drive') ||
+      transcript.includes('drive') ||
+      message.toLowerCase().includes('google drive') ||
+      message.toLowerCase().includes('drive')) &&
+    (transcript.includes('create') ||
+      transcript.includes('make') ||
+      transcript.includes('new') ||
+      message.toLowerCase().includes('create'))
+  ) {
+    name = decisionTarget || 'Untitled'
+  } else {
+    return null
+  }
+
+  if (!name) {
+    name = decisionTarget || 'Untitled'
+  }
+
+  const format = resolveDriveFormat(name, input.transcript, decisionTarget)
+
+  return {
+    kind: 'drive_file',
+    mode: 'create',
+    format,
+    name,
+    folder
+  }
+}
+
+function formatFromName(name: string): NotchDriveFormat | null {
+  const lower = name.trim().toLowerCase()
+  if (/\.(?:md|markdown)$/.test(lower)) return 'markdown'
+  if (/\.(?:txt|text)$/.test(lower)) return 'text'
+  if (/\.(?:docx?|gdoc)$/.test(lower)) return 'document'
+  if (/\.(?:xlsx?|csv|gsheet)$/.test(lower)) return 'spreadsheet'
+  if (/\.(?:pptx?|gslides)$/.test(lower)) return 'presentation'
+  return null
+}
+
+function formatFromText(text: string): NotchDriveFormat | null {
+  const said = text
+    .toLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+  if (/\b(?:markdown|md)\b/.test(said)) return 'markdown'
+  if (
+    /\b(?:google\s+sheets?|spreadsheets?|sheets?|gsheets?|excel|xlsx?|csv)\b/.test(
+      said
+    )
+  ) {
+    return 'spreadsheet'
+  }
+  if (
+    /\b(?:google\s+slides?|presentations?|slides?|pptx?|powerpoint)\b/.test(said)
+  ) {
+    return 'presentation'
+  }
+  if (/\b(?:google\s+docs?|gdocs?|documents?|docs?|docx?|word)\b/.test(said)) {
+    return 'document'
+  }
+  if (/\b(?:text\s+files?|plain\s+text|txt|text)\b/.test(said)) return 'text'
+  return null
+}
+
+export function resolveDriveFormat(
+  name: string,
+  transcript?: string | null,
+  target?: string | null
+): NotchDriveFormat {
+  return (
+    formatFromName(name) ??
+    formatFromName(target ?? '') ??
+    formatFromText(transcript ?? '') ??
+    formatFromText(name) ??
+    'text'
+  )
+}
+
 export function deriveCardFromDecisionOrMessage(input: CardDerivationInput): DerivedCards {
+  const driveCard = deriveDriveCard(input)
+  if (driveCard !== null) {
+    return { calendarCard: null, emailComposeCard: null, driveCard }
+  }
+
   const calendarCard = deriveCalendarCard(input)
   if (calendarCard !== null) {
-    return { calendarCard, emailComposeCard: null }
+    return { calendarCard, emailComposeCard: null, driveCard: null }
   }
 
   const emailComposeCard = deriveEmailComposeCard(input)
-  return { calendarCard: null, emailComposeCard }
+  return { calendarCard: null, emailComposeCard, driveCard: null }
 }

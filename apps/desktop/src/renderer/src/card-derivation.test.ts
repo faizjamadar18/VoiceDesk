@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveCalendarCard,
   deriveEmailComposeCard,
+  deriveDriveCard,
   deriveCardFromDecisionOrMessage
 } from './card-derivation'
 import type { NotchDecision } from '../../shared/types'
@@ -150,6 +151,75 @@ describe('card-derivation', () => {
     })
   })
 
+  describe('deriveDriveCard', () => {
+    it('derives document card for Google Docs request', () => {
+      const message = 'Create "Project Roadmap" in Google Drive?'
+      const card = deriveDriveCard({
+        message,
+        transcript: 'create a google doc named Project Roadmap in Google Drive'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('drive_file')
+      expect(card?.mode).toBe('create')
+      expect(card?.format).toBe('document')
+      expect(card?.name).toBe('Project Roadmap')
+      expect(card?.folder).toBeNull()
+    })
+
+    it('derives spreadsheet card for Google Sheets request with folder', () => {
+      const message = 'Create "Budget 2026" in Google Drive inside "Finance"?'
+      const card = deriveDriveCard({
+        message,
+        transcript: 'create a spreadsheet called Budget 2026 in Finance'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('drive_file')
+      expect(card?.mode).toBe('create')
+      expect(card?.format).toBe('spreadsheet')
+      expect(card?.name).toBe('Budget 2026')
+      expect(card?.folder).toBe('Finance')
+    })
+
+    it('derives text card for .txt file or text request', () => {
+      const message = 'Create "notes.txt" in Google Drive?'
+      const card = deriveDriveCard({
+        message,
+        transcript: 'create notes.txt in google drive'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('drive_file')
+      expect(card?.mode).toBe('create')
+      expect(card?.format).toBe('text')
+      expect(card?.name).toBe('notes.txt')
+    })
+
+    it('derives markdown card for .md file or markdown request', () => {
+      const message = 'Create "README.md" in Google Drive?'
+      const card = deriveDriveCard({
+        message,
+        transcript: 'create a markdown file named README.md'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('drive_file')
+      expect(card?.mode).toBe('create')
+      expect(card?.format).toBe('markdown')
+      expect(card?.name).toBe('README.md')
+    })
+
+    it('returns null when message does not describe Google Drive file', () => {
+      const message = 'Schedule "Meeting" for tomorrow at 2:00 PM? Approval needed.'
+      const card = deriveDriveCard({
+        message,
+        transcript: 'schedule a meeting'
+      })
+      expect(card).toBeNull()
+    })
+  })
+
   describe('deriveCardFromDecisionOrMessage', () => {
     it('returns derived calendar card when calendar event detected', () => {
       const result = deriveCardFromDecisionOrMessage({
@@ -161,6 +231,42 @@ describe('card-derivation', () => {
       expect(result.calendarCard).not.toBeNull()
       expect(result.calendarCard?.title).toBe('Sync')
       expect(result.emailComposeCard).toBeNull()
+      expect(result.driveCard).toBeNull()
+    })
+
+    it('returns derived drive card when Google Drive file creation detected', () => {
+      const result = deriveCardFromDecisionOrMessage({
+        message: 'Create "Research.docx" in Google Drive?',
+        decision: { kind: 'confirm', planId: 'drive-1', target: 'Research.docx', busy: false },
+        transcript: 'create Research.docx in google drive'
+      })
+
+      expect(result.driveCard).not.toBeNull()
+      expect(result.driveCard?.kind).toBe('drive_file')
+      expect(result.driveCard?.format).toBe('document')
+      expect(result.driveCard?.name).toBe('Research.docx')
+      expect(result.calendarCard).toBeNull()
+      expect(result.emailComposeCard).toBeNull()
+    })
+
+    it('returns all nulls for unrelated message', () => {
+      const message = 'Delete "notes.txt"? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-000',
+        target: 'notes.txt',
+        busy: false
+      }
+
+      const cards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript: 'delete notes.txt'
+      })
+
+      expect(cards.calendarCard).toBeNull()
+      expect(cards.emailComposeCard).toBeNull()
+      expect(cards.driveCard).toBeNull()
     })
   })
 })

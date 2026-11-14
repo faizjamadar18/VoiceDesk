@@ -383,7 +383,36 @@ describe('drive_create_file', () => {
       format: 'document',
       parent_id: 'f1'
     })
+    expect(prepared?.card).toEqual({
+      kind: 'drive_file',
+      mode: 'create',
+      format: 'document',
+      name: 'shortlisted student',
+      content: '',
+      folder: 'Docs'
+    })
     expect(calls).toHaveLength(1)
+  })
+
+  it('constructs a drive_file card with content and format', async () => {
+    const { tools, calls } = makeTools([])
+    const tool = toolNamed(tools, 'drive_create_file')
+
+    const prepared = await tool.prepare?.(
+      { name: 'summary.md', content: '# Summary' },
+      makeContext()
+    )
+
+    expect(prepared?.outcome).toBeUndefined()
+    expect(prepared?.card).toEqual({
+      kind: 'drive_file',
+      mode: 'create',
+      format: 'markdown',
+      name: 'summary.md',
+      content: '# Summary',
+      folder: null
+    })
+    expect(calls).toHaveLength(0)
   })
 
   it('refuses an empty name without calling Composio', async () => {

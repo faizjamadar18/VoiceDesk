@@ -167,11 +167,41 @@ export interface NotchWeatherCard {
   icon: string
 }
 
+export type NotchDriveFormat =
+  | 'document'
+  | 'spreadsheet'
+  | 'presentation'
+  | 'markdown'
+  | 'text'
+
+export interface NotchDriveCard {
+  kind: 'drive_file'
+  mode: 'create' | 'edit' | 'delete'
+  format: NotchDriveFormat
+  name: string
+  content?: string
+  folder?: string | null
+  fileId?: string | null
+}
+
+/**
+ * A drafted reply shown for review: editable text with a copy button, exactly
+ * like VoiceOS. Nothing is sent or pasted by the app.
+ */
+export interface NotchEmailReplyCard {
+  kind: 'email_reply'
+  title: string
+  body: string
+  threadCount: number | null
+}
+
 export type NotchCard =
   | NotchWeatherCard
   | NotchEmailListCard
   | NotchEmailComposeCard
+  | NotchEmailReplyCard
   | NotchCalendarCard
+  | NotchDriveCard
   | Record<string, unknown>
 
 /** One email row in {@link NotchEmailListCard}. Display-only. */

@@ -8,9 +8,9 @@ import {
 import { pointInInteractiveRegion, type ScreenBounds } from './interactive-region'
 import type { NotchPresenter } from './notch-controller'
 
-export const NOTCH_WIDTH = 660
+export const NOTCH_WIDTH = 720
 export const NOTCH_HEIGHT = 300
-export const NOTCH_RESULTS_HEIGHT = 620
+export const NOTCH_RESULTS_HEIGHT = 800
 /** Breathing room below the measured content before the window edge. */
 export const NOTCH_CONTENT_MARGIN = 12
 

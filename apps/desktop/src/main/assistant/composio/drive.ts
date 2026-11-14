@@ -12,6 +12,7 @@
  */
 
 import type { Tool, ToolContext, ToolOutcome } from '../types'
+import type { NotchDriveCard, NotchDriveFormat } from '../../../shared/types'
 import type { CallTool } from './support'
 import {
   EMAIL,
@@ -591,9 +592,22 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
       )
       const folder = folderTarget(optionalString(args, 'folder'))
 
+      const card: NotchDriveCard = {
+        kind: 'drive_file',
+        mode: 'create',
+        format: format as NotchDriveFormat,
+        name,
+        content,
+        folder
+      }
+
       // A dry run must not touch Drive; `run` reports what would happen.
       if (ctx.dryRun) {
-        return { arguments: { name, content, format }, display: name }
+        return {
+          arguments: { name, content, format },
+          display: name,
+          card: card as unknown as Record<string, unknown>
+        }
       }
 
       let parentId: string | null = null
@@ -610,7 +624,12 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
         parentId !== null
           ? `Create "${name}" in Google Drive inside "${folder}"?`
           : `Create "${name}" in Google Drive?`
-      return { arguments: prepared, display: name, message }
+      return {
+        arguments: prepared,
+        display: name,
+        message,
+        card: card as unknown as Record<string, unknown>
+      }
     },
     async run(args, ctx) {
       const action = 'create a Google Drive file'

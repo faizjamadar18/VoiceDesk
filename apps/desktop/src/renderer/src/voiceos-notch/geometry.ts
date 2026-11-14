@@ -100,6 +100,19 @@ export const AGENT_NOTCH_WINDOW_SHADOW_GUTTER_Y_PX = 90;
 /** Inset of the notch window from the screen bottom. 201500 */
 export const AGENT_NOTCH_SCREEN_BOTTOM_INSET_PX = 20;
 
+/**
+ * Maximum height the notch surface can grow to, clamped by screen bounds and shadow gutter.
+ * Shipped VoiceOS bundle index-BKi3REhQ.js:
+ * screenCeiling = availHeight - AGENT_NOTCH_SCREEN_BOTTOM_INSET_PX (20)
+ * windowCeiling = AGENT_NOTCH_WINDOW_MAX_HEIGHT_PX (800) - AGENT_NOTCH_WINDOW_SHADOW_GUTTER_Y_PX (90) = 710
+ */
+export function agentNotchSurfaceMaxHeight(availHeight: number): number {
+  const screenCeiling = availHeight - AGENT_NOTCH_SCREEN_BOTTOM_INSET_PX;
+  const windowCeiling =
+    AGENT_NOTCH_WINDOW_MAX_HEIGHT_PX - AGENT_NOTCH_WINDOW_SHADOW_GUTTER_Y_PX;
+  return Math.max(0, Math.min(screenCeiling, windowCeiling));
+}
+
 /** The master size-transition cubic bezier. 201580-201585 */
 export const NOTCH_SIZE_TRANSITION_BEZIER: readonly number[] = [0.45, 0, 0.55, 1];
 /** CSS form of the master easing. 201586 */

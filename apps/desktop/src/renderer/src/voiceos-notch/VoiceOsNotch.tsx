@@ -47,6 +47,7 @@ import {
   NOTCH_IDLE_WIDTH_PX,
   NOTCH_RECORDING_BAND_HEIGHT_PX,
   NOTCH_TOP_BAND_HEIGHT_PX,
+  agentNotchSurfaceMaxHeight,
   getAgentNotchSurfaceShadow,
   getNotchSilhouetteGeometry,
   getNotchSilhouetteRadii,
@@ -287,10 +288,11 @@ export function VoiceOsNotch({
     return base + (hoverGrowApplied ? NOTCH_HOVER_AFFORDANCE_GROW_PX : 0);
   })();
 
-  const notchViewportMaxHeight =
-    typeof window === "undefined"
-      ? 800
-      : Math.max(0, window.innerHeight - 20);
+  const availHeight =
+    typeof window !== "undefined" && window.screen && typeof window.screen.availHeight === "number"
+      ? window.screen.availHeight
+      : 800;
+  const notchViewportMaxHeight = agentNotchSurfaceMaxHeight(availHeight);
 
   const surfaceHeight = Math.min(
     Math.max(
@@ -375,7 +377,7 @@ export function VoiceOsNotch({
     transform: "translateX(-50%)",
     width: `${visualSurfaceWidth}px`,
     height: `${surfaceHeight}px`,
-    maxHeight: "calc(100vh - 20px)",
+    maxHeight: `${notchViewportMaxHeight}px`,
     color: "rgba(255,255,255,0.92)",
     pointerEvents: "auto",
     animation: "agent-notch-fade-in 160ms ease-out",
@@ -388,7 +390,7 @@ export function VoiceOsNotch({
     zIndex: 1,
     width: `${surfaceWidth}px`,
     height: `${surfaceHeight}px`,
-    maxHeight: "calc(100vh - 20px)",
+    maxHeight: `${notchViewportMaxHeight}px`,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
