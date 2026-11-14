@@ -420,6 +420,57 @@ describe('calendar_cancel_event', () => {
       false
     )
   })
+
+  it('prepares a delete card with located event details', async () => {
+    const coffeeMeeting = {
+      id: 'evt-coffee',
+      summary: 'Coffee Meeting',
+      start: '2026-11-15T14:00:00Z',
+      end: '2026-11-15T15:00:00Z',
+      location: 'Blue Bottle Coffee'
+    }
+    const { tools, calls } = makeTools({
+      GOOGLECALENDAR_EVENTS_LIST: () => ({ text: listPayload([coffeeMeeting]) })
+    })
+
+    const tool = toolNamed(tools, 'calendar_cancel_event')
+    expect(tool.prepare).toBeDefined()
+    const prep = await tool.prepare!({ query: 'coffee' }, makeContext())
+
+    expect(calls.map((c) => c.slug)).toEqual(['GOOGLECALENDAR_EVENTS_LIST'])
+    expect(prep.message).toBe('Cancel "Coffee Meeting"? Approval needed.')
+    expect(prep.display).toBe('Coffee Meeting')
+    expect(prep.card).toEqual({
+      kind: 'calendar_event',
+      mode: 'delete',
+      title: 'Coffee Meeting',
+      start: '2026-11-15T14:00:00Z',
+      end: '2026-11-15T15:00:00Z',
+      durationMinutes: 60,
+      calendarName: 'primary',
+      location: 'Blue Bottle Coffee'
+    })
+  })
+
+  it('prepares a fallback delete card when event cannot be located', async () => {
+    const { tools } = makeTools({
+      GOOGLECALENDAR_EVENTS_LIST: () => ({ text: listPayload([]) })
+    })
+
+    const tool = toolNamed(tools, 'calendar_cancel_event')
+    const prep = await tool.prepare!({ query: 'Dentist' }, makeContext())
+
+    expect(prep.message).toBe('Cancel "Dentist"? Approval needed.')
+    expect(prep.card).toEqual({
+      kind: 'calendar_event',
+      mode: 'delete',
+      title: 'Dentist',
+      start: '',
+      end: '',
+      durationMinutes: 60,
+      calendarName: 'primary'
+    })
+  })
 })
 
 describe('resolveEvent', () => {

@@ -36,6 +36,7 @@ export interface CalendarEvent {
   /** ISO 8601, as returned by Google. */
   readonly start: string
   readonly end: string | null
+  readonly location?: string
 }
 
 export interface CalendarToolOptions {
@@ -312,11 +313,13 @@ function looksLikeEvent(item: unknown): boolean {
 function toEvent(item: Record<string, unknown>): CalendarEvent | null {
   const start = dateOf(item['start'])
   if (start === null) return null
+  const location = stringOf(item['location'])
   return {
     id: stringOf(item['id']) ?? '',
     summary: stringOf(item['summary']) ?? '',
     start,
-    end: dateOf(item['end'])
+    end: dateOf(item['end']),
+    ...(location ? { location } : {})
   }
 }
 
@@ -897,19 +900,42 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
     async prepare(args, ctx): Promise<ToolPreparation> {
       if (ctx.dryRun) return { arguments: { ...args } }
       const query = optionalString(args, 'query') ?? ''
+      const calendarId = optionalString(args, 'calendar_id') ?? 'primary'
+      const action = 'cancel a meeting'
+
+      let title = query || 'Meeting'
+      let start = ''
+      let end = ''
+      let duration = 60
+      let location: string | undefined = undefined
+
+      try {
+        const located = await locateEvent(query, calendarId, action, ctx)
+        if (located.ok) {
+          title = located.event.summary || title
+          start = located.event.start
+          end = located.event.end ?? ''
+          duration = originalDuration(located.event)
+          location = located.event.location
+        }
+      } catch {
+        // Fall back gracefully to query title and defaults
+      }
+
       const card: NotchCalendarCard = {
         kind: 'calendar_event',
         mode: 'delete',
-        title: query || 'Meeting',
-        start: '',
-        end: '',
-        durationMinutes: 60,
-        calendarName: 'Primary'
+        title,
+        start,
+        end,
+        durationMinutes: duration,
+        calendarName: calendarId === 'primary' ? 'primary' : calendarId,
+        ...(location ? { location } : {})
       }
       return {
         arguments: { ...args },
-        message: `Cancel "${query}"? Approval needed.`,
-        display: query,
+        message: `Cancel "${title}"? Approval needed.`,
+        display: title,
         card: card as unknown as Record<string, unknown>
       }
     },

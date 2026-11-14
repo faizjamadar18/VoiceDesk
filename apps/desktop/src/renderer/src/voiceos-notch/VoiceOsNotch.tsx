@@ -215,13 +215,18 @@ export function VoiceOsNotch({
   onGeometryChange,
   children
 }: VoiceOsNotchProps): ReactNode {
-  const isExpanded = expanded;
+  const hasExpandedContent = Boolean(
+    children && (Array.isArray(children) ? children.some(Boolean) : true)
+  );
   const isHidden = mode === "hidden";
   const isIdle = mode === "idle";
   const isListening = mode === "listening";
   const isThinking = mode === "thinking";
   const isResponding = mode === "responding";
   const isError = mode === "error";
+  const isExpanded = Boolean(
+    expanded || (hasExpandedContent && (isError || isResponding))
+  );
 
   /** Measured height of the expanded body, fed to the surface silhouette. */
   const [expandedContentHeight, setExpandedContentHeight] = useState(0);
@@ -249,8 +254,9 @@ export function VoiceOsNotch({
 
   const surfaceWidth = (() => {
     if (isHidden) return NOTCH_COLLAPSED_WIDTH_PX;
-    if (isExpanded) return NOTCH_EXPANDED_BODY_WIDTH_PX;
-    if (isListening || isThinking || isResponding || isError)
+    if (isExpanded || isError || (hasExpandedContent && !isIdle))
+      return NOTCH_EXPANDED_BODY_WIDTH_PX;
+    if (isListening || isThinking || isResponding)
       return NOTCH_COMPACT_BAND_WIDTH_PX;
     // idle
     return NOTCH_IDLE_WIDTH_PX + (hoverWidenApplied ? NOTCH_HOVER_AFFORDANCE_WIDEN_PX : 0);
@@ -372,7 +378,7 @@ export function VoiceOsNotch({
     maxHeight: "calc(100vh - 20px)",
     color: "rgba(255,255,255,0.92)",
     pointerEvents: "auto",
-    animation: "agent-notch-fade-in 160ms ease-out forwards",
+    animation: "agent-notch-fade-in 160ms ease-out",
     transition: rendererGeometryTransition,
     overflow: "visible"
   };
@@ -697,10 +703,11 @@ export function VoiceOsNotch({
                 flexDirection: "column",
                 flexShrink: 0,
                 gap: EXPANDED_SURFACE_CONTENT_INSET_PX,
-                width: `${
-                  NOTCH_EXPANDED_BODY_WIDTH_PX -
-                  EXPANDED_SURFACE_CONTENT_INSET_PX * 2
-                }px`
+                width: `${Math.min(
+                  surfaceWidth - EXPANDED_SURFACE_CONTENT_INSET_PX * 2,
+                  NOTCH_EXPANDED_BODY_WIDTH_PX - EXPANDED_SURFACE_CONTENT_INSET_PX * 2
+                )}px`,
+                maxWidth: "100%"
               }}
             >
               {children}

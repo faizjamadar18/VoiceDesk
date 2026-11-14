@@ -187,6 +187,33 @@ describe('notchBounds', () => {
       height: 300
     })
   })
+
+  it('pins to primary display regardless of cursor screen point', () => {
+    electronState.bounds = { x: 0, y: 0, width: 1_920, height: 1_080 }
+    electronState.cursor = { x: -500, y: 200 }
+    const bounds = notchBounds(300)
+    expect(bounds).toEqual({
+      x: Math.round((1_920 - 660) / 2),
+      y: 0,
+      width: 660,
+      height: 300
+    })
+  })
+
+  it('pins to targetDisplay when provided', () => {
+    const secondaryDisplay = {
+      bounds: { x: 1920, y: 0, width: 2560, height: 1440 },
+      workArea: { x: 1920, y: 0, width: 2560, height: 1440 },
+      scaleFactor: 1
+    } as unknown as Electron.Display
+    const bounds = notchBounds(300, secondaryDisplay)
+    expect(bounds).toEqual({
+      x: 1920 + Math.round((2560 - 660) / 2),
+      y: 0,
+      width: 660,
+      height: 300
+    })
+  })
 })
 
 describe('createNotchWindow', () => {
@@ -371,6 +398,20 @@ describe('NotchWindowPresenter interaction & dismissal', () => {
     expect(target.moveTop).toHaveBeenCalled()
     expect(target.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
 
+    presenter.dispose()
+  })
+
+  it('repositions to targetDisplay when provided to reposition', () => {
+    const target = fakeWindow()
+    const presenter = new NotchWindowPresenter(target.win)
+    const secondaryDisplay = {
+      bounds: { x: 1920, y: 0, width: 2560, height: 1440 },
+      workArea: { x: 1920, y: 0, width: 2560, height: 1440 },
+      scaleFactor: 1
+    } as unknown as Electron.Display
+
+    presenter.reposition(secondaryDisplay)
+    expect(target.win.getBounds().x).toBe(1920 + Math.round((2560 - 660) / 2))
     presenter.dispose()
   })
 })

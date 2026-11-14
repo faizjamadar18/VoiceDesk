@@ -286,6 +286,31 @@ describe('voiceos-notch UI', () => {
       )
       expect(settledHtml).not.toContain('class="agent-notch-request-cancel"')
     })
+
+    it('uses fade-in animation without forwards', () => {
+      const html = renderToStaticMarkup(
+        createElement(VoiceOsNotch, { mode: 'idle' })
+      )
+      expect(html).toContain('animation:agent-notch-fade-in 160ms ease-out')
+      expect(html).not.toContain('agent-notch-fade-in 160ms ease-out forwards')
+    })
+
+    it('expands surfaceWidth and sets responsive content width on error with message', () => {
+      const html = renderToStaticMarkup(
+        createElement(
+          VoiceOsNotch,
+          { mode: 'error' },
+          createElement(VoiceOsAnswer, {
+            text: "I didn't catch that. Try again a little closer to the mic.",
+            isError: true
+          })
+        )
+      )
+      // data-agent-notch-geometry-key format: `${surfaceWidth}|${visualSurfaceWidth}|${surfaceHeight}|${bandHeight}`
+      expect(html).toContain('data-agent-notch-geometry-key="440|')
+      expect(html).toContain('width:416px;max-width:100%')
+      expect(html).toContain("I didn&#x27;t catch that. Try again a little closer to the mic.")
+    })
   })
 
   describe('createDismissAnimator', () => {

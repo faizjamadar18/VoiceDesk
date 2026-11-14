@@ -1,31 +1,18 @@
 # AGENTS.md
 
-## Test-driven development
+## TDD
 
-Use TDD for **core behavior** — the paths where a failure would break Kestrel or its trust boundary:
+For behavior changes, work test-first:
+1. Write one small failing test.
+2. Run it and confirm it fails for the right reason.
+3. Write the least code needed to pass.
+4. Refactor with tests green.
 
-- global hotkey registration, window summoning, and focus
-- audio capture, transcription, and text insertion/paste
-- API/backend contracts, authentication, persistence, and data integrity
-- state machines and security- or privacy-sensitive logic
+Test public behavior, not internals. Run only the tests for your change.
 
-For a core change, work in a **red → green → refactor** loop:
+Skip TDD for cosmetic work — colors, copy, layout, docs, dependency bumps. Run typecheck/build instead.
 
-1. Write the smallest failing test that describes one behavior.
-2. Run it and confirm it fails for the expected reason.
-3. Implement the minimum needed to pass.
-4. Refactor while the test stays green.
-5. Run only the test files created for that implementation (`npm test -- <path>`, from `apps/desktop`) before calling the work complete — never run the whole test suite.
-
-Tests assert public behavior, not implementation details. If no test runner exists when the first core feature starts, add one as part of that work.
-
-**Test cleanup.** If tests were created solely to verify that specific implementation, delete them once verified to keep the codebase clean.
-
-Use normal verification for cosmetic or low-risk changes — button colors, copy, layout polish, documentation, dependency bumps, throwaway spikes. Run the existing typecheck/build/manual checks; TDD is not required.
-
-**Day 1 exception:** the completed global-hotkey spike is exempt and stays as-is. This policy applies from the next implementation onward.
-
-If you are unsure whether a change is core, ask before writing code.
+Delete throwaway tests after use; keep tests that describe behavior. Ask if unsure.
 
 ## Decisions
 
@@ -41,4 +28,4 @@ In build mode, do every task through subagents. The main session is a foreman: i
 
 **Checkpoints.** A subagent must stop and return a question — never a guess — at any point that needs the user: any product, UX, scope, or risk decision. The foreman relays that question, then resumes the same subagent with the answer, so no work is lost. No other task needs a stop.
 
-**Tests run once.** The subagent that changes the code runs only the tests created for that implementation (never the full suite) and reports the exact command and result. The foreman reviews that report and does not re-run tests; it re-runs only a specific affected test file if the evidence looks wrong. If tests were created solely for that task, delete them after verification.
+**Tests run once.** The subagent that changes the code runs only the tests for its implementation (never the full suite) and reports the exact command and result. The foreman reviews that report and does not re-run tests; it re-runs only a specific affected test file if the evidence looks wrong.

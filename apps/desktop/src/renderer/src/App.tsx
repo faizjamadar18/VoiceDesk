@@ -22,15 +22,17 @@ import {
   GiftIcon,
   HistoryIcon,
   HomeIcon,
+  InsightsIcon,
   MicIcon
 } from './components/dashboard-icons'
 import { ThemeProvider, useSystemTheme } from './context/ThemeContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { useAuth } from './features/auth/useAuth'
 import { OnboardingFlow } from './features/onboarding/OnboardingFlow'
+import { InsightsTab } from './components/insights/InsightsTab'
 
 type WindowAction = 'minimize' | 'maximize' | 'close'
-type TabId = 'dashboard' | 'history' | 'dictation' | 'agent' | 'apps'
+type TabId = 'dashboard' | 'insights' | 'history' | 'dictation' | 'agent' | 'apps'
 
 interface NavItem {
   id: TabId
@@ -40,6 +42,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <HomeIcon /> },
+  { id: 'insights', label: 'Insights', icon: <InsightsIcon /> },
   { id: 'history', label: 'History', icon: <HistoryIcon /> },
   { id: 'dictation', label: 'Dictation', icon: <MicIcon /> },
   { id: 'agent', label: 'Agent', icon: <AISparkleIcon /> },
@@ -446,6 +449,8 @@ function DashboardApp(): JSX.Element {
                     </section>
                   </div>
                 )}
+
+                {activeTab === 'insights' && <InsightsTab />}
 
                 {activeTab === 'history' && (
                   <HistoryPage

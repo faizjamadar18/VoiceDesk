@@ -231,7 +231,7 @@ describe('SidebarWindow', () => {
     sidebar.dispose()
   })
 
-  it('reinforces moveTop and setAlwaysOnTop on show, syncPointer, and expansion', () => {
+  it('reinforces moveTop and setAlwaysOnTop on show and expansion, but does not spam in syncPointer', () => {
     const target = fakeSidebarWindow()
     const sidebar = new SidebarWindow(target.win)
 
@@ -242,11 +242,11 @@ describe('SidebarWindow', () => {
     target.moveTop.mockClear()
     target.setAlwaysOnTop.mockClear()
 
-    // Hover inside sliver
+    // syncPointer does not call moveTop or setAlwaysOnTop
     electronState.cursor = { x: 0, y: 300 }
     sidebar.syncPointer()
-    expect(target.moveTop).toHaveBeenCalled()
-    expect(target.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+    expect(target.moveTop).not.toHaveBeenCalled()
+    expect(target.setAlwaysOnTop).not.toHaveBeenCalled()
 
     target.moveTop.mockClear()
     target.setAlwaysOnTop.mockClear()
@@ -325,15 +325,16 @@ describe('SidebarWindow', () => {
     sidebar.dispose()
   })
 
-  it('detects cursor at leftmost edge and broadcasts IPC.sidebarPointer', () => {
+  it('detects cursor at leftmost edge and broadcasts IPC.sidebarPointer without disabling mouse ignore unless inside interactive region', () => {
     const target = fakeSidebarWindow()
     const sidebar = new SidebarWindow(target.win)
 
-    // Cursor at extreme left edge (x=1 <= 1)
+    // Cursor at extreme left edge (x=1 <= 1) but no interactive region set:
+    // Mouse events MUST still be ignored (click-through for Print Screen / tabs)
     electronState.cursor = { x: 1, y: 400 }
     sidebar.syncPointer()
 
-    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
     expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
       atLeftEdge: true,
       x: 1,
@@ -343,7 +344,7 @@ describe('SidebarWindow', () => {
     // Cursor at extreme left edge (x=0)
     electronState.cursor = { x: 0, y: 400 }
     sidebar.syncPointer()
-    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
     expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
       atLeftEdge: true,
       x: 0,
@@ -353,7 +354,12 @@ describe('SidebarWindow', () => {
     // Cursor at negative coordinate x=-2 (slammed against left edge)
     electronState.cursor = { x: -2, y: 400 }
     sidebar.syncPointer()
-    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
+    expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
+      atLeftEdge: true,
+      x: -2,
+      y: 400
+    })
 
     // Cursor outside left edge and outside region (x=5)
     electronState.cursor = { x: 5, y: 400 }
@@ -371,6 +377,16 @@ describe('SidebarWindow', () => {
     electronState.cursor = { x: 10, y: 400 }
     sidebar.syncPointer()
     expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(false)
+
+    // Cursor at extreme left edge but outside interactive region: mouse events still ignored!
+    electronState.cursor = { x: 0, y: 100 }
+    sidebar.syncPointer()
+    expect(target.setIgnoreMouseEvents).toHaveBeenCalledWith(...expectedIgnoreArgs)
+    expect(target.send).toHaveBeenCalledWith(IPC.sidebarPointer, {
+      atLeftEdge: true,
+      x: 0,
+      y: 100
+    })
 
     // Outside interactive region and not at left edge, click-through is enabled (no 40px corridor)
     electronState.cursor = { x: 30, y: 400 }

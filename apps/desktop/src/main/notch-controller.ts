@@ -27,7 +27,7 @@ export interface NotchPresenter {
   partial(text: string): void
   setSpeechActive?(active: boolean): void
   dismissWithAnimation?(): void
-  reposition?(): void
+  reposition?(targetDisplay?: unknown): void
 }
 
 /**

@@ -267,14 +267,18 @@ export function VoiceOsSidebar(): JSX.Element {
 
   // Mouse interactivity reconciliation
   const reconcilePointer = useCallback(
-    (x: number, y: number) => {
+    (x: number, y: number, atLeftEdgeOverride?: boolean) => {
       if (dragPointerRef.current) return
       if (isExpanded) {
         return
       }
 
       const sliverY = panelTopPx + collapsedTopPx
-      const overSliver = isPointInSliver(x, y, collapsedWidthPx, collapsedHeightPx, sliverY)
+      const sliverInteractiveWidth = collapsedWidthPx + 4
+      const atEdge = atLeftEdgeOverride ?? isLeftEdgeHovered
+      const overSliver =
+        (isSliverVisible || atEdge) &&
+        isPointInSliver(x, y, sliverInteractiveWidth, collapsedHeightPx, sliverY)
       const overPopover =
         showPopover &&
         x >= SLIVER_POPOVER_LEFT &&
@@ -286,6 +290,8 @@ export function VoiceOsSidebar(): JSX.Element {
     },
     [
       isExpanded,
+      isSliverVisible,
+      isLeftEdgeHovered,
       panelTopPx,
       collapsedTopPx,
       collapsedWidthPx,
@@ -299,10 +305,11 @@ export function VoiceOsSidebar(): JSX.Element {
   useEffect(() => {
     if (!window.kestrel?.onSidebarPointer) return undefined
     const unsubscribe = window.kestrel.onSidebarPointer((payload) => {
-      setIsLeftEdgeHovered(Boolean(payload.atLeftEdge || payload.x <= 1))
+      const atEdge = Boolean(payload.atLeftEdge || payload.x <= 1)
+      setIsLeftEdgeHovered(atEdge)
 
       if (!isExpanded) {
-        reconcilePointer(payload.x, payload.y)
+        reconcilePointer(payload.x, payload.y, atEdge)
       }
     })
     return () => {
@@ -341,6 +348,7 @@ export function VoiceOsSidebar(): JSX.Element {
     if (!window.kestrel?.setSidebarRegion) return
 
     const sliverY = panelTopPx + collapsedTopPx
+    const sliverInteractiveWidth = collapsedWidthPx + 4
 
     if (isExpanded) {
       window.kestrel.setSidebarRegion({
@@ -353,7 +361,7 @@ export function VoiceOsSidebar(): JSX.Element {
       window.kestrel.setSidebarRegion({
         left: 0,
         top: Math.max(0, Math.round(showPopover ? Math.min(popoverTop, sliverY) : sliverY)),
-        width: showPopover ? SLIVER_POPOVER_LEFT + 220 : collapsedWidthPx + 4,
+        width: showPopover ? SLIVER_POPOVER_LEFT + 220 : sliverInteractiveWidth,
         height: Math.round(
           showPopover
             ? Math.max(popoverTop + 68, sliverY + collapsedHeightPx) - Math.min(popoverTop, sliverY)

@@ -238,6 +238,7 @@ export interface NotchCalendarCard {
   description?: string
   attendees?: string[]
   existingEvents?: NotchCalendarEvent[]
+  backgroundColor?: string
 }
 
 /**

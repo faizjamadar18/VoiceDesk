@@ -193,6 +193,93 @@ function ClockIcon(): JSX.Element {
   )
 }
 
+function ClockMetaIcon({ size = 14 }: { size?: number }): JSX.Element {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <circle cx="12" cy="12" r="9" stroke={GCAL_DARK.textMuted} strokeWidth="1.8" />
+      <path
+        d="M12 7v5l3 2"
+        stroke={GCAL_DARK.textMuted}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function LocationMetaIcon({ size = 14 }: { size?: number }): JSX.Element {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <path
+        d="M12 22s7-7 7-12a7 7 0 10-14 0c0 5 7 12 7 12z"
+        stroke={GCAL_DARK.textMuted}
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.5" stroke={GCAL_DARK.textMuted} strokeWidth="1.8" />
+    </svg>
+  )
+}
+
+export function formatEventDateTimeLine(
+  startISO?: string,
+  endISO?: string,
+  durationMinutes?: number
+): string {
+  if (!startISO) return ''
+  const startParts = parseISOParts(startISO)
+  const [sy, sm, sd] = startParts.date.split('-').map(Number)
+  if (!sy || !sm || !sd) return ''
+  const startDate = new Date(sy, sm - 1, sd, startParts.hour, startParts.minute)
+  if (isNaN(startDate.getTime())) return ''
+
+  const dateFmt = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  })
+  const timeFmt = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  })
+
+  const datePart = dateFmt.format(startDate)
+  const startTime = timeFmt.format(startDate)
+
+  let effectiveEndISO = endISO
+  if (!effectiveEndISO && durationMinutes && durationMinutes > 0) {
+    effectiveEndISO = computeEndISO(startISO, durationMinutes)
+  }
+
+  let endTime = ''
+  if (effectiveEndISO) {
+    const endParts = parseISOParts(effectiveEndISO)
+    const [ey, em, ed] = endParts.date.split('-').map(Number)
+    const endDate = new Date(ey, em - 1, ed, endParts.hour, endParts.minute)
+    if (!isNaN(endDate.getTime())) {
+      endTime = timeFmt.format(endDate)
+    }
+  }
+
+  return endTime ? `${datePart} · ${startTime} \u2013 ${endTime}` : `${datePart} · ${startTime}`
+}
+
 interface MiniTimelineProps {
   startHour: number
   startMinute: number
@@ -301,7 +388,7 @@ function GCalMiniTimeline({
   )
 }
 
-export function GoogleCalendarCard({
+export function GoogleCalendarScheduleCard({
   card,
   busy = false,
   onConfirm,
@@ -669,4 +756,123 @@ export function GoogleCalendarCard({
       </div>
     </div>
   )
+}
+
+export function GoogleCalendarDeleteCard({
+  card,
+  busy = false,
+  onConfirm,
+  onDiscard
+}: GoogleCalendarCardProps): JSX.Element {
+  const [isActionOverlayVisible, setIsActionOverlayVisible] = useState(false)
+  const [deleteHovered, setDeleteHovered] = useState(false)
+
+  const eventColor = card.backgroundColor || GCAL_DARK.eventDefault
+  const calendarName = card.calendarName || card.account || 'primary'
+  const dateTimeLine = formatEventDateTimeLine(card.start, card.end, card.durationMinutes)
+
+  return (
+    <div
+      className="kestrel-calendar-card kestrel-calendar-delete-card"
+      onMouseEnter={() => setIsActionOverlayVisible(true)}
+      onMouseLeave={() => setIsActionOverlayVisible(false)}
+    >
+      {/* Header bar */}
+      <div className="kestrel-calendar-head">
+        <div className="kestrel-calendar-head-left">
+          <img
+            src={calendarIcon}
+            alt="Google Calendar"
+            width={18}
+            height={18}
+            className="kestrel-calendar-icon"
+          />
+          <span className="kestrel-calendar-delete-header-title">Delete event</span>
+        </div>
+        <button
+          type="button"
+          className="kestrel-calendar-close-btn"
+          aria-label="Cancel"
+          disabled={busy}
+          onClick={onDiscard}
+        >
+          <CloseCrossIcon size={11} />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="kestrel-calendar-delete-body">
+        <div
+          className="kestrel-calendar-delete-box"
+          style={{
+            background: `${eventColor}26`,
+            borderLeft: `4px solid ${eventColor}`
+          }}
+        >
+          <div className="kestrel-calendar-delete-title">{card.title || 'Meeting'}</div>
+
+          {dateTimeLine ? (
+            <div className="kestrel-calendar-delete-time-row">
+              <ClockMetaIcon size={14} />
+              <span>{dateTimeLine}</span>
+            </div>
+          ) : null}
+
+          {card.location ? (
+            <div className="kestrel-calendar-delete-loc-row">
+              <LocationMetaIcon size={14} />
+              <span>{card.location}</span>
+            </div>
+          ) : null}
+
+          {calendarName ? (
+            <div className="kestrel-calendar-delete-cal-row">
+              <span
+                className="kestrel-calendar-delete-cal-dot"
+                style={{ background: eventColor }}
+              />
+              <span className="kestrel-calendar-delete-cal-name">{calendarName}</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Floating Action Button Overlay */}
+      <div
+        className="kestrel-calendar-action-overlay"
+        style={{
+          opacity: isActionOverlayVisible ? 1 : 0,
+          transform: isActionOverlayVisible ? 'translateY(0)' : 'translateY(4px)',
+          pointerEvents: isActionOverlayVisible ? 'auto' : 'none'
+        }}
+      >
+        <button
+          type="button"
+          className="kestrel-calendar-delete-pill"
+          disabled={busy}
+          onClick={() => {
+            if (!busy) onConfirm(card)
+          }}
+          onMouseEnter={() => setDeleteHovered(true)}
+          onMouseLeave={() => setDeleteHovered(false)}
+          style={{
+            background: busy
+              ? 'rgba(234, 67, 53, 0.45)'
+              : deleteHovered
+                ? '#F06A5E'
+                : '#EA4335'
+          }}
+        >
+          Delete event
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function GoogleCalendarCard(props: GoogleCalendarCardProps): JSX.Element {
+  if (props.card.mode === 'delete') {
+    return <GoogleCalendarDeleteCard {...props} />
+  }
+  return <GoogleCalendarScheduleCard {...props} />
 }

@@ -22,25 +22,15 @@ export const NOTCH_CONTENT_MARGIN = 12
 const INTERACTION_POLL_MS = 80
 
 export function notchBounds(
-  height: number = NOTCH_HEIGHT
+  height: number = NOTCH_HEIGHT,
+  targetDisplay?: Electron.Display
 ): { x: number; y: number; width: number; height: number } {
-  let display: Electron.Display | undefined
-  try {
-    if (
-      typeof screen.getCursorScreenPoint === 'function' &&
-      typeof screen.getDisplayNearestPoint === 'function'
-    ) {
-      display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-    }
-  } catch {
-    // fallback to primary display if cursor point lookup fails
-  }
-  if (!display) {
-    display = screen.getPrimaryDisplay()
-  }
+  const display = targetDisplay ?? screen.getPrimaryDisplay()
+  const scale = display.scaleFactor || 1
+  const roundToDeviceDip = (v: number) => Math.round(Math.round(v * scale) / scale)
   return {
-    x: Math.round(display.bounds.x + (display.bounds.width - NOTCH_WIDTH) / 2),
-    y: display.bounds.y,
+    x: roundToDeviceDip(display.bounds.x + (display.bounds.width - NOTCH_WIDTH) / 2),
+    y: roundToDeviceDip(display.bounds.y),
     width: NOTCH_WIDTH,
     height: Math.min(height, display.bounds.height)
   }
@@ -125,7 +115,7 @@ export class NotchWindowPresenter implements NotchPresenter {
 
   constructor(win: BrowserWindow) {
     this.win = win
-    this.onDisplayMetricsChanged = () => this.reposition()
+    this.onDisplayMetricsChanged = () => this.reposition(screen.getPrimaryDisplay())
 
     screen.on?.('display-metrics-changed', this.onDisplayMetricsChanged)
     screen.on?.('display-added', this.onDisplayMetricsChanged)
@@ -169,8 +159,8 @@ export class NotchWindowPresenter implements NotchPresenter {
     }
   }
 
-  reposition(): void {
-    this.applyBounds()
+  reposition(targetDisplay?: Electron.Display): void {
+    this.applyBounds(targetDisplay ?? screen.getPrimaryDisplay())
     if (this.win.isVisible()) {
       if (typeof this.win.moveTop === 'function') {
         this.win.moveTop()
@@ -455,9 +445,9 @@ export class NotchWindowPresenter implements NotchPresenter {
     }
   }
 
-  private applyBounds(): void {
+  private applyBounds(targetDisplay?: Electron.Display): void {
     if (this.disposed || this.win.isDestroyed()) return
-    const next = notchBounds(this.contentHeight)
+    const next = notchBounds(this.contentHeight, targetDisplay ?? screen.getPrimaryDisplay())
     const current = this.win.getBounds()
     if (
       current.x !== next.x ||

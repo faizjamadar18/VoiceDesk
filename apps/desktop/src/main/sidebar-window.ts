@@ -111,11 +111,11 @@ export class SidebarWindow {
     if (this.disposed || this.win.isDestroyed()) return
     this.applyBounds()
     this.win.showInactive()
-    if (typeof this.win.moveTop === 'function') {
-      this.win.moveTop()
-    }
     if (typeof this.win.setAlwaysOnTop === 'function') {
       this.win.setAlwaysOnTop(true, 'screen-saver')
+    }
+    if (typeof this.win.moveTop === 'function') {
+      this.win.moveTop()
     }
     this.startInteractionPolling()
     this.syncPointer()
@@ -134,11 +134,11 @@ export class SidebarWindow {
       this.isSliverRevealed = false
     }
     if (this.isExpanded() && !wasExpanded) {
-      if (typeof this.win.moveTop === 'function') {
-        this.win.moveTop()
-      }
       if (typeof this.win.setAlwaysOnTop === 'function') {
         this.win.setAlwaysOnTop(true, 'screen-saver')
+      }
+      if (typeof this.win.moveTop === 'function') {
+        this.win.moveTop()
       }
     }
     if (this.win.isVisible()) {
@@ -222,27 +222,13 @@ export class SidebarWindow {
       this.interactiveRegion !== null &&
       pointInInteractiveRegion(cursor, content, this.interactiveRegion)
 
-    if (insideInteractiveRegion || atLeftEdge) {
-      if (typeof this.win.moveTop === 'function') {
-        this.win.moveTop()
-      }
-      if (typeof this.win.setAlwaysOnTop === 'function') {
-        this.win.setAlwaysOnTop(true, 'screen-saver')
-      }
+    if (insideInteractiveRegion) {
       this.setIgnoreMouseEvents(false)
-      this.send(IPC.sidebarPointer, { atLeftEdge, x: localX, y: localY })
     } else {
-      if (this.isExpanded()) {
-        if (typeof this.win.moveTop === 'function') {
-          this.win.moveTop()
-        }
-        if (typeof this.win.setAlwaysOnTop === 'function') {
-          this.win.setAlwaysOnTop(true, 'screen-saver')
-        }
-      }
-      this.setIgnoreMouseEvents(true, { forward: true })
-      this.send(IPC.sidebarPointer, { atLeftEdge: false, x: localX, y: localY })
+      this.setIgnoreMouseEvents(true)
     }
+
+    this.send(IPC.sidebarPointer, { atLeftEdge, x: localX, y: localY })
   }
 
   private startInteractionPolling(): void {
