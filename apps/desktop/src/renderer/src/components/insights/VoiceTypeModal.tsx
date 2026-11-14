@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
+import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   paintShareCard,
   renderMarkTexture,
@@ -222,22 +223,24 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
   const mask =
     'radial-gradient(circle 132px at var(--reveal-x, -999px) var(--reveal-y, -999px), rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.5) 40%, transparent 72%)'
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
+      style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
     >
       <div
-        className="relative flex flex-col items-center overflow-hidden rounded-[30px] border border-white/10 p-6 sm:max-w-[488px] w-full"
+        className="relative z-[200] flex flex-col items-center overflow-hidden rounded-[30px] border border-white/10 p-6 sm:max-w-[488px] w-full"
         onClick={(e) => e.stopPropagation()}
         style={{
+          WebkitAppRegion: 'no-drag',
           backgroundColor: isDarkMode ? '#17181C' : '#FFFFFF',
           boxShadow: isDarkMode
             ? '0 30px 60px -24px rgba(0, 0, 0, 0.85), 0 8px 24px -12px rgba(0, 0, 0, 0.5)'
             : '0 30px 60px -24px rgba(15, 23, 42, 0.35), 0 8px 24px -12px rgba(15, 23, 42, 0.14)'
-        }}
+        } as CSSProperties}
       >
         {/* Close Button */}
         <button
@@ -268,7 +271,16 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
               filter:
                 'drop-shadow(0 14px 22px rgba(20, 58, 100, 0.32)) drop-shadow(0 2px 4px rgba(20, 58, 100, 0.24))'
             }}
-          />
+          >
+            <div className="sr-only">
+              <p>{MOCK_VOICE_TYPE_MODEL.typeName}</p>
+              {MOCK_VOICE_TYPE_MODEL.stats.map((stat) => (
+                <p key={stat.label}>
+                  {stat.value} {stat.label}
+                </p>
+              ))}
+            </div>
+          </canvas>
           <div
             ref={revealRef}
             aria-hidden="true"
@@ -348,6 +360,7 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

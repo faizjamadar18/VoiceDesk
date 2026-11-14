@@ -44,7 +44,7 @@ export function StreakCard({ data, className = '' }: StreakCardProps) {
         </div>
 
         {/* Heatmap Section */}
-        <div className="overflow-x-auto pb-1">
+        <div className="overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {/* Month labels along top */}
           <div className="flex pl-5 pr-2 justify-between text-[10px] text-gray-500 mb-1.5 select-none">
             <span>Jun</span>

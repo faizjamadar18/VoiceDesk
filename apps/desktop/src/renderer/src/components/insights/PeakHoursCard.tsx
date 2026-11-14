@@ -3,23 +3,17 @@ import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Card } from '../../features/profile/Card'
 import type { InsightsData } from './types'
+import { ChartTooltip, type TooltipData } from './ChartTooltip'
 
 export interface PeakHoursCardProps {
   data: InsightsData
   isDarkMode?: boolean
 }
 
-interface TooltipState {
-  x: number
-  y: number
-  title: string
-  detail: string
-}
-
 const CHART_HEIGHT = 80
 
 export function PeakHoursCard({ data, isDarkMode = true }: PeakHoursCardProps): JSX.Element {
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null)
   const max = Math.max(...data.hourCounts, 1)
   const peakHour = data.hourCounts.indexOf(Math.max(...data.hourCounts))
   const accent = isDarkMode ? '#0A84FF' : '#007AFF'
@@ -76,11 +70,11 @@ export function PeakHoursCard({ data, isDarkMode = true }: PeakHoursCardProps): 
           return (
             <div
               key={hour}
-              className="flex-1 h-full flex items-end cursor-default"
+              className="flex-1 h-full flex items-end cursor-pointer group py-1"
               onMouseEnter={(e) => handleBarEnter(e, hour, count, height)}
             >
               <motion.div
-                className="w-full rounded-full"
+                className="w-full rounded-full transition-all duration-150 group-hover:brightness-125 group-hover:shadow-[0_0_8px_rgba(10,132,255,0.5)]"
                 style={{
                   backgroundColor: isPeak ? accent : neutral
                 }}
@@ -108,23 +102,8 @@ export function PeakHoursCard({ data, isDarkMode = true }: PeakHoursCardProps): 
         ))}
       </div>
 
-      {tooltip && (
-        <div
-          className="fixed pointer-events-none z-50 -translate-x-1/2 -translate-y-full mb-2 rounded-lg px-2.5 py-1.5 shadow-xl text-center"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y - 6,
-            backgroundColor: isDarkMode ? '#1F2024' : '#FFFFFF',
-            border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(0, 0, 0, 0.1)',
-            color: isDarkMode ? '#F3F4F6' : '#111827'
-          }}
-        >
-          <div className="text-[11px] font-semibold">{tooltip.title}</div>
-          <div className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {tooltip.detail}
-          </div>
-        </div>
-      )}
+      {/* Tooltip via createPortal */}
+      <ChartTooltip tooltip={tooltip} isDarkMode={isDarkMode} />
     </Card>
   )
 }

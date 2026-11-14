@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import { motion } from 'framer-motion'
 import { useSystemTheme } from '../../context/ThemeContext'
 import { AgentPromptsCard } from './AgentPromptsCard'
@@ -52,7 +52,7 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
   return (
     <div className={`w-full transition-colors duration-200 ${className}`}>
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="relative z-[80] mb-6 flex items-center justify-between gap-4">
         <h1
           className="text-xl font-bold"
           style={{
@@ -66,12 +66,13 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
         <button
           type="button"
           onClick={() => setIsVoiceTypeModalOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all active:scale-[0.98] border cursor-pointer"
+          className="relative z-[80] inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all active:scale-[0.98] hover:bg-white/[0.14] border cursor-pointer select-none"
           style={{
+            WebkitAppRegion: 'no-drag',
             backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
             borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
             color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.85)'
-          }}
+          } as CSSProperties}
         >
           <ShareIcon className="w-3.5 h-3.5 -mt-px" />
           <span>Voice Type</span>

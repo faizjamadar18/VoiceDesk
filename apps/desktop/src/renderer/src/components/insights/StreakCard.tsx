@@ -3,17 +3,11 @@ import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { Card } from '../../features/profile/Card'
 import { toDayKey } from './mockData'
 import type { InsightsData } from './types'
+import { ChartTooltip, type TooltipData } from './ChartTooltip'
 
 export interface StreakCardProps {
   data: InsightsData
   isDarkMode?: boolean
-}
-
-interface TooltipState {
-  x: number
-  y: number
-  title: string
-  detail: string
 }
 
 const CELL_SIZE = 11
@@ -47,7 +41,7 @@ function startOfHeatmapWeek(date: Date): Date {
 }
 
 export function StreakCard({ data, isDarkMode = true }: StreakCardProps): JSX.Element {
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null)
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null)
   const ramp = isDarkMode ? DARK_RAMP : LIGHT_RAMP
 
   const { weeks, monthLabels, todayKey } = useMemo(() => {
@@ -136,7 +130,10 @@ export function StreakCard({ data, isDarkMode = true }: StreakCardProps): JSX.El
         </span>
       </div>
 
-      <div className="w-full overflow-x-auto" onMouseLeave={() => setTooltip(null)}>
+      <div
+        className="w-full overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden p-1 -m-1"
+        onMouseLeave={() => setTooltip(null)}
+      >
         <div>
           {/* Month labels */}
           <div
@@ -192,6 +189,7 @@ export function StreakCard({ data, isDarkMode = true }: StreakCardProps): JSX.El
                     return (
                       <div
                         key={cell.dayKey}
+                        className={`cursor-pointer transition-all duration-150 hover:z-20 hover:brightness-125 hover:ring-1 ${isDarkMode ? 'hover:ring-white/50' : 'hover:ring-black/40'}`}
                         onMouseEnter={(e) => handleCellEnter(e, cell.dayKey)}
                         style={{
                           width: CELL_SIZE,
@@ -257,24 +255,8 @@ export function StreakCard({ data, isDarkMode = true }: StreakCardProps): JSX.El
         </div>
       </div>
 
-      {/* Tooltip */}
-      {tooltip && (
-        <div
-          className="fixed pointer-events-none z-50 -translate-x-1/2 -translate-y-full mb-2 rounded-lg px-2.5 py-1.5 shadow-xl text-center"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y - 6,
-            backgroundColor: isDarkMode ? '#1F2024' : '#FFFFFF',
-            border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(0, 0, 0, 0.1)',
-            color: isDarkMode ? '#F3F4F6' : '#111827'
-          }}
-        >
-          <div className="text-[11px] font-semibold">{tooltip.title}</div>
-          <div className={`text-[10px] ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {tooltip.detail}
-          </div>
-        </div>
-      )}
+      {/* Tooltip via createPortal */}
+      <ChartTooltip tooltip={tooltip} isDarkMode={isDarkMode} />
     </Card>
   )
 }

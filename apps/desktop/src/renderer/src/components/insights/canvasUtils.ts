@@ -341,7 +341,7 @@ function markLayer(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  const ctx = canvas.getContext('2d')
+  const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null
   if (!ctx) return canvas
   ctx.beginPath()
   traceCardOutline(ctx, width, height)
@@ -369,7 +369,7 @@ function renderMarkLayer(opacity: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  const ctx = canvas.getContext('2d')
+  const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null
   if (!ctx) return canvas
   ctx.globalAlpha = opacity
   ctx.drawImage(markLayer(width, height), 0, 0)
@@ -377,7 +377,8 @@ function renderMarkLayer(opacity: number): HTMLCanvasElement {
 }
 
 export function renderMarkTexture(opacity: number): string {
-  return renderMarkLayer(opacity).toDataURL('image/png')
+  const layer = renderMarkLayer(opacity)
+  return typeof layer.toDataURL === 'function' ? layer.toDataURL('image/png') : ''
 }
 
 function paintBrand(ctx: CanvasRenderingContext2D, brand: string, family: string): void {
@@ -485,7 +486,7 @@ export function paintShareCard(
   const { pixelRatio } = options
   canvas.width = Math.round(SHARE_CARD_WIDTH * pixelRatio)
   canvas.height = Math.round(SHARE_CARD_HEIGHT * pixelRatio)
-  const ctx = canvas.getContext('2d')
+  const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null
   if (!ctx) return
   const family = cardFontFamily()
   ctx.clearRect(0, 0, canvas.width, canvas.height)
