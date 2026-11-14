@@ -677,6 +677,27 @@ kbd {
   animation: 10s cubic-bezier(0.4, 0, 0.2, 1) infinite shimmerMove;
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0%;
+  }
+  50% {
+    background-position: 100%;
+  }
+  100% {
+    background-position: 0%;
+  }
+}
+
 /* Main content */
 
 

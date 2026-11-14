@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { motion } from 'framer-motion'
 import { useSystemTheme } from '../../context/ThemeContext'
+import { DashboardButton } from '../ui/DashboardButton'
 import { AgentPromptsCard } from './AgentPromptsCard'
 import { AppUsageCard } from './AppUsageCard'
 import { MOCK_INSIGHTS_DATA } from './mockData'
@@ -63,20 +64,19 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
           Insights
         </h1>
 
-        <button
+        <DashboardButton
           type="button"
+          variant="secondary"
+          isDarkMode={isDarkMode}
           onClick={() => setIsVoiceTypeModalOpen(true)}
-          className="relative z-[80] inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold tracking-tight transition-all active:scale-[0.98] hover:bg-white/[0.14] border cursor-pointer select-none"
-          style={{
-            WebkitAppRegion: 'no-drag',
-            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-            borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
-            color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.85)'
-          } as CSSProperties}
+          className="relative z-[80] !rounded-full !px-3.5 !py-1.5 active:scale-[0.98] [&::before]:!rounded-full [&::after]:!rounded-full cursor-pointer select-none"
+          style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
         >
-          <ShareIcon className="w-3.5 h-3.5 -mt-px" />
-          <span>Voice Type</span>
-        </button>
+          <span className="inline-flex items-center gap-1.5 font-semibold tracking-[-0.01em]">
+            <ShareIcon className="w-3.5 h-3.5 -mt-px" />
+            <span>Voice Type</span>
+          </span>
+        </DashboardButton>
       </div>
 
       {/* Bento Grid */}

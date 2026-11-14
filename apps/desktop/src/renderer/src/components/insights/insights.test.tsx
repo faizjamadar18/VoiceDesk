@@ -158,14 +158,24 @@ describe('Insights Components Suite', () => {
       expect(container.toString()).not.toContain('The Agent Commander')
 
       // Find the "Voice Type" button in the rendered DOM tree
+      const getNodeText = (n: any): string => {
+        if (!n) return ''
+        let str = n.textContent || n.data || ''
+        if (n.childNodes) {
+          for (const c of n.childNodes) {
+            str += ' ' + getNodeText(c)
+          }
+        }
+        return str
+      }
+
       const findVoiceTypeButton = (node: any): any => {
         if (!node) return null
         const reactPropsKey = Object.keys(node).find((k) => k.startsWith('__reactProps$'))
         if (reactPropsKey && typeof node[reactPropsKey]?.onClick === 'function') {
           // Check if this button contains Voice Type
-          const text = node.textContent || ''
-          const childText = node.childNodes?.map((c: any) => c.data || c.textContent || '').join(' ')
-          if (text.includes('Voice Type') || childText.includes('Voice Type')) {
+          const text = getNodeText(node)
+          if (text.includes('Voice Type')) {
             return node
           }
         }

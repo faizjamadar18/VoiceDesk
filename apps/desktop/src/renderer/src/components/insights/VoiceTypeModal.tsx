@@ -125,9 +125,96 @@ function LinkedInIcon({ width = 15, height = 15, className }: { width?: number; 
   )
 }
 
+const CONFIRMATION_MS = 1800
+
+export interface UtilityChipProps {
+  icon: React.ReactNode
+  label: string
+  confirmed?: boolean
+  isDarkMode?: boolean
+  onClick?: () => void
+}
+
+export function UtilityChip({
+  icon,
+  label,
+  confirmed = false,
+  isDarkMode = true,
+  onClick
+}: UtilityChipProps): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:outline-none border cursor-pointer ${
+        isDarkMode
+          ? 'bg-white/10 hover:bg-white/15 text-gray-200 border-white/10'
+          : 'bg-black/[0.05] hover:bg-black/[0.09] text-gray-700 border-black/10'
+      }`}
+      style={{
+        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        color: isDarkMode ? '#e5e7eb' : '#374151'
+      }}
+    >
+      {confirmed ? <CheckIcon size={17} /> : icon}
+    </button>
+  )
+}
+
+export interface PostButtonProps {
+  icon: React.ReactNode
+  label: string
+  primary?: boolean
+  isDarkMode?: boolean
+  onClick?: () => void
+}
+
+export function PostButton({
+  icon,
+  label,
+  primary = false,
+  isDarkMode = true,
+  onClick
+}: PostButtonProps): JSX.Element {
+  const toneClasses = primary
+    ? isDarkMode
+      ? 'bg-white text-gray-900 hover:bg-gray-100 shadow-sm font-semibold'
+      : 'bg-gray-900 text-white hover:bg-gray-800 shadow-sm font-semibold'
+    : isDarkMode
+      ? 'bg-white/10 hover:bg-white/15 text-gray-200 border border-white/10 font-medium'
+      : 'bg-black/[0.05] hover:bg-black/[0.09] text-gray-700 border border-black/10 font-medium'
+
+  const toneStyle: CSSProperties = primary
+    ? {
+        backgroundColor: isDarkMode ? '#ffffff' : '#111827',
+        color: isDarkMode ? '#111827' : '#ffffff'
+      }
+    : {
+        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+        borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        color: isDarkMode ? '#e5e7eb' : '#374151'
+      }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13px] whitespace-nowrap transition-colors focus:outline-none cursor-pointer ${toneClasses}`}
+      style={toneStyle}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+}
+
 export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceTypeModalProps): JSX.Element | null {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const revealRef = useRef<HTMLDivElement | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [texture, setTexture] = useState<string | null>(null)
   const [confirmedAction, setConfirmedAction] = useState<string | null>(null)
 
@@ -168,11 +255,18 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
     if (node) node.style.opacity = '0'
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
   const triggerConfirmation = (action: string): void => {
     setConfirmedAction(action)
-    setTimeout(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
       setConfirmedAction(null)
-    }, 2500)
+    }, CONFIRMATION_MS)
   }
 
   const handleCopyImage = async (): Promise<void> => {
@@ -300,64 +394,41 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
         {/* Action Buttons Row */}
         <div className="mt-6 flex w-full items-center gap-2">
           {/* Copy Image Button */}
-          <button
-            type="button"
+          <UtilityChip
+            icon={<CopyIcon size={17} />}
+            label="Copy image"
+            confirmed={confirmedAction === 'copy'}
+            isDarkMode={isDarkMode}
             onClick={handleCopyImage}
-            title="Copy image"
-            aria-label="Copy image"
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:outline-none ${
-              isDarkMode
-                ? 'bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]'
-                : 'bg-black/[0.05] text-gray-700 hover:bg-black/[0.09]'
-            }`}
-          >
-            {confirmedAction === 'copy' ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
-          </button>
+          />
 
           {/* Download Image Button */}
-          <button
-            type="button"
+          <UtilityChip
+            icon={<DownloadIcon size={17} />}
+            label="Save image"
+            confirmed={confirmedAction === 'download'}
+            isDarkMode={isDarkMode}
             onClick={handleDownloadImage}
-            title="Save image"
-            aria-label="Save image"
-            className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors focus:outline-none ${
-              isDarkMode
-                ? 'bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]'
-                : 'bg-black/[0.05] text-gray-700 hover:bg-black/[0.09]'
-            }`}
-          >
-            {confirmedAction === 'download' ? <CheckIcon size={16} /> : <DownloadIcon size={16} />}
-          </button>
+          />
 
           <div className="flex-1" />
 
           {/* Post to LinkedIn */}
-          <button
-            type="button"
+          <PostButton
+            icon={<LinkedInIcon width={15} height={15} />}
+            label={confirmedAction === 'linkedin' ? 'Copied' : 'Post to LinkedIn'}
+            isDarkMode={isDarkMode}
             onClick={handlePostToLinkedIn}
-            className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-medium whitespace-nowrap transition-colors focus:outline-none ${
-              isDarkMode
-                ? 'bg-white/[0.07] text-gray-200 hover:bg-white/[0.12]'
-                : 'bg-black/[0.05] text-gray-700 hover:bg-black/[0.09]'
-            }`}
-          >
-            <LinkedInIcon width={15} height={15} />
-            <span>{confirmedAction === 'linkedin' ? 'Copied' : 'Post to LinkedIn'}</span>
-          </button>
+          />
 
           {/* Post to Twitter */}
-          <button
-            type="button"
+          <PostButton
+            primary
+            icon={<TwitterIcon width={14} height={14} />}
+            label={confirmedAction === 'twitter' ? 'Copied' : 'Post to Twitter'}
+            isDarkMode={isDarkMode}
             onClick={handlePostToTwitter}
-            className={`flex h-10 items-center gap-2 rounded-full px-4 text-[13px] font-medium whitespace-nowrap transition-colors focus:outline-none ${
-              isDarkMode
-                ? 'bg-white text-gray-900 hover:bg-gray-200'
-                : 'bg-gray-900 text-white hover:bg-gray-700'
-            }`}
-          >
-            <TwitterIcon width={14} height={14} />
-            <span>{confirmedAction === 'twitter' ? 'Copied' : 'Post to Twitter'}</span>
-          </button>
+          />
         </div>
       </div>
     </div>,
