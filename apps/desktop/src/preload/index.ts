@@ -19,6 +19,7 @@ import {
   type HistoryRecord,
   type HistoryRestorePayload,
   type IntegrationConnectResult,
+  type IntegrationDisconnectResult,
   type IntegrationId,
   type IntegrationsStatus,
   type SidebarPointerPayload
@@ -92,6 +93,8 @@ const api: KestrelApi = {
     ipcRenderer.invoke(IPC.integrationsClearKey) as Promise<IntegrationsStatus>,
   connectIntegration: (id: IntegrationId) =>
     ipcRenderer.invoke(IPC.integrationsConnect, id) as Promise<IntegrationConnectResult>,
+  disconnectIntegration: (id: IntegrationId) =>
+    ipcRenderer.invoke(IPC.integrationsDisconnect, id) as Promise<IntegrationDisconnectResult>,
   refreshIntegrations: () =>
     ipcRenderer.invoke(IPC.integrationsRefresh) as Promise<IntegrationsStatus>,
   onIntegrationsChanged: (callback) =>

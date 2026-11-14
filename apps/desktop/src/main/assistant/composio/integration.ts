@@ -53,6 +53,12 @@ export interface ComposioConnectResult {
   readonly message: string
 }
 
+/** Outcome of revoking a provider's connected accounts. */
+export interface ComposioDisconnectResult {
+  readonly ok: boolean
+  readonly message: string
+}
+
 export interface ComposioIntegrationOptions {
   keyStore: ComposioKeyStore
   /** Stable per-user id passed to Composio. */
@@ -329,6 +335,47 @@ export class ComposioIntegration {
       }
     } catch (error) {
       return { ok: false, url: null, message: errorMessage(error) }
+    }
+  }
+
+  /**
+   * Revoke `providerId`'s connected accounts and rebuild the tool set, so a
+   * different account can be connected. Never throws.
+   */
+  async disconnect(
+    providerId: ComposioProviderId
+  ): Promise<ComposioDisconnectResult> {
+    try {
+      const provider =
+        this.providerSpecs.find((spec) => spec.id === providerId) ?? null
+      if (provider === null || TOOL_FACTORIES[providerId] === undefined) {
+        return { ok: false, message: UNSUPPORTED_MESSAGE }
+      }
+
+      if (this.session === null || this.client === null) {
+        await this.initialize()
+      }
+
+      const client = this.client
+      if (this.session === null || client === null || !this.hasKey) {
+        return { ok: false, message: NO_KEY_MESSAGE }
+      }
+
+      const accounts = await client.listConnectedAccounts({
+        userId: this.userId,
+        toolkit: provider.toolkit
+      })
+      for (const account of accounts) {
+        await client.deleteConnectedAccount(account.id)
+      }
+
+      await this.sync()
+      return {
+        ok: true,
+        message: `${provider.label} disconnected. You can connect a different account now.`
+      }
+    } catch (error) {
+      return { ok: false, message: errorMessage(error) }
     }
   }
 

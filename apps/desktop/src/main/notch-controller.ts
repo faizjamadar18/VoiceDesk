@@ -589,21 +589,27 @@ export class NotchController {
             )
 
       this.decision = null
+      const spoken = response.spokenResponse || response.message
+      if (response.status === 'error') {
+        this.emit('error', this.lastTranscript || null, response.message, 'error', {
+          spoken
+        })
+        this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
+        return
+      }
       // Speak the confirmation once the choice is applied. Falling back to the
       // message keeps a cancel ("Cancelled.") audible too.
       this.emit('result', this.lastTranscript || null, response.message, response.status, {
-        spoken: response.spokenResponse || response.message
+        spoken
       })
       this.scheduleHide(this.options.resultVisibleMs ?? 2_000)
     } catch (error) {
       // The card stays put so the user can try again; the plan is unchanged.
-      this.emit(
-        'error',
-        this.lastTranscript || null,
-        `That didn't work: ${errorMessage(error)}`,
-        'error',
-        { decision: this.decisionPayload(decision, false) }
-      )
+      const errorMsg = `That didn't work: ${errorMessage(error)}`
+      this.emit('error', this.lastTranscript || null, errorMsg, 'error', {
+        decision: this.decisionPayload(decision, false),
+        spoken: errorMsg
+      })
     }
     console.log(`[notch] decide action=${action} plan=${decision.planId}`)
   }

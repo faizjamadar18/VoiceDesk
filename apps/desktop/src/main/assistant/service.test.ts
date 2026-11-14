@@ -319,6 +319,48 @@ describe('AssistantService integrations', () => {
   })
 })
 
+describe('AssistantService confirmation outcomes', () => {
+  it('returns the action status when a confirmed write fails', async () => {
+    const registry = new ToolRegistry()
+    const tool = makeWriteTool('drive_create_file', () => ({ arguments: {} }))
+    tool.run = () => ({
+      status: 'error',
+      action: 'create a Google Drive file',
+      message: 'I couldn\'t find a folder called "My Drive".'
+    })
+    registry.register(tool)
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('drive_create_file')
+    })
+
+    const pending = await service.act('create a doc')
+    expect(pending.status).toBe('pending')
+    expect(pending.planId).toBeTruthy()
+
+    const outcome = await service.confirm(pending.planId ?? '', true)
+
+    expect(outcome.status).toBe('error')
+    expect(outcome.message).toContain('My Drive')
+    expect(outcome.spokenResponse).toContain('My Drive')
+  })
+
+  it('returns ok when a confirmed write succeeds', async () => {
+    const registry = new ToolRegistry()
+    registry.register(makeWriteTool('drive_create_file', () => ({ arguments: {} })))
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('drive_create_file')
+    })
+
+    const pending = await service.act('create a doc')
+    const outcome = await service.confirm(pending.planId ?? '', true)
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe('Done.')
+  })
+})
+
 describe('AssistantService confirmation cards', () => {
   it('carries a card from prepare into the pending response', async () => {
     const registry = new ToolRegistry()

@@ -69,6 +69,7 @@ export const IPC = {
   integrationsSetKey: 'kestrel:integrations-set-key',
   integrationsClearKey: 'kestrel:integrations-clear-key',
   integrationsConnect: 'kestrel:integrations-connect',
+  integrationsDisconnect: 'kestrel:integrations-disconnect',
   integrationsRefresh: 'kestrel:integrations-refresh',
   integrationsChanged: 'kestrel:integrations-changed',
   historyList: 'kestrel:history-list',
@@ -417,6 +418,12 @@ export interface IntegrationConnectResult {
   message: string
 }
 
+export interface IntegrationDisconnectResult {
+  ok: boolean
+  /** A short line to show the user. */
+  message: string
+}
+
 export interface ActionResponse {
   status: 'ok' | 'unhandled' | 'error' | 'pending' | 'cancelled'
   action: string
@@ -554,6 +561,7 @@ export interface KestrelApi {
   setIntegrationsKey: (key: string) => Promise<IntegrationsStatus>
   clearIntegrationsKey: () => Promise<IntegrationsStatus>
   connectIntegration: (id: IntegrationId) => Promise<IntegrationConnectResult>
+  disconnectIntegration: (id: IntegrationId) => Promise<IntegrationDisconnectResult>
   refreshIntegrations: () => Promise<IntegrationsStatus>
   onIntegrationsChanged: (callback: (status: IntegrationsStatus) => void) => () => void
   listHistory: () => Promise<HistoryRecord[]>

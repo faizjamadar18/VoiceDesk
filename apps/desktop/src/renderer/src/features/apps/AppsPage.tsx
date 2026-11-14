@@ -17,8 +17,8 @@ const INTEGRATION_IDS: readonly IntegrationId[] = [
 ]
 
 const NO_KEY_MESSAGE = 'Paste your Composio key above first, then connect an app.'
-const DISCONNECT_MESSAGE = 'To disconnect an app, remove it from your Composio dashboard.'
 const CONNECT_FAILED_MESSAGE = 'Could not start the connection. Please try again.'
+const DISCONNECT_FAILED_MESSAGE = 'Could not disconnect the app. Please try again.'
 
 function isIntegrationId(id: string): id is IntegrationId {
   return (INTEGRATION_IDS as readonly string[]).includes(id)
@@ -48,17 +48,33 @@ export interface IntegrationToggleOutcome {
 
 /**
  * Decides what a toggle on an integration row should do. Kept pure and
- * injectable so the guard rails (no key, or a disconnect) can be tested without
- * a running main process.
+ * injectable so the no-key guard and the main-process calls can be tested
+ * without a running main process.
  */
 export async function runIntegrationToggle(
   id: IntegrationId,
   connected: boolean,
   status: IntegrationsStatus | null,
-  kestrel: Pick<KestrelApi, 'connectIntegration' | 'refreshIntegrations'> | undefined
+  kestrel:
+    | Pick<
+        KestrelApi,
+        'connectIntegration' | 'disconnectIntegration' | 'refreshIntegrations'
+      >
+    | undefined
 ): Promise<IntegrationToggleOutcome> {
   if (!connected) {
-    return { message: DISCONNECT_MESSAGE, refresh: false }
+    if (!kestrel?.disconnectIntegration) {
+      return { message: DISCONNECT_FAILED_MESSAGE, refresh: false }
+    }
+    try {
+      const result = await kestrel.disconnectIntegration(id)
+      return { message: result.message, refresh: result.ok }
+    } catch (err) {
+      return {
+        message: err instanceof Error ? err.message : String(err),
+        refresh: false
+      }
+    }
   }
   if (status?.hasKey !== true) {
     return { message: NO_KEY_MESSAGE, refresh: false }

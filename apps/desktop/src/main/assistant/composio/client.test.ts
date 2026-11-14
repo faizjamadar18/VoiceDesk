@@ -341,6 +341,78 @@ describe('ComposioClient.listConnectedToolkits', () => {
   })
 })
 
+describe('ComposioClient.listConnectedAccounts', () => {
+  it('encodes both query values and parses usable items', async () => {
+    const calls: Call[] = []
+    const client = new ComposioClient({
+      apiKey: 'test-key',
+      fetch: recordingFetch(calls, () =>
+        jsonResponse({
+          items: [
+            {
+              id: 'ca_1',
+              status: 'ACTIVE',
+              toolkit: { slug: 'googlesuper' }
+            },
+            { id: '   ', status: 'ACTIVE', toolkit: { slug: 'googlesuper' } },
+            { id: 'ca_2', status: 'INITIALIZING' },
+            'not-an-object'
+          ],
+          total_items: 4
+        })
+      )
+    })
+
+    const accounts = await client.listConnectedAccounts({
+      userId: 'user 1',
+      toolkit: 'google super'
+    })
+
+    expect(accounts).toEqual([
+      { id: 'ca_1', toolkit: 'googlesuper', status: 'ACTIVE' },
+      { id: 'ca_2', toolkit: '', status: 'INITIALIZING' }
+    ])
+    expect(calls[0].url).toBe(
+      `${DEFAULT_COMPOSIO_BASE_URL}/connected_accounts?user_ids=user%201&toolkit_slugs=google%20super`
+    )
+    expect(calls[0].init.method).toBe('GET')
+    expect(headersOf(calls[0])['x-api-key']).toBe('test-key')
+  })
+})
+
+describe('ComposioClient.deleteConnectedAccount', () => {
+  it('revokes the account on delete and encodes the account id', async () => {
+    const calls: Call[] = []
+    const client = new ComposioClient({
+      apiKey: 'test-key',
+      fetch: recordingFetch(calls, () => jsonResponse({}))
+    })
+
+    await expect(
+      client.deleteConnectedAccount('ca/1')
+    ).resolves.toBeUndefined()
+
+    expect(calls[0].init.method).toBe('DELETE')
+    expect(calls[0].url).toBe(
+      `${DEFAULT_COMPOSIO_BASE_URL}/connected_accounts/ca%2F1?revoke_on_delete=true`
+    )
+    expect(headersOf(calls[0])['x-api-key']).toBe('test-key')
+  })
+
+  it('resolves on a 404 response', async () => {
+    const calls: Call[] = []
+    const client = new ComposioClient({
+      apiKey: 'test-key',
+      fetch: recordingFetch(calls, () => jsonResponse({}, 404))
+    })
+
+    await expect(
+      client.deleteConnectedAccount('ca_1')
+    ).resolves.toBeUndefined()
+    expect(calls[0].init.method).toBe('DELETE')
+  })
+})
+
 describe('ComposioClient.deleteSession', () => {
   it('resolves on a 404 response', async () => {
     const calls: Call[] = []

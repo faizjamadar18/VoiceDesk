@@ -1152,9 +1152,30 @@ describe('NotchController write decisions', () => {
       busy: false
     })
     expect(state?.message).toContain('backend offline')
+    expect(state?.spoken).toContain('backend offline')
 
     await vi.advanceTimersByTimeAsync(120_000)
     expect(context.presenter.hidden).toBe(0)
+  })
+
+  it('clears the card and speaks when the confirmed action returns an error', async () => {
+    const context = setup()
+    await runTurn(context, PENDING_DELETE)
+    context.actionClient.confirmResponse = {
+      status: 'error',
+      action: 'create a Google Drive file',
+      message: 'I couldn\'t find a folder called "My Drive".',
+      spokenResponse: 'I couldn\'t find a folder called "My Drive".',
+      dryRun: false
+    }
+
+    await context.controller.decide('confirm')
+
+    const state = context.presenter.payloads.at(-1)
+    expect(state?.phase).toBe('error')
+    expect(state?.decision).toBeNull()
+    expect(state?.message).toContain('My Drive')
+    expect(state?.spoken).toContain('My Drive')
   })
 })
 

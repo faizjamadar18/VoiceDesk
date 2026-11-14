@@ -18,6 +18,7 @@ import type {
   ActionResponse,
   HistoryRecord,
   IntegrationConnectResult,
+  IntegrationDisconnectResult,
   IntegrationId,
   IntegrationsStatus,
   ScreenAnswerResponse,
@@ -532,14 +533,14 @@ export class AssistantService {
       throw new AssistantHttpError(409, 'Plan has no result.')
     }
     return actionResponse({
-      status: 'ok',
+      status: outcome.status as ActionResponse['status'],
       action: tool.spec.actionLabel || tool.spec.name,
       message: outcome.message,
       // The confirmation is the last thing the user hears after approving, so
       // speak it rather than leaving the approval line as the final word.
       spokenResponse: outcome.spokenResponse || outcome.message,
       dryRun: false,
-      canUndo: Boolean(tool.spec.undo),
+      canUndo: outcome.status === 'ok' && Boolean(tool.spec.undo),
       target: outcome.target ?? null
     })
   }
@@ -703,6 +704,16 @@ export class AssistantService {
       return { ok: false, url: null, message: 'Integrations are not available.' }
     }
     return integration.connect(id)
+  }
+
+  async disconnectIntegration(id: IntegrationId): Promise<IntegrationDisconnectResult> {
+    const integration = this.integrations
+    if (integration === null) {
+      return { ok: false, message: 'Integrations are not available.' }
+    }
+    const result = await integration.disconnect(id)
+    this.applyIntegrationTools()
+    return result
   }
 
   async awaitIntegration(id: IntegrationId): Promise<boolean> {

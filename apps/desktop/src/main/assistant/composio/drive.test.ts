@@ -243,20 +243,158 @@ describe('drive_create_file', () => {
     expect(outcome.message).toContain('inside "Docs"')
   })
 
-  it('refuses an empty name or content without calling Composio', async () => {
+  it('creates a blank document when no content was dictated', async () => {
+    const { tools, calls } = makeTools([{ text: okPayload({ id: 'n' }) }])
+
+    const outcome = await toolNamed(tools, 'drive_create_file').run(
+      { name: 'shortlisted student' },
+      makeContext({ transcript: 'create a Google Docs file named shortlisted student' })
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].args).toMatchObject({
+      file_name: 'shortlisted student',
+      text_content: '',
+      mime_type: 'application/vnd.google-apps.document'
+    })
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toContain('blank')
+  })
+
+  it('infers Google Docs from the request when no format is passed', async () => {
+    const { tools, calls } = makeTools([{ text: okPayload({ id: 'n' }) }])
+
+    await toolNamed(tools, 'drive_create_file').run(
+      { name: 'spec', content: 'body' },
+      makeContext({ transcript: 'make a new doc called spec with body' })
+    )
+
+    expect(calls[0].args).toMatchObject({
+      mime_type: 'application/vnd.google-apps.document'
+    })
+  })
+
+  it("lets the user's words pick the file type over the planner's format", async () => {
+    const cases: Array<{ transcript: string; format?: string; mime: string }> = [
+      {
+        transcript: 'create a Google Docs file named spec',
+        format: 'text',
+        mime: 'application/vnd.google-apps.document'
+      },
+      {
+        transcript: 'create a spreadsheet named budget',
+        mime: 'application/vnd.google-apps.spreadsheet'
+      },
+      {
+        transcript: 'create a Google Sheets file named budget',
+        format: 'document',
+        mime: 'application/vnd.google-apps.spreadsheet'
+      },
+      {
+        transcript: 'create a markdown file named notes',
+        mime: 'text/markdown'
+      },
+      {
+        transcript: 'create a txt file named notes',
+        mime: 'text/plain'
+      },
+      {
+        transcript: 'create a slide deck named kickoff',
+        mime: 'application/vnd.google-apps.presentation'
+      }
+    ]
+
+    for (const item of cases) {
+      const { tools, calls } = makeTools([{ text: okPayload({ id: 'n' }) }])
+
+      const outcome = await toolNamed(tools, 'drive_create_file').run(
+        { name: 'spec', content: 'body', format: item.format },
+        makeContext({ transcript: item.transcript })
+      )
+
+      expect(calls[0].args['mime_type']).toBe(item.mime)
+      expect(outcome.status).toBe('ok')
+    }
+  })
+
+  it('uses a file extension in the name as the strongest signal', async () => {
+    const { tools, calls } = makeTools([{ text: okPayload({ id: 'n' }) }])
+
+    await toolNamed(tools, 'drive_create_file').run(
+      { name: 'notes.md', content: 'body', format: 'document' },
+      makeContext({ transcript: 'create a Google Doc called notes' })
+    )
+
+    expect(calls[0].args['mime_type']).toBe('text/markdown')
+  })
+
+  it('treats My Drive and Google Drive as the root, not a folder', async () => {
+    for (const folder of ['My Drive', 'my google drive', 'Google Drive']) {
+      const { tools, calls } = makeTools([{ text: okPayload({ id: 'n' }) }])
+
+      const outcome = await toolNamed(tools, 'drive_create_file').run(
+        { name: 'notes.txt', content: 'body', folder },
+        makeContext()
+      )
+
+      expect(calls.map((call) => call.slug)).toEqual([
+        'GOOGLESUPER_CREATE_FILE_FROM_TEXT'
+      ])
+      expect(calls[0].args).not.toHaveProperty('parent_id')
+      expect(outcome.status).toBe('ok')
+    }
+  })
+
+  it('resolves a real subfolder after a My Drive prefix', async () => {
+    const { tools, calls } = makeTools([
+      { text: filesPayload([fileRecord('f1', 'Docs', FOLDER_MIME)]) },
+      { text: okPayload({ id: 'n' }) }
+    ])
+
+    const outcome = await toolNamed(tools, 'drive_create_file').run(
+      { name: 'spec', content: 'body', folder: 'My Drive/Docs' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(2)
+    expect(String(calls[0].args['q'])).toContain("name contains 'Docs'")
+    expect(calls[1].args).toMatchObject({ parent_id: 'f1' })
+    expect(outcome.status).toBe('ok')
+  })
+
+  it('resolves the folder and offers the file name before approval', async () => {
+    const { tools, calls } = makeTools([
+      { text: filesPayload([fileRecord('f1', 'Docs', FOLDER_MIME)]) }
+    ])
+    const tool = toolNamed(tools, 'drive_create_file')
+
+    expect(tool.prepare).toBeTypeOf('function')
+    const prepared = await tool.prepare?.(
+      { name: 'shortlisted student', folder: 'My Drive/Docs' },
+      makeContext({ transcript: 'create a docs file named shortlisted student' })
+    )
+
+    expect(prepared?.outcome).toBeUndefined()
+    expect(prepared?.display).toBe('shortlisted student')
+    expect(prepared?.message).toContain('shortlisted student')
+    expect(prepared?.arguments).toMatchObject({
+      name: 'shortlisted student',
+      content: '',
+      format: 'document',
+      parent_id: 'f1'
+    })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('refuses an empty name without calling Composio', async () => {
     const { tools, calls } = makeTools([])
 
     const emptyName = await toolNamed(tools, 'drive_create_file').run(
       { name: '', content: 'body' },
       makeContext()
     )
-    const emptyContent = await toolNamed(tools, 'drive_create_file').run(
-      { name: 'notes.txt', content: '' },
-      makeContext()
-    )
 
     expect(emptyName.status).toBe('error')
-    expect(emptyContent.status).toBe('error')
     expect(calls).toHaveLength(0)
   })
 })
@@ -456,6 +594,24 @@ describe('Composio errors', () => {
 
     expect(outcome.status).toBe('error')
     expect(outcome.message).toBe('boom')
+  })
+
+  it('unwraps a nested Google error instead of stopping at the first brace', () => {
+    const nested = JSON.stringify({
+      error: {
+        code: 403,
+        message: "The user's Drive storage quota has been exceeded."
+      }
+    })
+    const body = JSON.stringify({
+      successful: false,
+      data: { message: nested, status_code: 403 },
+      error: nested
+    })
+
+    expect(readableError(body)).toBe(
+      "The user's Drive storage quota has been exceeded."
+    )
   })
 
   it('re-exports the shared error helpers', () => {

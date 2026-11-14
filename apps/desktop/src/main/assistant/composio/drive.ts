@@ -58,6 +58,19 @@ const SPOKEN_FILE_LIMIT = 5
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const DRIVE_FIELDS = 'files(id,name,mimeType,parents,modifiedTime,webViewLink)'
 
+/** Names a person uses for the top of Drive rather than a real subfolder. */
+const ROOT_FOLDER_NAMES = new Set([
+  'drive',
+  'google drive',
+  'my drive',
+  'my google drive',
+  'my drive root',
+  'root',
+  'the root',
+  'top level',
+  'top-level'
+])
+
 /** Drive query clauses for the type keywords a person can say. */
 const TYPE_CLAUSES: Record<string, string> = {
   folder: `mimeType = '${FOLDER_MIME}'`,
@@ -196,10 +209,106 @@ function typeClause(type: string | null): string | null {
   return TYPE_CLAUSES[type.toLowerCase().trim()] ?? null
 }
 
+/**
+ * Pure. Turns "in my Google Drive" into the Drive root, and "My Drive/Docs"
+ * into the real folder "Docs". A folder name that is a root alias never
+ * reaches a Drive search, because no file is named "My Drive".
+ */
+export function folderTarget(raw: string | null): string | null {
+  if (raw === null) return null
+  const trimmed = raw.trim().replace(/^["']+|["']+$/g, '').replace(/[.!?]+$/, '').trim()
+  if (trimmed === '') return null
+
+  const bare = trimmed.toLowerCase().replace(/\s+/g, ' ')
+  if (ROOT_FOLDER_NAMES.has(bare)) return null
+
+  const nested =
+    /^(?:my\s+google\s+drive|google\s+drive|my\s+drive|drive)\s*[\\/>]+\s*(?<folder>.+)$/i.exec(
+      trimmed
+    )
+  if (nested !== null) {
+    const folder = nested.groups?.folder?.trim() ?? ''
+    return folder === '' ? null : folder
+  }
+  return trimmed
+}
+
+/** Reads a file type out of natural speech, e.g. "Google Sheets" or "md". */
+function formatFromText(text: string): string | null {
+  const said = text
+    .toLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+  if (/\b(?:markdown|md)\b/.test(said)) return 'markdown'
+  if (
+    /\b(?:google\s+sheets?|spreadsheets?|sheets?|gsheets?|excel|xlsx?|csv)\b/.test(
+      said
+    )
+  ) {
+    return 'spreadsheet'
+  }
+  if (
+    /\b(?:google\s+slides?|presentations?|slides?|pptx?|powerpoint)\b/.test(said)
+  ) {
+    return 'presentation'
+  }
+  if (/\b(?:google\s+docs?|gdocs?|documents?|docs?|docx?|word)\b/.test(said)) {
+    return 'document'
+  }
+  if (/\b(?:text\s+files?|plain\s+text|txt|text)\b/.test(said)) return 'text'
+  return null
+}
+
+/** Reads a file type from a name's extension, e.g. "notes.md". */
+function formatFromName(name: string): string | null {
+  const lower = name.trim().toLowerCase()
+  if (/\.(?:md|markdown)$/.test(lower)) return 'markdown'
+  if (/\.(?:txt|text)$/.test(lower)) return 'text'
+  if (/\.(?:docx?|gdoc)$/.test(lower)) return 'document'
+  if (/\.(?:xlsx?|csv|gsheet)$/.test(lower)) return 'spreadsheet'
+  if (/\.(?:pptx?|gslides)$/.test(lower)) return 'presentation'
+  return null
+}
+
+/**
+ * Canonical format word for what the user asked to create.
+ *
+ * The user's own words win over the planner's `format` argument: a small model
+ * sometimes labels a "Google Docs" request as plain text. A file extension in
+ * the name is the most explicit signal and wins over everything else.
+ */
+export function resolveFormat(
+  format: string | null,
+  transcript?: string,
+  name?: string
+): string {
+  return (
+    formatFromName(name ?? '') ??
+    formatFromText(transcript ?? '') ??
+    formatFromText(format ?? '') ??
+    'text'
+  )
+}
+
+/** The human name for a canonical format. */
+function formatLabel(format: string): string {
+  if (format === 'document') return 'Google Doc'
+  if (format === 'spreadsheet') return 'Google Sheet'
+  if (format === 'presentation') return 'Google Slides presentation'
+  if (format === 'markdown') return 'Markdown file'
+  return 'text file'
+}
+
 function mimeFor(format: string | null): string {
   const key = (format ?? 'text').toLowerCase().trim()
   if (key === 'document' || key === 'doc') {
     return 'application/vnd.google-apps.document'
+  }
+  if (key === 'spreadsheet' || key === 'sheet') {
+    return 'application/vnd.google-apps.spreadsheet'
+  }
+  if (key === 'presentation' || key === 'slides') {
+    return 'application/vnd.google-apps.presentation'
   }
   if (key === 'markdown' || key === 'md') return 'text/markdown'
   return 'text/plain'
@@ -230,7 +339,8 @@ const FIND_DESCRIPTION =
   'Search Google Drive by file name, content, type, or folder name.'
 
 const CREATE_FILE_DESCRIPTION =
-  'Create a new text file or document in Google Drive from given content.'
+  'Create a Google Doc, Sheet, Slides presentation, Markdown, or text file in ' +
+  'Drive. Content is optional; a blank file is fine.'
 
 const SHARE_DESCRIPTION =
   'Share a Google Drive file with someone by email and access level.'
@@ -307,21 +417,23 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
   ): Promise<
     { ok: true; id: string | null } | { ok: false; outcome: ToolOutcome }
   > {
-    if (name.trim() === '') return { ok: true, id: null }
+    // "My Drive" and friends are how people name the root, not a real folder.
+    const target = folderTarget(name)
+    if (target === null) return { ok: true, id: null }
 
     const searched = await findRaw(
-      `trashed = false and mimeType = '${FOLDER_MIME}' and ${nameClause(name)}`,
+      `trashed = false and mimeType = '${FOLDER_MIME}' and ${nameClause(target)}`,
       action
     )
     if (!searched.ok) return searched
 
-    const matched = matchFiles(name, searched.files)
+    const matched = matchFiles(target, searched.files)
     if (matched.ok) return { ok: true, id: matched.file.id }
 
     const message =
       matched.reason === 'not_found'
-        ? `I couldn't find a folder called "${name}".`
-        : `More than one folder matches "${name}": ${joinNames(
+        ? `I couldn't find a folder called "${target}".`
+        : `More than one folder matches "${target}": ${joinNames(
             matched.candidates.slice(0, 3).map((file) => file.name)
           )}. Say which one.`
     return {
@@ -436,38 +548,93 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
       CREATE_FILE_DESCRIPTION,
       objectSchema(
         {
-          name: { type: 'string', description: 'The file name.' },
-          content: { type: 'string', description: 'The full body of the file.' },
+          name: {
+            type: 'string',
+            description: 'The file name. Do not include a folder path.'
+          },
+          content: {
+            type: 'string',
+            description: 'The body text. Leave empty to create a blank file.'
+          },
           folder: {
             type: 'string',
-            description: 'Folder name to create it in.'
+            description: 'Subfolder name to create it in. Omit for My Drive.'
           },
           format: {
             type: 'string',
-            description: "One of text, markdown, or document. Defaults to text."
+            description:
+              'One of document, spreadsheet, presentation, markdown, or text. Defaults to text.'
           }
         },
-        ['name', 'content']
+        ['name']
       ),
       'write',
       true,
       'create a Google Drive file'
     ),
+    async prepare(args, ctx) {
+      const action = 'create a Google Drive file'
+      const name = (optionalString(args, 'name') ?? '').trim()
+      if (name === '') {
+        const message = 'I need a name for the file.'
+        return {
+          arguments: args,
+          outcome: { status: 'error', action, message, spokenResponse: message }
+        }
+      }
+
+      const content = optionalString(args, 'content') ?? ''
+      const format = resolveFormat(
+        optionalString(args, 'format'),
+        ctx.transcript,
+        name
+      )
+      const folder = folderTarget(optionalString(args, 'folder'))
+
+      // A dry run must not touch Drive; `run` reports what would happen.
+      if (ctx.dryRun) {
+        return { arguments: { name, content, format }, display: name }
+      }
+
+      let parentId: string | null = null
+      if (folder !== null) {
+        const resolved = await resolveFolder(folder, action)
+        if (!resolved.ok) return { arguments: args, outcome: resolved.outcome }
+        parentId = resolved.id
+      }
+
+      const prepared: Record<string, unknown> = { name, content, format }
+      if (parentId !== null) prepared['parent_id'] = parentId
+
+      const message =
+        parentId !== null
+          ? `Create "${name}" in Google Drive inside "${folder}"?`
+          : `Create "${name}" in Google Drive?`
+      return { arguments: prepared, display: name, message }
+    },
     async run(args, ctx) {
       const action = 'create a Google Drive file'
       const skipped = dryRun(ctx, action, 'drive_create_file')
       if (skipped !== null) return skipped
 
-      const name = optionalString(args, 'name') ?? ''
-      const content = optionalString(args, 'content') ?? ''
-      if (name.trim() === '' || content.trim() === '') {
-        const message = 'I need a file name and some content to create that.'
+      const name = (optionalString(args, 'name') ?? '').trim()
+      if (name === '') {
+        const message = 'I need a name for the file.'
         return { status: 'error', action, message, spokenResponse: message }
       }
 
-      const folder = optionalString(args, 'folder')
-      let parentId: string | null = null
-      if (folder !== null) {
+      // Content is optional: "create a doc named X" means a blank document.
+      const content = optionalString(args, 'content') ?? ''
+      const format = resolveFormat(
+        optionalString(args, 'format'),
+        ctx.transcript,
+        name
+      )
+      const folder = folderTarget(optionalString(args, 'folder'))
+
+      // `prepare` already resolved the folder; only search when it did not.
+      let parentId = optionalString(args, 'parent_id')
+      if (parentId === null && folder !== null) {
         const resolved = await resolveFolder(folder, action)
         if (!resolved.ok) return resolved.outcome
         parentId = resolved.id
@@ -476,17 +643,19 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
       const callArgs: Record<string, unknown> = {
         file_name: name,
         text_content: content,
-        mime_type: mimeFor(optionalString(args, 'format'))
+        mime_type: mimeFor(format)
       }
       if (parentId !== null) callArgs['parent_id'] = parentId
 
       const created = await invoke(SLUG.createFile, callArgs, action)
       if (!created.ok) return created.outcome
 
+      const where =
+        parentId !== null && folder !== null ? ` inside "${folder}"` : ''
       const message =
-        folder !== null && parentId !== null
-          ? `Created "${name}" in Google Drive inside "${folder}".`
-          : `Created "${name}" in Google Drive.`
+        content.trim() === ''
+          ? `Created a blank ${formatLabel(format)} named "${name}" in Google Drive${where}.`
+          : `Created "${name}" in Google Drive${where}.`
       return {
         status: 'ok',
         action,

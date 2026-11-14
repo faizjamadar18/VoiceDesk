@@ -45,6 +45,13 @@ export interface ComposioClientOptions {
   timeoutMs?: number
 }
 
+/** One of a user's Composio connected accounts. */
+export interface ComposioConnectedAccount {
+  readonly id: string
+  readonly toolkit: string
+  readonly status: string
+}
+
 export class ComposioClient {
   private readonly apiKey: string
   private readonly fetchImpl: FetchLike
@@ -170,6 +177,46 @@ export class ComposioClient {
       }
     }
     return slugs
+  }
+
+  /** The connected accounts for one user and toolkit. */
+  async listConnectedAccounts(input: {
+    userId: string
+    toolkit: string
+  }): Promise<ComposioConnectedAccount[]> {
+    const result = await this.request(
+      'GET',
+      `/connected_accounts?user_ids=${encodeURIComponent(input.userId)}&toolkit_slugs=${encodeURIComponent(input.toolkit)}`
+    )
+
+    const accounts: ComposioConnectedAccount[] = []
+    const items = result.items
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        if (!isRecord(item)) continue
+        const id = stringField(item, 'id')
+        if (!id) continue
+        const toolkit = isRecord(item.toolkit)
+          ? stringField(item.toolkit, 'slug') ?? ''
+          : ''
+        accounts.push({
+          id,
+          toolkit,
+          status: stringField(item, 'status') ?? ''
+        })
+      }
+    }
+    return accounts
+  }
+
+  /** Delete one connected account, revoking its OAuth grant first. */
+  async deleteConnectedAccount(accountId: string): Promise<void> {
+    await this.request(
+      'DELETE',
+      `/connected_accounts/${encodeURIComponent(accountId)}?revoke_on_delete=true`,
+      undefined,
+      { allowNotFound: true }
+    )
   }
 
   /** Tear down a session. A session that is already gone is not an error. */

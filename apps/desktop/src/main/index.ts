@@ -21,6 +21,7 @@ import {
   type AuthTokens,
   type AuthUser,
   type IntegrationConnectResult,
+  type IntegrationDisconnectResult,
   type KestrelRuntimeState,
   type KestrelSettings,
   type NotchActivity,
@@ -616,6 +617,15 @@ function registerIpc(): void {
       void assistantService?.awaitIntegration(id)
     }
     return result
+  })
+  ipcMain.handle(IPC.integrationsDisconnect, async (_event, id: unknown) => {
+    if (!isIntegrationId(id)) {
+      return { ok: false, message: 'That app is not supported yet.' } satisfies IntegrationDisconnectResult
+    }
+    return (
+      (await assistantService?.disconnectIntegration(id)) ??
+      ({ ok: false, message: 'Integrations are not available.' } satisfies IntegrationDisconnectResult)
+    )
   })
   ipcMain.handle(IPC.historyList, () => historyStore?.list() ?? [])
   ipcMain.handle(IPC.historyDelete, (_event, id: unknown) => {

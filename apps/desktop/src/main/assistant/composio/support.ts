@@ -129,6 +129,37 @@ export function parseComposioResult(text: string): {
 
 export const ERROR_LINE_LIMIT = 240
 
+/** Pulls the most specific human message out of a possibly nested error body. */
+function messageFromValue(value: unknown, depth = 0): string | null {
+  if (!isRecord(value) || depth > 4) return null
+
+  const direct = stringOf(value['message'])
+  if (direct !== null) {
+    // Composio sometimes nests a JSON document inside `message`.
+    return messageFromText(direct) ?? direct
+  }
+
+  const data = value['data']
+  if (isRecord(data)) {
+    const nested = messageFromValue(data, depth + 1)
+    if (nested !== null) return nested
+  }
+
+  const error = value['error']
+  if (typeof error === 'string') {
+    return messageFromText(error) ?? stringOf(error)
+  }
+  if (isRecord(error)) return messageFromValue(error, depth + 1)
+  return null
+}
+
+/** Parses a string that may itself contain a JSON error document. */
+function messageFromText(text: string): string | null {
+  const parsed = tryParse(text)
+  if (!parsed.ok) return null
+  return messageFromValue(parsed.value)
+}
+
 /**
  * Turns whatever Composio sent into one short line safe to speak.
  * Never shows the raw JSON body when it carries a message.
@@ -140,18 +171,8 @@ export function readableError(
   const trimmed = text.trim()
   if (trimmed === '') return fallback
 
-  let message: string | null = null
-  try {
-    const parsed: unknown = JSON.parse(trimmed)
-    if (isRecord(parsed)) {
-      const data = parsed['data']
-      if (isRecord(data)) message = stringOf(data['message'])
-      if (message === null) message = stringOf(parsed['error'])
-      if (message === null) message = stringOf(parsed['message'])
-    }
-  } catch {
-    // Not JSON: fall back to the original text below.
-  }
+  const parsed = tryParse(trimmed)
+  const message = parsed.ok ? messageFromValue(parsed.value) : null
 
   const firstLine = (message ?? trimmed).split('\n')[0].trim()
   const line = firstLine === '' ? fallback : firstLine

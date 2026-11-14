@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpCallResult, McpClient, McpTool } from '../mcp/types'
 import type { ToolContext } from '../types'
+import type { ComposioConnectedAccount } from './client'
 import { ComposioAuthError, ComposioClient } from './client'
 import {
   CONNECT_POLL_ATTEMPTS,
@@ -67,12 +68,15 @@ class FakeComposioClient extends ComposioClient {
   }> = []
   listConnectedCalls = 0
   deleteSessionCalls: string[] = []
+  listConnectedAccountsCalls: Array<{ userId: string; toolkit: string }> = []
+  deleteConnectedAccountCalls: string[] = []
 
   sessionResult: ComposioSession = SESSION
   sessionError: Error | null = null
   connectLinkResult = 'https://connect.example/abc'
   /** Given the zero-based call index, the toolkits to report as connected. */
   listConnected: (callIndex: number) => string[] = () => []
+  connectedAccounts: ComposioConnectedAccount[] = []
 
   constructor() {
     super({ apiKey: 'fake-key' })
@@ -104,6 +108,18 @@ class FakeComposioClient extends ComposioClient {
 
   override async deleteSession(sessionId: string): Promise<void> {
     this.deleteSessionCalls.push(sessionId)
+  }
+
+  override async listConnectedAccounts(input: {
+    userId: string
+    toolkit: string
+  }): Promise<ComposioConnectedAccount[]> {
+    this.listConnectedAccountsCalls.push(input)
+    return this.connectedAccounts
+  }
+
+  override async deleteConnectedAccount(accountId: string): Promise<void> {
+    this.deleteConnectedAccountCalls.push(accountId)
   }
 }
 
@@ -462,6 +478,82 @@ describe('ComposioIntegration', () => {
     expect(unsupported.ok).toBe(false)
     expect(unsupported.url).toBeNull()
     expect(unsupported.message).toBe('That app is not supported yet.')
+  })
+
+  it('deletes every connected account for the provider and reports ok', async () => {
+    const harness = makeHarness()
+    harness.store.save('composio-secret')
+    harness.client.listConnected = () => ['googlesuper']
+    harness.mcp.tools = DRIVE_SLUGS.map(mcpTool)
+    await harness.integration.initialize()
+
+    harness.client.connectedAccounts = [
+      { id: 'ca_1', toolkit: 'googlesuper', status: 'ACTIVE' },
+      { id: 'ca_2', toolkit: 'googlesuper', status: 'ACTIVE' }
+    ]
+    harness.client.listConnected = () => []
+
+    const result = await harness.integration.disconnect('googlesuper')
+
+    expect(result).toEqual({
+      ok: true,
+      message:
+        'Google Drive disconnected. You can connect a different account now.'
+    })
+    expect(harness.client.listConnectedAccountsCalls).toEqual([
+      { userId: 'user-1', toolkit: 'googlesuper' }
+    ])
+    expect(harness.client.deleteConnectedAccountCalls).toEqual([
+      'ca_1',
+      'ca_2'
+    ])
+    const provider = harness.integration
+      .status()
+      .providers.find((entry) => entry.id === 'googlesuper')
+    expect(provider?.connected).toBe(false)
+    expect(harness.integration.tools).toEqual([])
+  })
+
+  it('reports ok when no connected account is found', async () => {
+    const harness = makeHarness()
+    harness.store.save('composio-secret')
+    harness.client.listConnected = () => []
+    await harness.integration.initialize()
+
+    const result = await harness.integration.disconnect('googlecalendar')
+
+    expect(result).toEqual({
+      ok: true,
+      message:
+        'Google Calendar disconnected. You can connect a different account now.'
+    })
+    expect(harness.client.deleteConnectedAccountCalls).toEqual([])
+  })
+
+  it('refuses to disconnect an unsupported provider', async () => {
+    const harness = makeHarness([COMPOSIO_PROVIDERS[0]])
+
+    const result = await harness.integration.disconnect('notion')
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'That app is not supported yet.'
+    })
+    expect(harness.client.listConnectedAccountsCalls).toEqual([])
+    expect(harness.client.deleteConnectedAccountCalls).toEqual([])
+  })
+
+  it('reports a missing session or key instead of disconnecting', async () => {
+    const harness = makeHarness()
+
+    const result = await harness.integration.disconnect('googlecalendar')
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'Add your Composio API key first.'
+    })
+    expect(harness.client.listConnectedAccountsCalls).toEqual([])
+    expect(harness.client.deleteConnectedAccountCalls).toEqual([])
   })
 
   it('gives up after the poll budget without throwing', async () => {
