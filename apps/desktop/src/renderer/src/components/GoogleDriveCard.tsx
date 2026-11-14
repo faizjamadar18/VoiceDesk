@@ -9,6 +9,27 @@ export interface GoogleDriveCardProps {
   onDiscard?: () => void
 }
 
+export const GDRIVE_DARK = {
+  bg: '#1C1C1E',
+  bgSecondary: '#2C2C2E',
+  bgHover: '#3A3A3C',
+  headerBg: '#232326',
+  text: '#D1D1D6',
+  textBright: '#F2F2F7',
+  textMuted: '#98989D',
+  textDim: '#636366',
+  border: 'rgba(255,255,255,0.10)',
+  borderLight: 'rgba(255,255,255,0.06)',
+  borderFocus: '#4285F4',
+  blue: '#4285F4',
+  blueHover: '#5A9CF5',
+  green: '#0F9D58',
+  yellow: '#F4B400',
+  red: '#DB4437',
+  sheetsGreen: '#34A853',
+  docsBlue: '#4285F4'
+} as const
+
 function DocsIcon({ size = 18 }: { size?: number }): JSX.Element {
   return (
     <svg
@@ -17,7 +38,7 @@ function DocsIcon({ size = 18 }: { size?: number }): JSX.Element {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className="shrink-0"
+      style={{ flexShrink: 0 }}
     >
       <path
         d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
@@ -44,7 +65,7 @@ function SheetsIcon({ size = 18 }: { size?: number }): JSX.Element {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className="shrink-0"
+      style={{ flexShrink: 0 }}
     >
       <rect
         x="3"
@@ -73,7 +94,7 @@ function GoogleDriveIcon({ size = 18 }: { size?: number }): JSX.Element {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className="shrink-0"
+      style={{ flexShrink: 0 }}
     >
       <path d="M8.5 2.5h7l6.5 11.25h-7L8.5 2.5z" fill="#FFBA00" />
       <path d="M15 13.75L8.5 2.5 2 13.75h13z" fill="#0066DA" />
@@ -90,7 +111,7 @@ function FileIcon({ size = 18 }: { size?: number }): JSX.Element {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      className="shrink-0"
+      style={{ flexShrink: 0 }}
     >
       <path
         d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
@@ -131,38 +152,62 @@ function CloseCrossIcon({ size = 10 }: { size?: number }): JSX.Element {
 function SpinnerIcon({ size = 13 }: { size?: number }): JSX.Element {
   return (
     <svg
-      className="animate-spin shrink-0"
+      className="animate-spin"
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
+      style={{ flexShrink: 0 }}
     >
       <circle
-        className="opacity-25"
         cx="12"
         cy="12"
         r="10"
         stroke="currentColor"
         strokeWidth="3"
+        style={{ opacity: 0.25 }}
       />
       <path
-        className="opacity-75"
         fill="currentColor"
         d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+        style={{ opacity: 0.75 }}
       />
     </svg>
   )
 }
 
 function CardCloseButton({ onClick }: { onClick?: () => void }): JSX.Element {
+  const [hovered, setHovered] = useState(false)
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseDown={(e) => e.stopPropagation()}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       aria-label="Cancel"
-      className="absolute top-2.5 right-2.5 z-10 w-6 h-6 rounded-full flex items-center justify-center bg-white/20 hover:bg-white/30 text-white/90 backdrop-blur-md transition-colors"
+      style={{
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        zIndex: 10,
+        width: 24,
+        height: 24,
+        padding: 0,
+        borderRadius: '50%',
+        border: 'none',
+        outline: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: hovered ? 'rgba(120, 120, 128, 0.5)' : 'rgba(120, 120, 128, 0.32)',
+        color: 'rgba(255,255,255,0.9)',
+        cursor: 'pointer',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        transition: 'background 0.15s ease'
+      }}
     >
       <CloseCrossIcon size={10} />
     </button>
@@ -204,6 +249,7 @@ export function GoogleDriveCard({
 
   const [content, setContent] = useState<string>(() => card.content || '')
   const [docsViewMode, setDocsViewMode] = useState<'preview' | 'markdown'>('preview')
+  const [confirmHovered, setConfirmHovered] = useState(false)
   const docsTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -249,11 +295,36 @@ export function GoogleDriveCard({
   })()
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-[#1C1C1E] border border-white/10 text-[#D1D1D6] shadow-2xl flex flex-col font-sans">
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        overflow: 'hidden',
+        borderRadius: 20,
+        background: GDRIVE_DARK.bg,
+        border: `1px solid ${GDRIVE_DARK.border}`,
+        color: GDRIVE_DARK.text,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.15)',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}
+    >
       <CardCloseButton onClick={onDiscard} />
 
-      {/* Header */}
-      <div className="bg-[#232326] border-b border-white/10 px-3.5 py-2.5 flex items-center gap-2.5 shrink-0 pr-10">
+      {/* Header Bar */}
+      <div
+        style={{
+          background: GDRIVE_DARK.headerBg,
+          borderBottom: `1px solid ${GDRIVE_DARK.border}`,
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexShrink: 0,
+          boxSizing: 'border-box'
+        }}
+      >
         {isDocument && (
           <>
             <DocsIcon size={18} />
@@ -265,7 +336,20 @@ export function GoogleDriveCard({
               spellCheck={false}
               aria-label="Document title"
               placeholder="Document title"
-              className="w-full bg-transparent border-none text-[#F2F2F7] text-base font-semibold outline-none leading-snug placeholder:text-neutral-500"
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: 'transparent',
+                border: 'none',
+                color: GDRIVE_DARK.textBright,
+                fontSize: 16,
+                fontWeight: 600,
+                outline: 'none',
+                lineHeight: 1.4,
+                padding: 0,
+                paddingRight: 32,
+                boxSizing: 'border-box'
+              }}
             />
           </>
         )}
@@ -273,7 +357,14 @@ export function GoogleDriveCard({
         {isSpreadsheet && (
           <>
             <SheetsIcon size={18} />
-            <span className="text-[#F2F2F7] text-sm font-semibold tracking-wide">
+            <span
+              style={{
+                color: GDRIVE_DARK.textBright,
+                fontSize: 13,
+                fontWeight: 600,
+                letterSpacing: '0.01em'
+              }}
+            >
               {headerTitle}
             </span>
           </>
@@ -282,7 +373,14 @@ export function GoogleDriveCard({
         {!isDocument && !isSpreadsheet && (
           <>
             <GoogleDriveIcon size={18} />
-            <span className="text-[#F2F2F7] text-sm font-semibold tracking-wide">
+            <span
+              style={{
+                color: GDRIVE_DARK.textBright,
+                fontSize: 13,
+                fontWeight: 600,
+                letterSpacing: '0.01em'
+              }}
+            >
               {headerTitle}
             </span>
           </>
@@ -290,18 +388,40 @@ export function GoogleDriveCard({
       </div>
 
       {/* Body */}
-      <div className="p-3.5 flex flex-col gap-3 min-h-0">
+      <div
+        style={{
+          padding: isDocument ? '12px 14px' : '14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: isDocument ? 8 : 10,
+          minHeight: 0
+        }}
+      >
         {isDocument && (
-          <div className="flex flex-col gap-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {docsViewMode === 'preview' ? (
               <div
                 onMouseDown={(e) => e.stopPropagation()}
-                className="w-full rounded bg-[#222326] border border-white/10 text-[#D1D1D6] text-sm p-4 min-h-56 max-h-80 overflow-y-auto leading-relaxed shadow-inner"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: '#222326',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 8,
+                  color: GDRIVE_DARK.text,
+                  minHeight: 180,
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  padding: '14px 16px',
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 1px 2px rgba(0,0,0,0.18)'
+                }}
               >
                 {content.trim().length > 0 ? (
                   <VoiceOsMarkdown text={content} />
                 ) : (
-                  <div className="text-neutral-500 text-sm">Document preview</div>
+                  <div style={{ color: GDRIVE_DARK.textDim, fontSize: 14 }}>Document preview</div>
                 )}
               </div>
             ) : (
@@ -320,18 +440,62 @@ export function GoogleDriveCard({
                 rows={8}
                 aria-label="Document markdown"
                 placeholder="Document content (Markdown)"
-                className="w-full rounded bg-[#1f2023] border border-white/10 focus:border-[#4285F4] text-[#D1D1D6] text-xs font-mono p-3 leading-normal resize-none outline-none min-h-56 transition-colors"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: '#1f2023',
+                  border: `1px solid ${GDRIVE_DARK.border}`,
+                  color: GDRIVE_DARK.text,
+                  borderRadius: 8,
+                  minHeight: 180,
+                  maxHeight: 280,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                  fontSize: 12,
+                  padding: '12px 14px',
+                  lineHeight: 1.5,
+                  resize: 'none',
+                  outline: 'none',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = GDRIVE_DARK.borderFocus
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = GDRIVE_DARK.border
+                }}
               />
             )}
           </div>
         )}
 
         {isSpreadsheet && (
-          <div className="rounded-lg bg-[#2C2C2E] border border-white/5 p-3 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#202124] flex items-center justify-center shrink-0">
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              background: GDRIVE_DARK.bgSecondary,
+              border: `1px solid ${GDRIVE_DARK.borderLight}`,
+              borderRadius: 12,
+              padding: '10px 12px',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
               <SheetsIcon size={20} />
             </div>
-            <div className="flex-1 min-w-0">
+            <div style={{ flex: 1, minWidth: 0 }}>
               <input
                 type="text"
                 value={name}
@@ -340,19 +504,59 @@ export function GoogleDriveCard({
                 spellCheck={false}
                 aria-label="File name"
                 placeholder="File name"
-                className="w-full bg-transparent border-none border-b border-white/10 focus:border-[#4285F4] text-[#F2F2F7] text-sm font-medium py-1 outline-none transition-colors placeholder:text-neutral-500"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid transparent',
+                  color: GDRIVE_DARK.textBright,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  outline: 'none',
+                  padding: '4px 0',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderBottomColor = GDRIVE_DARK.borderFocus
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderBottomColor = 'transparent'
+                }}
               />
             </div>
           </div>
         )}
 
         {!isDocument && !isSpreadsheet && (
-          <div className="flex flex-col gap-2.5">
-            <div className="rounded-lg bg-[#2C2C2E] border border-white/5 p-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#202124] flex items-center justify-center shrink-0">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                background: GDRIVE_DARK.bgSecondary,
+                border: `1px solid ${GDRIVE_DARK.borderLight}`,
+                borderRadius: 12,
+                padding: '10px 12px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 8,
+                  background: 'rgba(255,255,255,0.05)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
                 <FileIcon size={20} />
               </div>
-              <div className="flex-1 min-w-0">
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <input
                   type="text"
                   value={name}
@@ -361,7 +565,25 @@ export function GoogleDriveCard({
                   spellCheck={false}
                   aria-label="File name"
                   placeholder="File name"
-                  className="w-full bg-transparent border-none border-b border-white/10 focus:border-[#4285F4] text-[#F2F2F7] text-sm font-medium py-1 outline-none transition-colors placeholder:text-neutral-500"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: '1px solid transparent',
+                    color: GDRIVE_DARK.textBright,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    outline: 'none',
+                    padding: '4px 0',
+                    transition: 'border-color 0.15s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderBottomColor = GDRIVE_DARK.borderFocus
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderBottomColor = 'transparent'
+                  }}
                 />
               </div>
             </div>
@@ -375,7 +597,27 @@ export function GoogleDriveCard({
                 rows={4}
                 aria-label="File content"
                 placeholder="File content"
-                className="w-full rounded-lg bg-[#2C2C2E] border border-white/10 focus:border-[#4285F4] text-[#D1D1D6] text-xs font-mono p-2.5 leading-normal outline-none transition-colors resize-vertical"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  borderRadius: 8,
+                  background: GDRIVE_DARK.bgSecondary,
+                  border: `1px solid ${GDRIVE_DARK.border}`,
+                  color: GDRIVE_DARK.text,
+                  fontSize: 12,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                  padding: '10px 12px',
+                  lineHeight: 1.5,
+                  outline: 'none',
+                  resize: 'vertical',
+                  transition: 'border-color 0.15s ease'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = GDRIVE_DARK.borderFocus
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = GDRIVE_DARK.border
+                }}
               />
             )}
           </div>
@@ -383,32 +625,63 @@ export function GoogleDriveCard({
       </div>
 
       {/* Footer */}
-      <div className="px-3.5 pb-3 flex items-center justify-between gap-2 shrink-0">
+      <div
+        style={{
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0
+        }}
+      >
         <div>
           {isDocument && (
             <div
               onMouseDown={(e) => e.stopPropagation()}
-              className="inline-flex items-center p-0.5 rounded-full bg-[#2C2C2E] border border-white/10 gap-0.5 shadow-inner"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: 2,
+                borderRadius: 999,
+                background: GDRIVE_DARK.bgSecondary,
+                border: '1px solid rgba(255,255,255,0.08)',
+                gap: 2,
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)'
+              }}
             >
               <button
                 type="button"
                 onClick={() => setDocsViewMode('preview')}
-                className={`h-7 px-3 rounded-full text-xs transition-colors cursor-pointer ${
-                  docsViewMode === 'preview'
-                    ? 'bg-[#3A3A3C] text-[#F2F2F7] font-semibold shadow-sm'
-                    : 'text-[#98989D] hover:text-[#F2F2F7]'
-                }`}
+                style={{
+                  height: 28,
+                  padding: '0 12px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: docsViewMode === 'preview' ? GDRIVE_DARK.bgHover : 'transparent',
+                  color: docsViewMode === 'preview' ? GDRIVE_DARK.textBright : GDRIVE_DARK.textMuted,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
               >
                 Preview
               </button>
               <button
                 type="button"
                 onClick={() => setDocsViewMode('markdown')}
-                className={`h-7 px-3 rounded-full text-xs transition-colors cursor-pointer ${
-                  docsViewMode === 'markdown'
-                    ? 'bg-[#3A3A3C] text-[#F2F2F7] font-semibold shadow-sm'
-                    : 'text-[#98989D] hover:text-[#F2F2F7]'
-                }`}
+                style={{
+                  height: 28,
+                  padding: '0 12px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: docsViewMode === 'markdown' ? GDRIVE_DARK.bgHover : 'transparent',
+                  color: docsViewMode === 'markdown' ? GDRIVE_DARK.textBright : GDRIVE_DARK.textMuted,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
               >
                 Edit
               </button>
@@ -421,7 +694,27 @@ export function GoogleDriveCard({
           onClick={handleConfirm}
           disabled={busy}
           onMouseDown={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center gap-1.5 h-7.5 px-4 rounded-full bg-[#4285F4] hover:bg-[#5A9CF5] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold cursor-pointer transition-colors shadow-md ml-auto"
+          onMouseEnter={() => setConfirmHovered(true)}
+          onMouseLeave={() => setConfirmHovered(false)}
+          style={{
+            height: 30,
+            padding: '0 18px',
+            borderRadius: 15,
+            border: 'none',
+            background: confirmHovered && !busy ? GDRIVE_DARK.blueHover : GDRIVE_DARK.blue,
+            color: '#FFFFFF',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.6 : 1,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            transition: 'all 0.15s ease',
+            boxShadow: confirmHovered && !busy ? '0 2px 8px rgba(66,133,244,0.3)' : 'none',
+            marginLeft: !isDocument ? 'auto' : undefined
+          }}
         >
           {busy && <SpinnerIcon size={12} />}
           <span>{actionLabel}</span>

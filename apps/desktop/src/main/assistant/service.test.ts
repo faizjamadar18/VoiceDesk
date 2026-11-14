@@ -394,6 +394,54 @@ describe('AssistantService confirmation cards', () => {
   })
 })
 
+describe('AssistantService confirmation edits', () => {
+  /** A write tool whose outcome echoes the body it was run with. */
+  function editableWriteTool(): Tool {
+    const tool = makeWriteTool('gmail_send_email', () => ({
+      arguments: { body: 'original' }
+    }))
+    tool.run = (args) => ({
+      status: 'ok',
+      action: 'gmail_send_email',
+      message: String(args['body'])
+    })
+    tool.applyEdits = (args, edits) => ({ ...args, body: edits['body'] })
+    return tool
+  }
+
+  it('runs with the edited arguments when edits are supplied', async () => {
+    const registry = new ToolRegistry()
+    registry.register(editableWriteTool())
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('gmail_send_email')
+    })
+
+    const pending = await service.act('send it')
+    const outcome = await service.confirm(pending.planId ?? '', true, {
+      body: 'edited'
+    })
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe('edited')
+  })
+
+  it('keeps the prepared arguments when no edits are supplied', async () => {
+    const registry = new ToolRegistry()
+    registry.register(editableWriteTool())
+    const service = new AssistantService({
+      registry,
+      planner: plannerFor('gmail_send_email')
+    })
+
+    const pending = await service.act('send it')
+    const outcome = await service.confirm(pending.planId ?? '', true)
+
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe('original')
+  })
+})
+
 describe('AssistantService history', () => {
   const answerPlanner: Planner = {
     plan: async () => ({ kind: 'answer', message: 'It is noon.' })

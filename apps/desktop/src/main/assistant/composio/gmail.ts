@@ -635,7 +635,7 @@ function ccFromArgs(args: Record<string, unknown>): {
 }
 
 const LIST_DESCRIPTION =
-  "List the newest emails in the user's inbox, newest first, or only unread."
+  "List the newest emails in the user's inbox, newest first. Only list unread if the user explicitly asks for unread emails."
 
 const READ_DESCRIPTION =
   'Read one email aloud; the newest matching email is position 1.'
@@ -1090,6 +1090,30 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
         card
       }
     },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const to = edits['to']
+      if (Array.isArray(to) && to.every((entry) => typeof entry === 'string')) {
+        if (to.length > 0) {
+          next['recipient_email'] = to[0]
+          next['recipient'] = to.join(', ')
+        } else {
+          next['recipient_email'] = ''
+          next['recipient'] = ''
+        }
+      }
+
+      const cc = edits['cc']
+      if (Array.isArray(cc) && cc.every((entry) => typeof entry === 'string')) {
+        next['cc'] = cc
+      }
+
+      if (typeof edits['subject'] === 'string') next['subject'] = edits['subject']
+      if (typeof edits['body'] === 'string') next['body'] = edits['body']
+
+      return next
+    },
     async run(args, ctx) {
       const action = 'send an email'
       const skipped = dryRun(ctx, action, 'gmail_send_email')
@@ -1314,6 +1338,25 @@ export function createGmailTools(options: GmailToolOptions): Tool[] {
         display: label,
         card
       }
+    },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const to = edits['to']
+      if (Array.isArray(to) && to.every((entry) => typeof entry === 'string')) {
+        if (to.length > 0) {
+          next['recipient_email'] = to[0]
+          next['recipient'] = to.join(', ')
+        } else {
+          next['recipient_email'] = ''
+          next['recipient'] = ''
+        }
+      }
+
+      if (typeof edits['subject'] === 'string') next['subject'] = edits['subject']
+      if (typeof edits['body'] === 'string') next['body'] = edits['body']
+
+      return next
     },
     async run(args, ctx) {
       const action = 'save an email draft'

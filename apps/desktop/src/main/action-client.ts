@@ -2,7 +2,11 @@ import type { ActionResponse, ScreenAnswerResponse, ScreenAskInput } from '../sh
 
 export interface ActionClient {
   act(transcript: string): Promise<ActionResponse>
-  confirm(planId: string, approved: boolean): Promise<ActionResponse>
+  confirm(
+    planId: string,
+    approved: boolean,
+    edits?: Record<string, unknown>
+  ): Promise<ActionResponse>
   undo(planId: string): Promise<ActionResponse>
   askScreen(input: ScreenAskInput): Promise<ScreenAnswerResponse>
 }
@@ -53,12 +57,14 @@ export class HttpActionClient implements ActionClient {
     return this.post<ActionResponse>('/act', { transcript }, this.actionOptions())
   }
 
-  async confirm(planId: string, approved: boolean): Promise<ActionResponse> {
-    return this.post<ActionResponse>(
-      '/act/confirm',
-      { planId, approved },
-      this.actionOptions()
-    )
+  async confirm(
+    planId: string,
+    approved: boolean,
+    edits?: Record<string, unknown>
+  ): Promise<ActionResponse> {
+    const body: Record<string, unknown> = { planId, approved }
+    if (edits !== undefined) body['edits'] = edits
+    return this.post<ActionResponse>('/act/confirm', body, this.actionOptions())
   }
 
   async undo(planId: string): Promise<ActionResponse> {

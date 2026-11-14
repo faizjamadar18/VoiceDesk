@@ -13,6 +13,7 @@ import {
   type NotchCard,
   type NotchDecision,
   type NotchDecisionAction,
+  type NotchDecisionEdits,
   type NotchEmailComposeCard,
   type NotchEmailReplyCard,
   type NotchEmailListCard,
@@ -1222,9 +1223,9 @@ export default function Notch(): JSX.Element {
     dismissAnimatorRef.current?.start()
   }
 
-  const decide = (action: NotchDecisionAction): void => {
+  const decide = (action: NotchDecisionAction, edits?: NotchDecisionEdits): void => {
     if (decision?.busy) return
-    window.kestrel?.decideNotch(action)
+    window.kestrel?.decideNotch(action, edits)
   }
 
   const openResult = async (id: number): Promise<void> => {
@@ -1419,7 +1420,9 @@ export default function Notch(): JSX.Element {
         <GmailComposeCard
           card={emailCompose}
           busy={decision?.busy}
-          onSend={() => decide('confirm')}
+          onSend={(updated) =>
+            decide('confirm', updated as unknown as Record<string, unknown>)
+          }
           onDiscard={() => decide('cancel')}
           onCopy={(text) => window.kestrel?.copyToClipboard(text)}
         />
@@ -1429,7 +1432,9 @@ export default function Notch(): JSX.Element {
         <GoogleCalendarCard
           card={calendarEvent}
           busy={decision?.busy}
-          onConfirm={() => decide('confirm')}
+          onConfirm={(updated) =>
+            decide('confirm', updated as unknown as Record<string, unknown>)
+          }
           onDiscard={() => decide('cancel')}
         />
       )}
@@ -1438,7 +1443,7 @@ export default function Notch(): JSX.Element {
         <GoogleDriveCard
           card={driveCard}
           busy={decision?.busy}
-          onConfirm={() => decide('confirm')}
+          onConfirm={(data) => decide('confirm', data)}
           onDiscard={() => decide('cancel')}
         />
       )}

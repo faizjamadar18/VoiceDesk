@@ -312,6 +312,12 @@ export type NotchDecisionKind = 'confirm' | 'undo'
 export type NotchDecisionAction = 'confirm' | 'cancel' | 'undo'
 
 /**
+ * A card-shaped object the user edited before confirming. It carries display
+ * data only; the backend validates it and ignores anything it cannot use.
+ */
+export type NotchDecisionEdits = Record<string, unknown>
+
+/**
  * A write that is waiting on the user. `planId` is the only handle the renderer
  * holds; `target` is a display-only absolute path so the user can see exactly
  * what will be touched. The renderer never uses it to run anything.
@@ -576,7 +582,7 @@ export interface KestrelApi {
   openNotchResult: (id: number) => Promise<NotchOpenResult>
   dismissNotchResult: () => void
   cancelNotchActive: () => void
-  decideNotch: (action: NotchDecisionAction) => void
+  decideNotch: (action: NotchDecisionAction, edits?: NotchDecisionEdits) => void
   submitNotchText: (text: string) => void
   setNotchFocusable: (focusable: boolean) => void
   startNotchTyping: () => void

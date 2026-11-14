@@ -123,6 +123,14 @@ function shellErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** A non-array object, or undefined for anything else. */
+function plainRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined
+  }
+  return value as Record<string, unknown>
+}
+
 /** Used when a stream request arrives before the synthesizer is ready. */
 async function* emptySpeechChunks(): AsyncIterable<SpeechChunk> {}
 
@@ -556,9 +564,13 @@ function registerIpc(): void {
   ipcMain.on(IPC.notchCancelActive, () => {
     notchController?.cancelActiveWork()
   })
-  ipcMain.on(IPC.notchDecide, (_event, action: unknown) => {
+  ipcMain.on(IPC.notchDecide, (_event, payload: unknown) => {
+    const message = plainRecord(payload)
+    if (message === undefined) return
+    const action = message['action']
     if (action !== 'confirm' && action !== 'cancel' && action !== 'undo') return
-    void notchController?.decide(action)
+    const edits = plainRecord(message['edits'])
+    void notchController?.decide(action, edits)
   })
   ipcMain.on(IPC.notchSubmitText, (_event, text: unknown) => {
     if (typeof text !== 'string') return

@@ -5,7 +5,7 @@ import gmailIcon from '../assets/gmail.webp'
 export interface GmailComposeCardProps {
   card: NotchEmailComposeCard
   busy?: boolean
-  onSend: () => void
+  onSend: (updated: NotchEmailComposeCard) => void
   onDiscard: () => void
   onCopy?: (text: string) => void
 }
@@ -347,7 +347,14 @@ export function GmailComposeCard({
           type="button"
           className="kestrel-email-send"
           disabled={busy || card.body.trim().length === 0}
-          onClick={onSend}
+          onClick={() =>
+            onSend({
+              ...card,
+              to: toRecipients,
+              cc: ccRecipients,
+              bcc: bccRecipients
+            })
+          }
         >
           {sendLabel}
         </button>

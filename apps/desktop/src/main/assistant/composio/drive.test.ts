@@ -428,6 +428,32 @@ describe('drive_create_file', () => {
   })
 })
 
+describe('drive_create_file applyEdits', () => {
+  it('applies an edited name and content', () => {
+    const { tools } = makeTools([])
+    const tool = toolNamed(tools, 'drive_create_file')
+
+    const applied = tool.applyEdits!(
+      { name: 'Old.txt', content: 'old body' },
+      { name: 'New.txt', content: 'new body' }
+    )
+
+    expect(applied).toMatchObject({ name: 'New.txt', content: 'new body' })
+  })
+
+  it('ignores a blank name and a non-string content', () => {
+    const { tools } = makeTools([])
+    const tool = toolNamed(tools, 'drive_create_file')
+
+    const applied = tool.applyEdits!(
+      { name: 'Old.txt', content: 'old body' },
+      { name: '   ', content: 42 }
+    )
+
+    expect(applied).toMatchObject({ name: 'Old.txt', content: 'old body' })
+  })
+})
+
 describe('drive_share_file', () => {
   it('refuses an invalid email address without calling Composio', async () => {
     const { tools, calls } = makeTools([])

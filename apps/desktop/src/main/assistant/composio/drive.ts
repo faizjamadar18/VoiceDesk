@@ -631,6 +631,16 @@ export function createDriveTools(options: DriveToolOptions): Tool[] {
         card: card as unknown as Record<string, unknown>
       }
     },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const name = optionalString(edits, 'name')
+      if (name !== null) next['name'] = name
+
+      if (typeof edits['content'] === 'string') next['content'] = edits['content']
+
+      return next
+    },
     async run(args, ctx) {
       const action = 'create a Google Drive file'
       const skipped = dryRun(ctx, action, 'drive_create_file')

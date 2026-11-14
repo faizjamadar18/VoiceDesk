@@ -657,6 +657,47 @@ describe('gmail_send_email', () => {
   })
 })
 
+describe('gmail_send_email applyEdits', () => {
+  it('overrides the recipient and cc from the edited compose card', () => {
+    const { tools } = makeTools({})
+    const tool = toolNamed(tools, 'gmail_send_email')
+
+    const applied = tool.applyEdits!(
+      {
+        recipient: 'sam@example.com',
+        recipient_email: 'sam@example.com',
+        subject: 'Hi',
+        body: 'Hello'
+      },
+      { to: ['alex@example.com'], cc: ['cc@example.com'] }
+    )
+
+    expect(applied).toMatchObject({
+      recipient_email: 'alex@example.com',
+      recipient: 'alex@example.com',
+      cc: ['cc@example.com']
+    })
+  })
+
+  it('clears both recipient fields when the edited card has no recipients', () => {
+    const { tools } = makeTools({})
+    const tool = toolNamed(tools, 'gmail_send_email')
+
+    const applied = tool.applyEdits!(
+      {
+        recipient: 'sam@example.com',
+        recipient_email: 'sam@example.com',
+        subject: 'Hi',
+        body: 'Hello'
+      },
+      { to: [] }
+    )
+
+    expect(applied['recipient_email']).toBe('')
+    expect(applied['recipient']).toBe('')
+  })
+})
+
 describe('gmail_reply_email', () => {
   it('resolves the email and builds a reply draft card without sending', async () => {
     const { tools, calls } = makeTools({

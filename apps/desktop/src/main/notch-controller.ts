@@ -568,7 +568,10 @@ export class NotchController {
    * the backend; the card's path is display-only. A bad choice for the card is
    * ignored rather than guessed.
    */
-  async decide(action: NotchDecisionAction): Promise<void> {
+  async decide(
+    action: NotchDecisionAction,
+    edits?: Record<string, unknown>
+  ): Promise<void> {
     const decision = this.decision
     if (!decision) return
     if (decision.kind === 'confirm' && action === 'undo') return
@@ -585,7 +588,8 @@ export class NotchController {
           ? await this.options.actionClient.undo(decision.planId)
           : await this.options.actionClient.confirm(
               decision.planId,
-              action === 'confirm'
+              action === 'confirm',
+              action === 'confirm' ? edits : undefined
             )
 
       this.decision = null

@@ -461,8 +461,8 @@ export class AssistantServer {
       return
     }
     if (method === 'POST' && path === '/act/confirm') {
-      const { planId, approved } = await this.readConfirm(req)
-      jsonResponse(res, 200, await this.service.confirm(planId, approved))
+      const { planId, approved, edits } = await this.readConfirm(req)
+      jsonResponse(res, 200, await this.service.confirm(planId, approved, edits))
       return
     }
     if (method === 'POST' && path === '/act/undo') {
@@ -496,13 +496,26 @@ export class AssistantServer {
 
   private async readConfirm(
     req: IncomingMessage
-  ): Promise<{ planId: string; approved: boolean }> {
+  ): Promise<{
+    planId: string
+    approved: boolean
+    edits?: Record<string, unknown>
+  }> {
     const body = await this.readJson(req)
     const issues: ValidationIssue[] = []
     const planId = checkString(body, 'planId', { required: true, minLength: 1 }, issues)
     const approved = checkBoolean(body, 'approved', false, issues)
     if (issues.length > 0) throw invalid(issues)
-    return { planId: planId as string, approved: approved as boolean }
+    const rawEdits = body['edits']
+    const edits =
+      typeof rawEdits === 'object' && rawEdits !== null && !Array.isArray(rawEdits)
+        ? (rawEdits as Record<string, unknown>)
+        : undefined
+    return {
+      planId: planId as string,
+      approved: approved as boolean,
+      edits
+    }
   }
 
   private async readUndo(req: IncomingMessage): Promise<string> {

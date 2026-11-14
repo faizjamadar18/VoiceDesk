@@ -37,6 +37,7 @@ export interface CalendarEvent {
   readonly start: string
   readonly end: string | null
   readonly location?: string
+  readonly description?: string
 }
 
 export interface CalendarToolOptions {
@@ -104,12 +105,68 @@ const STOP_WORDS = new Set([
   'in',
   'and',
   'with',
-  'meeting',
-  'event',
-  'calendar',
   'please',
   'can',
   'you'
+])
+
+/**
+ * Nouns that describe a calendar item rather than name one. They are weak
+ * signals: enough to pick a lone event out of a list, never enough to win a
+ * contest against a real title word.
+ */
+const HINT_WORDS = new Set([
+  'meeting',
+  'event',
+  'calendar',
+  'appointment',
+  'invite',
+  'invitation'
+])
+
+/** Verbs that say what to do, not which event to do it to. */
+const ACTION_WORDS = new Set([
+  'move',
+  'reschedule',
+  'shift',
+  'change',
+  'update',
+  'postpone',
+  'cancel',
+  'delete',
+  'remove',
+  'schedule',
+  'fix',
+  'make',
+  'set'
+])
+
+/** Relative-time words. They shape the target day, never the title. */
+const DATE_WORDS = new Set([
+  'today',
+  'tomorrow',
+  'tonight',
+  'yesterday',
+  'morning',
+  'afternoon',
+  'evening',
+  'night',
+  'am',
+  'pm',
+  'next',
+  'this',
+  'coming',
+  'upcoming'
+])
+
+const WEEKDAY_WORDS = new Set([
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday'
 ])
 
 const ISO_MOMENT =
@@ -314,12 +371,14 @@ function toEvent(item: Record<string, unknown>): CalendarEvent | null {
   const start = dateOf(item['start'])
   if (start === null) return null
   const location = stringOf(item['location'])
+  const description = stringOf(item['description'])
   return {
     id: stringOf(item['id']) ?? '',
     summary: stringOf(item['summary']) ?? '',
     start,
     end: dateOf(item['end']),
-    ...(location ? { location } : {})
+    ...(location ? { location } : {}),
+    ...(description ? { description } : {})
   }
 }
 
@@ -359,12 +418,61 @@ export function extractEvents(data: unknown): CalendarEvent[] {
 
 // --- event matching (exported for tests) -------------------------------
 
-function keywords(query: string): string[] {
-  return query
+/** A single query word, reduced to a stem, tagged as a weak hint or not. */
+interface Token {
+  readonly stem: string
+  readonly hint: boolean
+}
+
+/** Crude suffix stripping, enough to line up `meeting`/`meet`, plurals, etc. */
+function stem(word: string): string {
+  let w = word
+  if (w.length > 4 && w.endsWith('ings')) w = w.slice(0, -4)
+  else if (w.length > 4 && w.endsWith('ing')) w = w.slice(0, -3)
+  else if (w.length > 3 && w.endsWith('ed')) w = w.slice(0, -2)
+  else if (w.length > 3 && w.endsWith('es')) w = w.slice(0, -2)
+  else if (w.length > 2 && w.endsWith('s')) w = w.slice(0, -1)
+  return w
+}
+
+function tokenize(query: string): Token[] {
+  const tokens: Token[] = []
+  for (const raw of query
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter((word) => word.length > 2 && !STOP_WORDS.has(word))
+    .split(/\s+/)) {
+    const word = raw.trim()
+    if (word === '') continue
+    if (word.length <= 2) continue
+    if (STOP_WORDS.has(word)) continue
+    if (ACTION_WORDS.has(word)) continue
+    if (DATE_WORDS.has(word)) continue
+    if (WEEKDAY_WORDS.has(word)) continue
+    if (/^\d+$/.test(word)) continue
+    const reduced = stem(word)
+    tokens.push({
+      stem: reduced,
+      hint: HINT_WORDS.has(word) || HINT_WORDS.has(reduced)
+    })
+  }
+  return tokens
+}
+
+/** True when `stem` starts at a word boundary of `text`. */
+function wordBoundaryHit(text: string, stem: string): boolean {
+  if (stem === '') return false
+  const isWord = (char: string): boolean => /[a-z0-9]/.test(char)
+  let index = text.indexOf(stem)
+  while (index !== -1) {
+    const before = index === 0 ? '' : text[index - 1]
+    const after =
+      index + stem.length >= text.length ? '' : text[index + stem.length]
+    if ((before === '' || !isWord(before)) && (after === '' || !isWord(after))) {
+      return true
+    }
+    index = text.indexOf(stem, index + 1)
+  }
+  return false
 }
 
 function queryClockMinute(query: string): number | null {
@@ -394,20 +502,87 @@ function endTime(event: CalendarEvent): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
+/**
+ * The calendar day the speaker means, expressed as a day number, gathered
+ * from the query first and the surrounding transcript when the query itself
+ * carries no date. `null` when nothing points at a specific day.
+ */
+function targetDayNumber(
+  query: string,
+  transcript: string | undefined,
+  now: Date,
+  timeZone: string
+): number | null {
+  const text = `${query} ${transcript ?? ''}`.toLowerCase()
+  const nowParts = zoneParts(now, timeZone)
+  const today = dayNumber(
+    Number(nowParts['year']),
+    Number(nowParts['month']),
+    Number(nowParts['day'])
+  )
+
+  if (text.includes('day after tomorrow')) return today + 2
+  if (/\btomorrow\b/.test(text)) return today + 1
+  if (/\byesterday\b/.test(text)) return today - 1
+  if (/\btoday\b/.test(text) || /\btonight\b/.test(text)) return today
+
+  const currentWeekday = WEEKDAYS.findIndex(
+    (day) => day.toLowerCase() === (nowParts['weekday'] ?? '').toLowerCase()
+  )
+  for (let index = 0; index < WEEKDAYS.length; index += 1) {
+    const name = WEEKDAYS[index].toLowerCase()
+    if (new RegExp(`\\b${name}\\b`).test(text)) {
+      const delta = currentWeekday === -1 ? 0 : (index - currentWeekday + 7) % 7
+      return today + delta
+    }
+  }
+
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(text)
+  if (iso !== null) {
+    return dayNumber(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+  }
+
+  for (let index = 0; index < MONTHS.length; index += 1) {
+    const name = MONTHS[index].toLowerCase()
+    const match = new RegExp(`\\b${name}\\s+(\\d{1,2})\\b`).exec(text)
+    if (match !== null) {
+      return dayNumber(Number(nowParts['year']), index + 1, Number(match[1]))
+    }
+  }
+
+  return null
+}
+
 function scoreEvent(
   event: CalendarEvent,
-  words: readonly string[],
+  tokens: readonly Token[],
   clockMinute: number | null,
-  now: Date
+  targetDay: number | null,
+  now: Date,
+  timeZone: string
 ): number {
   const summary = event.summary.toLowerCase()
+  const extra = `${event.location ?? ''} ${event.description ?? ''}`.toLowerCase()
   let score = 0
-  for (const word of words) {
-    if (summary.includes(word)) score += 3
+  for (const token of tokens) {
+    let best = 0
+    if (wordBoundaryHit(summary, token.stem)) best = token.hint ? 1 : 4
+    else if (summary.includes(token.stem)) best = token.hint ? 1 : 3
+    else if (extra.includes(token.stem)) best = token.hint ? 1 : 2
+    score += best
   }
   if (clockMinute !== null) {
     const eventMinute = startMinuteOfDay(event.start)
     if (eventMinute !== null && eventMinute === clockMinute) score += 4
+  }
+  if (targetDay !== null) {
+    const moment = parseMoment(event.start, timeZone)
+    if (
+      moment !== null &&
+      dayNumber(moment.year, moment.month, moment.day) === targetDay
+    ) {
+      score += 5
+    }
   }
   const ended = endTime(event)
   if (ended !== null && ended.getTime() < now.getTime()) score -= 3
@@ -418,7 +593,8 @@ function scoreEvent(
 export function resolveEvent(
   events: readonly CalendarEvent[],
   query: string,
-  now: Date
+  now: Date,
+  options?: { transcript?: string; timeZone?: string }
 ): {
   ok: true
   event: CalendarEvent
@@ -427,14 +603,17 @@ export function resolveEvent(
   reason: 'not_found' | 'ambiguous'
   candidates: CalendarEvent[]
 } {
-  const words = keywords(query)
-  const clockMinute = queryClockMinute(query)
+  const timeZone = options?.timeZone ?? hostZone()
+  const tokens = tokenize(query)
+  const clockMinute =
+    queryClockMinute(query) ?? queryClockMinute(options?.transcript ?? '')
+  const targetDay = targetDayNumber(query, options?.transcript, now, timeZone)
   let best: CalendarEvent | null = null
   let bestScore = Number.NEGATIVE_INFINITY
   let tied: CalendarEvent[] = []
 
   for (const event of events) {
-    const score = scoreEvent(event, words, clockMinute, now)
+    const score = scoreEvent(event, tokens, clockMinute, targetDay, now, timeZone)
     if (score > bestScore) {
       bestScore = score
       best = event
@@ -527,7 +706,10 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
     )
     if (!listed.ok) return { ok: false, outcome: listed.outcome }
 
-    const resolved = resolveEvent(extractEvents(listed.data), query, now)
+    const resolved = resolveEvent(extractEvents(listed.data), query, now, {
+      transcript: ctx.transcript,
+      timeZone
+    })
     if (!resolved.ok) {
       const message = resolveFailureMessage(query, resolved, now, timeZone)
       return {
@@ -715,6 +897,36 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
         card: card as unknown as Record<string, unknown>
       }
     },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const title = optionalString(edits, 'title')
+      if (title !== null) next['title'] = title
+
+      const start = optionalString(edits, 'start')
+      if (start !== null && ISO_MOMENT.exec(start) !== null) next['start'] = start
+
+      const duration = optionalInteger(edits, 'durationMinutes')
+      if (duration !== null && Number.isInteger(duration) && duration > 0) {
+        next['duration_minutes'] = duration
+      }
+
+      const location = optionalString(edits, 'location')
+      if (location !== null) next['location'] = location
+
+      const description = optionalString(edits, 'description')
+      if (description !== null) next['description'] = description
+
+      const attendees = edits['attendees']
+      if (
+        Array.isArray(attendees) &&
+        attendees.every((entry) => typeof entry === 'string')
+      ) {
+        next['attendees'] = attendees.join(', ')
+      }
+
+      return next
+    },
     async run(args, ctx) {
       const action = 'schedule a meeting'
       const skipped = dryRun(ctx, action, 'calendar_create_event')
@@ -812,61 +1024,107 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
           outcome: { status: 'error', action, message: NEED_EXACT_TIME }
         }
       }
-      const duration = optionalInteger(args, 'duration_minutes') ?? 60
+
+      const calendarId = optionalString(args, 'calendar_id') ?? 'primary'
+      const located = await locateEvent(query, calendarId, action, ctx)
+      if (!located.ok) {
+        return { arguments: { ...args }, outcome: located.outcome }
+      }
+
+      const duration =
+        optionalInteger(args, 'duration_minutes') ?? originalDuration(located.event)
       const end = addMinutes(newStart, duration) ?? newStart
       const when = describeWhen(newStart, currentTime(ctx), zone())
+      const summary = located.event.summary || query || 'Meeting'
       const card: NotchCalendarCard = {
         kind: 'calendar_event',
         mode: 'patch',
-        title: query || 'Meeting',
+        title: summary,
         start: newStart,
         end,
         durationMinutes: duration,
-        calendarName: 'Primary'
+        calendarName: calendarId === 'primary' ? 'Primary' : calendarId,
+        ...(located.event.location ? { location: located.event.location } : {})
       }
       return {
-        arguments: { ...args },
-        message: `Move "${query}" to ${when}? Approval needed.`,
-        display: query,
+        arguments: {
+          ...args,
+          calendar_id: calendarId,
+          event_id: located.event.id,
+          event_summary: located.event.summary,
+          event_start: located.event.start,
+          event_end: located.event.end ?? ''
+        },
+        message: `Move "${summary}" to ${when}? Approval needed.`,
+        display: summary,
         card: card as unknown as Record<string, unknown>
       }
+    },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const title = optionalString(edits, 'title')
+      if (title !== null) next['summary'] = title
+
+      const start = optionalString(edits, 'start')
+      if (start !== null && ISO_MOMENT.exec(start) !== null) next['new_start'] = start
+
+      const duration = optionalInteger(edits, 'durationMinutes')
+      if (duration !== null && Number.isInteger(duration) && duration > 0) {
+        next['duration_minutes'] = duration
+      }
+
+      return next
     },
     async run(args, ctx) {
       const action = 'move a meeting'
       const skipped = dryRun(ctx, action, 'calendar_move_event')
       if (skipped !== null) return skipped
 
-      const query = optionalString(args, 'query') ?? ''
       const newStart = optionalString(args, 'new_start')
       if (newStart === null || ISO_MOMENT.exec(newStart) === null) {
         return { status: 'error', action, message: NEED_EXACT_TIME }
       }
 
       const calendarId = optionalString(args, 'calendar_id') ?? 'primary'
-      const located = await locateEvent(query, calendarId, action, ctx)
-      if (!located.ok) return located.outcome
+      let eventId = optionalString(args, 'event_id')
+      let summary = optionalString(args, 'event_summary') ?? ''
+      let start = optionalString(args, 'event_start') ?? ''
+      let end = optionalString(args, 'event_end')
+
+      if (eventId === null) {
+        const query = optionalString(args, 'query') ?? ''
+        const located = await locateEvent(query, calendarId, action, ctx)
+        if (!located.ok) return located.outcome
+        eventId = located.event.id
+        summary = located.event.summary
+        start = located.event.start
+        end = located.event.end
+      }
 
       const explicit = optionalInteger(args, 'duration_minutes')
-      const duration = explicit ?? originalDuration(located.event)
-      const end = addMinutes(newStart, duration)
-      if (end === null) {
+      const duration =
+        explicit ?? originalDuration({ id: eventId, summary, start, end })
+      const newEnd = addMinutes(newStart, duration)
+      if (newEnd === null) {
         return { status: 'error', action, message: NEED_EXACT_TIME }
       }
 
-      const patched = await invoke(
-        SLUG.patch,
-        {
-          calendar_id: calendarId,
-          event_id: located.event.id,
-          start_time: newStart,
-          end_time: end,
-          timezone: zone()
-        },
-        action
-      )
+      const renamed = optionalString(args, 'summary')
+      const patchArgs: Record<string, unknown> = {
+        calendar_id: calendarId,
+        event_id: eventId,
+        start_time: newStart,
+        end_time: newEnd,
+        timezone: zone()
+      }
+      if (renamed !== null) patchArgs['summary'] = renamed
+
+      const patched = await invoke(SLUG.patch, patchArgs, action)
       if (!patched.ok) return patched.outcome
 
-      const message = `Moved "${located.event.summary}" to ${describeWhen(newStart, currentTime(ctx), zone())}.`
+      const shown = renamed || summary
+      const message = `Moved "${shown}" to ${describeWhen(newStart, currentTime(ctx), zone())}.`
       return {
         status: 'ok',
         action,
@@ -908,6 +1166,8 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
       let end = ''
       let duration = 60
       let location: string | undefined = undefined
+      let eventId: string | null = null
+      let eventSummary = ''
 
       try {
         const located = await locateEvent(query, calendarId, action, ctx)
@@ -917,6 +1177,8 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
           end = located.event.end ?? ''
           duration = originalDuration(located.event)
           location = located.event.location
+          eventId = located.event.id
+          eventSummary = located.event.summary
         }
       } catch {
         // Fall back gracefully to query title and defaults
@@ -933,7 +1195,10 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
         ...(location ? { location } : {})
       }
       return {
-        arguments: { ...args },
+        arguments: {
+          ...args,
+          ...(eventId !== null ? { event_id: eventId, event_summary: eventSummary } : {})
+        },
         message: `Cancel "${title}"? Approval needed.`,
         display: title,
         card: card as unknown as Record<string, unknown>
@@ -944,23 +1209,30 @@ export function createCalendarTools(options: CalendarToolOptions): Tool[] {
       const skipped = dryRun(ctx, action, 'calendar_cancel_event')
       if (skipped !== null) return skipped
 
-      const query = optionalString(args, 'query') ?? ''
       const calendarId = optionalString(args, 'calendar_id') ?? 'primary'
-      const located = await locateEvent(query, calendarId, action, ctx)
-      if (!located.ok) return located.outcome
+      let eventId = optionalString(args, 'event_id')
+      let summary = optionalString(args, 'event_summary') ?? ''
+
+      if (eventId === null) {
+        const query = optionalString(args, 'query') ?? ''
+        const located = await locateEvent(query, calendarId, action, ctx)
+        if (!located.ok) return located.outcome
+        eventId = located.event.id
+        summary = located.event.summary
+      }
 
       const removed = await invoke(
         SLUG.remove,
         {
           calendar_id: calendarId,
-          event_id: located.event.id,
+          event_id: eventId,
           send_updates: 'all'
         },
         action
       )
       if (!removed.ok) return removed.outcome
 
-      const message = `Cancelled "${located.event.summary}".`
+      const message = `Cancelled "${summary}".`
       return {
         status: 'ok',
         action,

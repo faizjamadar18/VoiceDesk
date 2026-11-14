@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { GoogleDriveCard } from './GoogleDriveCard'
+import { GoogleDriveCard, GDRIVE_DARK } from './GoogleDriveCard'
 import type { NotchDriveCard } from '../../../shared/types'
 
 // Setup minimal document / window mock for node environment
@@ -487,6 +487,77 @@ describe('GoogleDriveCard', () => {
       clickNode(closeBtn!)
 
       expect(onDiscard).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Self-contained inline styling and GDRIVE_DARK theme', () => {
+    it('exports GDRIVE_DARK with theme palette constants', () => {
+      expect(GDRIVE_DARK).toBeDefined()
+      expect(GDRIVE_DARK.bg).toBe('#1C1C1E')
+      expect(GDRIVE_DARK.bgSecondary).toBe('#2C2C2E')
+      expect(GDRIVE_DARK.bgHover).toBe('#3A3A3C')
+      expect(GDRIVE_DARK.headerBg).toBe('#232326')
+      expect(GDRIVE_DARK.text).toBe('#D1D1D6')
+      expect(GDRIVE_DARK.textBright).toBe('#F2F2F7')
+      expect(GDRIVE_DARK.blue).toBe('#4285F4')
+      expect(GDRIVE_DARK.docsBlue).toBe('#4285F4')
+      expect(GDRIVE_DARK.sheetsGreen).toBe('#34A853')
+    })
+
+    it('renders outer container and frosted close button with inline styles and no Tailwind classes', () => {
+      const card: NotchDriveCard = {
+        kind: 'drive_file',
+        mode: 'create',
+        format: 'document',
+        name: 'Sprint Planning Notes',
+        content: 'Content'
+      }
+
+      const html = renderToStaticMarkup(
+        createElement(GoogleDriveCard, {
+          card,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+
+      // Outer container has inline styles matching VoiceOS
+      expect(html).toContain('background:#1C1C1E')
+      expect(html).toContain('border:1px solid rgba(255,255,255,0.10)')
+      expect(html).toContain('border-radius:20px')
+      expect(html).toContain('box-shadow:0 8px 24px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.15)')
+
+      // Close button has frosted glass styling
+      expect(html).toContain('background:rgba(120, 120, 128, 0.32)')
+      expect(html).toContain('backdrop-filter:blur(8px)')
+
+      // Document paper box has inline styles
+      expect(html).toContain('background:#222326')
+      expect(html).toContain('border:1px solid rgba(255,255,255,0.12)')
+
+      // Preview / Edit pill toggle has self-contained styling
+      expect(html).toContain('background:#3A3A3C') // Active pill
+      expect(html).toContain('background:#4285F4') // Primary action button
+    })
+
+    it('renders spreadsheet variant with self-contained styles', () => {
+      const card: NotchDriveCard = {
+        kind: 'drive_file',
+        mode: 'create',
+        format: 'spreadsheet',
+        name: 'Budget Sheet'
+      }
+
+      const html = renderToStaticMarkup(
+        createElement(GoogleDriveCard, {
+          card
+        })
+      )
+
+      expect(html).toContain('background:#232326') // Header row
+      expect(html).toContain('background:#2C2C2E') // Row badge wrapper
+      expect(html).toContain('background:rgba(255,255,255,0.05)') // Badge container
+      expect(html).toContain('background:#4285F4') // Primary action button
     })
   })
 })

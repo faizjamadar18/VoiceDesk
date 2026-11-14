@@ -125,6 +125,15 @@ export interface Tool {
     args: Record<string, unknown>,
     ctx: ToolContext
   ): ToolPreparation | Promise<ToolPreparation>
+  /**
+   * Fold the user's card edits into the prepared arguments. Returns the full
+   * new arguments, validated strictly; unknown or malformed fields are
+   * ignored rather than thrown.
+   */
+  applyEdits?(
+    args: Record<string, unknown>,
+    edits: Record<string, unknown>
+  ): Record<string, unknown>
 }
 
 export interface AnswerDirective {

@@ -301,6 +301,68 @@ describe('calendar_create_event', () => {
   })
 })
 
+describe('calendar_create_event applyEdits', () => {
+  it('maps the edited create card onto the stored arguments', () => {
+    const { tools } = makeTools({})
+    const tool = toolNamed(tools, 'calendar_create_event')
+
+    const applied = tool.applyEdits!(
+      { title: 'Old title', start: '2026-11-13T15:00:00', duration_minutes: 30 },
+      {
+        title: 'New title',
+        start: '2026-11-14T09:30:00',
+        durationMinutes: 45,
+        location: 'Room 1',
+        description: 'Bring notes',
+        attendees: ['sam@example.com', 'alex@example.com']
+      }
+    )
+
+    expect(applied).toMatchObject({
+      title: 'New title',
+      start: '2026-11-14T09:30:00',
+      duration_minutes: 45,
+      location: 'Room 1',
+      description: 'Bring notes',
+      attendees: 'sam@example.com, alex@example.com'
+    })
+  })
+
+  it('ignores blank titles, bad starts, and non-positive durations', () => {
+    const { tools } = makeTools({})
+    const tool = toolNamed(tools, 'calendar_create_event')
+
+    const applied = tool.applyEdits!(
+      { title: 'Old title', start: '2026-11-13T15:00:00', duration_minutes: 30 },
+      { title: '   ', start: 'tomorrow', durationMinutes: 0 }
+    )
+
+    expect(applied).toMatchObject({
+      title: 'Old title',
+      start: '2026-11-13T15:00:00',
+      duration_minutes: 30
+    })
+  })
+})
+
+describe('calendar_move_event applyEdits', () => {
+  it('maps the edited move card onto the stored arguments', () => {
+    const { tools } = makeTools({})
+    const tool = toolNamed(tools, 'calendar_move_event')
+
+    const applied = tool.applyEdits!(
+      { new_start: '2026-11-08T16:00:00' },
+      { title: 'Renamed', start: '2026-11-09T10:00:00', durationMinutes: 45 }
+    )
+
+    expect(applied).toMatchObject({
+      summary: 'Renamed',
+      new_start: '2026-11-09T10:00:00',
+      duration_minutes: 45
+    })
+  })
+})
+
 describe('calendar_move_event', () => {
   it('lists, patches, and preserves the original duration', async () => {
     const { tools, calls } = makeTools({
@@ -333,6 +395,30 @@ describe('calendar_move_event', () => {
     expect(calls[1].args['start_datetime']).toBeUndefined()
     expect(outcome.status).toBe('ok')
     expect(outcome.message).toBe('Moved "Standup" to tomorrow at 4:00 PM.')
+  })
+
+  it('renames the event when the edited summary is present', async () => {
+    const { tools, calls } = makeTools({
+      GOOGLECALENDAR_PATCH_EVENT: () => ({ text: okPayload({ id: 'evt-1' }) })
+    })
+
+    const outcome = await toolNamed(tools, 'calendar_move_event').run(
+      {
+        event_id: 'evt-1',
+        event_summary: 'Standup',
+        event_start: '2026-11-07T15:00:00Z',
+        event_end: '2026-11-07T15:30:00Z',
+        new_start: '2026-11-08T16:00:00',
+        summary: 'Renamed'
+      },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].slug).toBe('GOOGLECALENDAR_PATCH_EVENT')
+    expect(calls[0].args['summary']).toBe('Renamed')
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe('Moved "Renamed" to tomorrow at 4:00 PM.')
   })
 
   it('refuses to patch when nothing matches', async () => {
@@ -373,6 +459,56 @@ describe('calendar_move_event', () => {
     expect(calls.some((call) => call.slug === 'GOOGLECALENDAR_PATCH_EVENT')).toBe(
       false
     )
+  })
+
+  it('binds the located event in prepare so run patches without re-listing', async () => {
+    const items = [
+      event('evt-1', 'Meeting', '2026-11-08T10:00:00Z', '2026-11-08T11:00:00Z')
+    ]
+    const { tools, calls } = makeTools({
+      GOOGLECALENDAR_EVENTS_LIST: () => ({ text: listPayload(items) }),
+      GOOGLECALENDAR_PATCH_EVENT: () => ({ text: okPayload({ id: 'evt-1' }) })
+    })
+
+    const tool = toolNamed(tools, 'calendar_move_event')
+    const prep = await tool.prepare!(
+      { query: 'meeting', new_start: '2026-11-08T16:00:00' },
+      makeContext()
+    )
+
+    expect(calls.map((call) => call.slug)).toEqual(['GOOGLECALENDAR_EVENTS_LIST'])
+    expect(prep.arguments['event_id']).toBe('evt-1')
+    expect(prep.arguments['event_summary']).toBe('Meeting')
+    expect(prep.outcome).toBeUndefined()
+
+    calls.length = 0
+    const outcome = await tool.run(prep.arguments, makeContext())
+
+    expect(calls.map((call) => call.slug)).toEqual(['GOOGLECALENDAR_PATCH_EVENT'])
+    expect(calls[0].args).toMatchObject({
+      calendar_id: 'primary',
+      event_id: 'evt-1',
+      start_time: '2026-11-08T16:00:00',
+      end_time: '2026-11-08T17:00:00',
+      timezone: 'UTC'
+    })
+    expect(outcome.status).toBe('ok')
+  })
+
+  it('returns an error outcome from prepare when nothing matches', async () => {
+    const { tools } = makeTools({
+      GOOGLECALENDAR_EVENTS_LIST: () => ({ text: listPayload([STANDUP]) })
+    })
+
+    const tool = toolNamed(tools, 'calendar_move_event')
+    const prep = await tool.prepare!(
+      { query: 'unicorn', new_start: '2026-11-08T16:00:00' },
+      makeContext()
+    )
+
+    expect(prep.card).toBeUndefined()
+    expect(prep.outcome?.status).toBe('error')
+    expect(prep.outcome?.message).toContain("couldn't find")
   })
 })
 
@@ -511,6 +647,83 @@ describe('resolveEvent', () => {
 
     expect(result).toEqual({ ok: false, reason: 'not_found', candidates: [] })
   })
+
+  it('resolves a relative-date query to a differently titled event', () => {
+    const events = [
+      {
+        id: 'sync',
+        summary: 'Project sync',
+        start: '2026-11-08T10:00:00',
+        end: '2026-11-08T11:00:00'
+      }
+    ]
+
+    const result = resolveEvent(events, "tomorrow's meeting", FIXED_NOW, {
+      timeZone: 'UTC'
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.event.id).toBe('sync')
+  })
+
+  it('resolves a bare hint word to a single event', () => {
+    const events = [
+      {
+        id: 'm',
+        summary: 'Meeting',
+        start: '2026-11-08T10:00:00',
+        end: '2026-11-08T11:00:00'
+      }
+    ]
+
+    const result = resolveEvent(events, 'meeting', FIXED_NOW, { timeZone: 'UTC' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.event.id).toBe('m')
+  })
+
+  it('matches a stemmed word against the summary', () => {
+    const events = [
+      {
+        id: 'c',
+        summary: 'Congratulation',
+        start: '2026-11-08T10:00:00',
+        end: '2026-11-08T11:00:00'
+      }
+    ]
+
+    const result = resolveEvent(events, 'congratulations', FIXED_NOW, {
+      timeZone: 'UTC'
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.event.id).toBe('c')
+  })
+
+  it('uses the transcript date to break an otherwise even match', () => {
+    const events = [
+      {
+        id: 'today',
+        summary: 'Sync',
+        start: '2026-11-07T10:00:00Z',
+        end: '2026-11-07T11:00:00Z'
+      },
+      {
+        id: 'tomorrow',
+        summary: 'Sync',
+        start: '2026-11-08T10:00:00Z',
+        end: '2026-11-08T11:00:00Z'
+      }
+    ]
+
+    const result = resolveEvent(events, 'sync', FIXED_NOW, {
+      timeZone: 'UTC',
+      transcript: 'move my sync to tomorrow'
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.event.id).toBe('tomorrow')
+  })
 })
 
 describe('parseComposioResult', () => {
@@ -583,6 +796,22 @@ describe('extractEvents', () => {
     expect(events).toHaveLength(1)
     expect(events[0].id).toBe('2')
     expect(events[0].end).toBeNull()
+  })
+
+  it('extracts location and description when present', () => {
+    const events = extractEvents([
+      {
+        id: '3',
+        summary: 'C',
+        start: { dateTime: '2026-11-09T09:00:00Z' },
+        end: { dateTime: '2026-11-09T10:00:00Z' },
+        location: 'Room 1',
+        description: 'Bring notes'
+      }
+    ])
+
+    expect(events[0].location).toBe('Room 1')
+    expect(events[0].description).toBe('Bring notes')
   })
 })
 

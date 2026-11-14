@@ -506,7 +506,11 @@ export class AssistantService {
     return outcomeResponse(finalOutcome, dryRun, planId)
   }
 
-  async confirm(planId: string, approved: boolean): Promise<ActionResponse> {
+  async confirm(
+    planId: string,
+    approved: boolean,
+    edits?: Record<string, unknown>
+  ): Promise<ActionResponse> {
     const record = this.pending.get(planId)
     if (record === undefined || record.state === 'cancelled') {
       throw new AssistantHttpError(404, 'Unknown or expired plan.')
@@ -524,7 +528,11 @@ export class AssistantService {
 
     if (record.state !== 'done') {
       const context = this.toolContext(false)
-      const outcome = await runTool(this.registry, record.tool, record.arguments, context)
+      const applied =
+        tool.applyEdits && edits !== undefined
+          ? tool.applyEdits(record.arguments, edits)
+          : record.arguments
+      const outcome = await runTool(this.registry, record.tool, applied, context)
       this.pending.markDone(planId, outcome)
     }
 
