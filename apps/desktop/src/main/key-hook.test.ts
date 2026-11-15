@@ -59,6 +59,26 @@ describe('buildKeyBinding', () => {
     })
   })
 
+  it('maps an Alt+Shift chord', () => {
+    const binding = buildKeyBinding(parseHotkey('Alt+Shift')!, keys)
+
+    expect(binding).toEqual({
+      modifierGroups: [[56, 3640]],
+      mainCode: 42,
+      escapeCode: 1
+    })
+  })
+
+  it('maps the default Control+Shift dictation chord', () => {
+    const binding = buildKeyBinding(parseHotkey('Control+Shift')!, keys)
+
+    expect(binding).toEqual({
+      modifierGroups: [[29, 3613]],
+      mainCode: 42,
+      escapeCode: 1
+    })
+  })
+
   it('maps every requested modifier and the main key', () => {
     const binding = buildKeyBinding(parseHotkey('Ctrl+Alt+Shift+Win+K')!, keys)
 

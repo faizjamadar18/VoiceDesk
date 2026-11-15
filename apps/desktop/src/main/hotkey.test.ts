@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HotkeyChordTracker, formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
+import { HotkeyChordTracker, formatHotkey, hotkeyLabel, isElectronAccelerator, parseHotkey } from './hotkey'
 
 const CTRL = 1
 const CTRL_RIGHT = 2
@@ -47,7 +47,32 @@ describe('parseHotkey', () => {
     expect(parseHotkey('ctrl+f8')?.key).toBe('F8')
     expect(parseHotkey('CommandOrControl+Space')?.ctrl).toBe(true)
     expect(parseHotkey('Win+Space')?.meta).toBe(true)
+    expect(parseHotkey('Control+Shift')).toEqual({
+      key: 'Shift',
+      ctrl: true,
+      alt: false,
+      shift: false,
+      meta: false
+    })
+    expect(parseHotkey('Alt+Shift')).toEqual({
+      key: 'Shift',
+      ctrl: false,
+      alt: true,
+      shift: false,
+      meta: false
+    })
+    expect(formatHotkey(parseHotkey('Alt+Shift')!)).toBe('Alt+Shift')
   })
+
+  it('identifies Electron accelerators vs hook-only chords', () => {
+    expect(isElectronAccelerator('Control+Space')).toBe(true)
+    expect(isElectronAccelerator('Alt+F8')).toBe(true)
+    expect(isElectronAccelerator('Control+Alt+A')).toBe(true)
+    expect(isElectronAccelerator('Alt+Shift')).toBe(false)
+    expect(isElectronAccelerator('Control+Shift')).toBe(false)
+    expect(isElectronAccelerator('InvalidHotkey')).toBe(false)
+  })
+
 
   it('allows a function key without a modifier', () => {
     expect(parseHotkey('F8')?.key).toBe('F8')

@@ -30,7 +30,7 @@ const MODIFIER_ALIASES: Record<string, keyof Pick<HotkeyChord, 'ctrl' | 'alt' | 
 }
 
 const FUNCTION_KEY = /^F(?:[1-9]|1[0-2])$/
-const PLAIN_KEY = /^(?:[A-Z0-9]|Space)$/
+const PLAIN_KEY = /^(?:[A-Z0-9]|Space|Shift)$/
 
 function normalizeMainKey(value: string): string | null {
   const trimmed = value.trim()
@@ -38,10 +38,12 @@ function normalizeMainKey(value: string): string | null {
 
   const upper = trimmed.toUpperCase()
   if (upper === 'SPACE') return 'Space'
+  if (upper === 'SHIFT') return 'Shift'
   if (PLAIN_KEY.test(upper)) return upper
   if (FUNCTION_KEY.test(upper)) return upper
   return null
 }
+
 
 /** Parse an Electron-style accelerator such as `Control+Space`. */
 export function parseHotkey(value: string): HotkeyChord | null {
@@ -77,6 +79,19 @@ export function formatHotkey(chord: HotkeyChord): string {
   if (chord.meta) parts.push('Meta')
   parts.push(chord.key)
   return parts.join('+')
+}
+
+/**
+ * Electron's globalShortcut only supports accelerators that have at least one
+ * non-modifier key (e.g. `Control+Space` or `Alt+F8`). Chords whose main key
+ * is itself a modifier (like `Alt+Shift` or `Control+Shift`) cannot be registered
+ * with `globalShortcut` and are handled solely by the low-level keyboard hook.
+ */
+export function isElectronAccelerator(hotkey: string): boolean {
+  const chord = parseHotkey(hotkey)
+  if (!chord) return false
+  const upper = chord.key.toUpperCase()
+  return upper !== 'SHIFT' && upper !== 'CONTROL' && upper !== 'ALT' && upper !== 'META'
 }
 
 export function hotkeyLabel(hotkey: string): string[] {

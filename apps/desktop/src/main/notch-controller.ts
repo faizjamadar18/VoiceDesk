@@ -13,7 +13,9 @@ import type {
 } from '../shared/types'
 import type { ActionClient } from './action-client'
 import type { PasteService } from './dictation/paste'
+import type { DictationCoordinator, NotchAudioCaptureProvider } from './dictation/coordinator'
 import { normalizeTranscript, type LiveTranscriber, type LiveTurn } from './live-asr'
+
 import { isScreenQuestion } from './screen-intent'
 import type { ScreenFrame, ScreenService, ScreenTurn } from './screen-service'
 
@@ -64,7 +66,10 @@ export interface NotchControllerOptions {
   paste: PasteService
   fileService: NotchFileService
   screen?: ScreenService
+  dictationCoordinator?: DictationCoordinator
+  dictationCapture?: NotchAudioCaptureProvider
   onActivity?: (activity: NotchActivity) => void
+
   onTurnComplete?: () => void
   endFallbackMs?: number
   resultVisibleMs?: number
@@ -188,6 +193,29 @@ export class NotchController {
     return this.session !== null
   }
 
+  get dictation(): DictationCoordinator | undefined {
+    return this.options.dictationCoordinator
+  }
+
+  get dictationCapture(): NotchAudioCaptureProvider | undefined {
+    return this.options.dictationCapture
+  }
+
+  async startDictation(): Promise<void> {
+    if (this.disposed) return
+    if (this.session !== null) return
+    await this.options.dictationCoordinator?.start()
+  }
+
+  async stopDictation(): Promise<string | null> {
+    return (await this.options.dictationCoordinator?.stop()) ?? null
+  }
+
+  async cancelDictation(): Promise<void> {
+    await this.options.dictationCoordinator?.cancel()
+  }
+
+
   isActing(): boolean {
     return this.acting
   }
@@ -253,8 +281,18 @@ export class NotchController {
   }
 
   pushAudio(samples: Float32Array, sampleRate: number): void {
+    if (this.dictationCapture?.isCapturing) {
+      if (this.options.dictationCoordinator) {
+        this.options.dictationCoordinator.pushAudio(samples, sampleRate)
+      } else {
+        this.dictationCapture.push(samples, sampleRate)
+      }
+      return
+    }
+
     const session = this.session
     if (!session || session.finalizing) return
+
     if (!(samples instanceof Float32Array) || samples.length === 0) return
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) return
     if (session.totalSamples > 0 && session.sampleRate !== sampleRate) return

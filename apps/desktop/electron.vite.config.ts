@@ -40,6 +40,7 @@ export default defineConfig({
           index: resolve('src/renderer/index.html'),
           notch: resolve('src/renderer/notch.html'),
           overlay: resolve('src/renderer/overlay.html'),
+          pill: resolve('src/renderer/pill.html'),
           sidebar: resolve('src/renderer/sidebar.html')
         }
       }

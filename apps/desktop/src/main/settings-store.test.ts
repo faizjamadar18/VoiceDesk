@@ -27,13 +27,21 @@ describe('SettingsStore', () => {
     expect(store.load()).toEqual(DEFAULT_SETTINGS)
   })
 
+  it('defaults dictationHotkey to Control+Shift', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    expect(store.load().dictationHotkey).toBe('Control+Shift')
+    expect(DEFAULT_SETTINGS.dictationHotkey).toBe('Control+Shift')
+  })
+
   it('persists and reloads a valid hotkey and mode', () => {
     const { file } = setup()
     const store = new SettingsStore(file)
 
     const saved = store.save({ hotkey: 'Alt+F8', asrMode: 'fake' })
 
-    expect(saved).toEqual({ hotkey: 'Alt+F8', asrMode: 'fake' })
+    expect(saved).toEqual({ hotkey: 'Alt+F8', dictationHotkey: 'Control+Shift', asrMode: 'fake' })
     expect(store.exists()).toBe(true)
     expect(new SettingsStore(file).load()).toEqual(saved)
   })

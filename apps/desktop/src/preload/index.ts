@@ -22,6 +22,7 @@ import {
   type IntegrationDisconnectResult,
   type IntegrationId,
   type IntegrationsStatus,
+  type PillStatePayload,
   type SidebarPointerPayload
 } from '../shared/types'
 
@@ -122,7 +123,12 @@ const api: KestrelApi = {
   onSpeechStreamDone: (callback) =>
     subscribe<SpeechStreamDonePayload>(IPC.speechStreamDone, callback),
   onSpeechStreamError: (callback) =>
-    subscribe<SpeechStreamErrorPayload>(IPC.speechStreamError, callback)
+    subscribe<SpeechStreamErrorPayload>(IPC.speechStreamError, callback),
+  onPillShow: (callback) => subscribeEvent(IPC.pillShow, callback),
+  onPillHide: (callback) => subscribeEvent(IPC.pillHide, callback),
+  onPillState: (callback) => subscribe<PillStatePayload>(IPC.pillState, callback),
+  onPillAudioWave: (callback) => subscribe<number>(IPC.pillAudioWave, callback),
+  notifyPillReady: () => ipcRenderer.send(IPC.pillReady)
 }
 
 contextBridge.exposeInMainWorld('kestrel', api)

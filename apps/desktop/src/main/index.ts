@@ -16,6 +16,7 @@ import { statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   IPC,
+  DEFAULT_DICTATION_HOTKEY,
   isIntegrationId,
   type AuthState,
   type AuthTokens,
@@ -42,7 +43,7 @@ import { AssistantService, emptyIntegrationsStatus } from './assistant/service'
 import { AuthService, syncUserToBackend } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
 import { HistoryStore } from './history/store'
-import { formatHotkey, hotkeyLabel, parseHotkey } from './hotkey'
+import { formatHotkey, hotkeyLabel, isElectronAccelerator, parseHotkey } from './hotkey'
 import { normalizeInteractiveRegion } from './interactive-region'
 import { startKeyHook, type KeyHookHandle } from './key-hook'
 import {
@@ -51,7 +52,19 @@ import {
   type LiveTranscriber
 } from './live-asr'
 import { NativePasteService } from './native-paste'
+import {
+  DictationCoordinator,
+  NotchAudioCaptureProvider
+} from './dictation/coordinator'
+import {
+  createPillWindow,
+  ElectronPillWindowPresenter,
+  PillWindowController
+} from './dictation/pill-window'
+import { NemoTranscriptionClient } from './dictation/nemo-transcription'
+import { GroqTranscriptPolisher, type TranscriptPolisher } from './dictation/llm-polish'
 import { NotchController } from './notch-controller'
+
 import { NotchWindowPresenter, createNotchWindow } from './notch-window'
 import { OverlayWindowPresenter, createOverlayWindow } from './overlay-window'
 import { SidebarWindow, createSidebarWindow } from './sidebar-window'
@@ -82,7 +95,14 @@ let sidebarWindow: SidebarWindow | null = null
 let screenService: OverlayScreenService | null = null
 let keyHook: KeyHookHandle | null = null
 let pushToTalk: PushToTalk | null = null
+let dictationPushToTalk: PushToTalk | null = null
+let dictationCoordinator: DictationCoordinator | null = null
+let dictationAudioCapture: NotchAudioCaptureProvider | null = null
+let dictationKeyHook: KeyHookHandle | null = null
+let pillPresenter: ElectronPillWindowPresenter | null = null
+let pillController: PillWindowController | null = null
 let settingsStore: SettingsStore | null = null
+
 let settings: KestrelSettings = { ...DEFAULT_SETTINGS }
 let isQuitting = false
 let hotkeyRegistered = false
@@ -308,9 +328,21 @@ function createTray(): void {
   }
 }
 
-function registerChord(hotkey: string): boolean {
+function safeUnregisterChord(hotkey: string): void {
+  if (!isElectronAccelerator(hotkey)) return
   try {
-    if (globalShortcut.isRegistered(hotkey)) globalShortcut.unregister(hotkey)
+    if (globalShortcut.isRegistered(hotkey)) {
+      globalShortcut.unregister(hotkey)
+    }
+  } catch {
+    // Ignore invalid accelerators
+  }
+}
+
+function registerChord(hotkey: string): boolean {
+  if (!isElectronAccelerator(hotkey)) return false
+  try {
+    safeUnregisterChord(hotkey)
     // The callback exists only to reserve/consume the chord. Hold detection and
     // release detection come from the low-level keyboard hook.
     return globalShortcut.register(hotkey, () => undefined)
@@ -322,7 +354,36 @@ function registerChord(hotkey: string): boolean {
 function stopKeyHook(): void {
   keyHook?.stop()
   keyHook = null
+  dictationKeyHook?.stop()
+  dictationKeyHook = null
 }
+
+async function ensureDictationKeyHook(): Promise<boolean> {
+  dictationKeyHook?.stop()
+  dictationKeyHook = null
+
+  const dictationShortcut = settings.dictationHotkey || DEFAULT_DICTATION_HOTKEY
+  const chord = parseHotkey(dictationShortcut)
+  if (!chord) {
+    console.warn(`[dictation-hotkey] Invalid shortcut: ${dictationShortcut}`)
+    return false
+  }
+
+  try {
+    dictationKeyHook = await startKeyHook(chord, {
+      onPress: () => dictationPushToTalk?.press(),
+      onRelease: () => dictationPushToTalk?.release(),
+      onCancel: () => dictationPushToTalk?.cancel()
+    })
+    console.log(`[dictation-hotkey] hook started for ${formatHotkey(chord)}`)
+    return true
+  } catch (error) {
+    dictationKeyHook = null
+    console.error('[dictation-hotkey] hook failed', error)
+    return false
+  }
+}
+
 
 async function ensureKeyHook(): Promise<boolean> {
   stopKeyHook()
@@ -398,18 +459,18 @@ async function applyHotkey(nextHotkey: string): Promise<{ ok: boolean; error: st
       }
     }
 
-    if (changing) globalShortcut.unregister(previous)
+    if (changing) safeUnregisterChord(previous)
     settings = { ...settings, hotkey: canonical }
-    hotkeyRegistered = globalShortcut.isRegistered(canonical)
+    hotkeyRegistered = isElectronAccelerator(canonical) ? globalShortcut.isRegistered(canonical) : true
     hotkeyError = null
 
     const hookOk = await ensureKeyHook()
     if (!hookOk && changing) {
       // Keep the working shortcut rather than leaving the user with no hook.
-      globalShortcut.unregister(canonical)
+      safeUnregisterChord(canonical)
       settings = { ...settings, hotkey: previous }
       registerChord(previous)
-      hotkeyRegistered = globalShortcut.isRegistered(previous)
+      hotkeyRegistered = isElectronAccelerator(previous) ? globalShortcut.isRegistered(previous) : true
       await ensureKeyHook()
       return { ok: false, error: hookError ?? 'The keyboard hook could not start.' }
     }
@@ -490,6 +551,14 @@ async function saveSettings(patch: Partial<KestrelSettings>): Promise<SaveSettin
     await restartAsr()
   }
 
+  if (patch.dictationHotkey !== undefined && typeof patch.dictationHotkey === 'string') {
+    const nextDictationHotkey = patch.dictationHotkey.trim()
+    if (nextDictationHotkey !== settings.dictationHotkey) {
+      settings = { ...settings, dictationHotkey: nextDictationHotkey }
+      await ensureDictationKeyHook()
+    }
+  }
+
   settingsStore.save(settings)
   updateTray()
   broadcastSettings()
@@ -531,6 +600,9 @@ function registerIpc(): void {
 
   ipcMain.on(IPC.notchReady, () => {
     notchPresenter?.handleReady()
+  })
+  ipcMain.on(IPC.pillReady, () => {
+    pillPresenter?.handleReady()
   })
   ipcMain.on(IPC.notchAudio, (_event, payload: NotchAudioPayload) => {
     if (!payload || !(payload.samples instanceof Float32Array)) return
@@ -704,6 +776,52 @@ function createPushToTalk(): void {
   })
 }
 
+function createDictationPushToTalk(): void {
+  dictationPushToTalk = new PushToTalk({
+    onListeningStart: () => {
+      console.log('[dictation-ptt] listening')
+      dictationCoordinator?.start().catch((err) => {
+        console.error('[dictation-ptt] start error:', err)
+      })
+    },
+    onListeningStop: (holdMs) => {
+      console.log(`[dictation-ptt] stop holdMs=${holdMs}`)
+      dictationCoordinator
+        ?.stop()
+        .catch((err) => {
+          console.error('[dictation-ptt] stop error:', err)
+        })
+        .finally(() => {
+          // Release the hold gate so the next press can arm a new session.
+          dictationPushToTalk?.reset()
+        })
+    },
+    onCancel: () => {
+      dictationCoordinator?.cancel().catch((err) => {
+        console.error('[dictation-ptt] cancel error:', err)
+      })
+    }
+  })
+}
+
+function createDictationPill(): void {
+  const win = createPillWindow()
+  pillPresenter = new ElectronPillWindowPresenter(win)
+  pillController = new PillWindowController(pillPresenter)
+}
+
+/**
+ * Build the Groq-backed cleanup client when a key is configured, so a missing
+ * key degrades to rule-only polish instead of failing dictation.
+ */
+function createTranscriptPolisher(): TranscriptPolisher | null {
+  const apiKey =
+    (process.env.KESTREL_GROQ_API_KEY ?? '').trim() || (process.env.GROQ_API_KEY ?? '').trim()
+  if (!apiKey) return null
+  const model = (process.env.KESTREL_POLISH_MODEL ?? '').trim()
+  return new GroqTranscriptPolisher(model ? { apiKey, model } : { apiKey })
+}
+
 function createNotch(): void {
   const win = createNotchWindow()
   notchWindow = win
@@ -719,16 +837,42 @@ function createNotch(): void {
     captureDisplay
   })
 
+  const nativePaste = new NativePasteService()
+  dictationAudioCapture = new NotchAudioCaptureProvider()
+
+  dictationCoordinator = new DictationCoordinator({
+    audioCapture: dictationAudioCapture,
+    transcriptionClient: new NemoTranscriptionClient({ getTranscriber: () => transcriber }),
+    pasteService: nativePaste,
+    polishStyle: 'light',
+    polishLlm: createTranscriptPolisher() ?? undefined,
+    pillController: pillController ?? undefined,
+    onTranscript: (raw, polished, meta) => {
+      console.log(
+        `[dictation] context=${meta.contextType} style=${meta.style} polish=${meta.polishedBy} raw: "${raw}" -> polished: "${polished}"`
+      )
+    },
+    onError: (err) => {
+      console.error('[dictation] error:', err)
+    }
+  })
+
   notchController = new NotchController({
     presenter: notchPresenter,
     getTranscriber: () => transcriber,
     actionClient: new HttpActionClient({ baseUrl: apiBaseUrl() }),
-    paste: new NativePasteService(),
+    paste: nativePaste,
     fileService: notchFileService,
     screen: screenService,
+    dictationCoordinator,
+    dictationCapture: dictationAudioCapture,
     onActivity: (activity: NotchActivity) => sendToMain(IPC.notchActivity, activity),
-    onTurnComplete: () => pushToTalk?.reset()
+    onTurnComplete: () => {
+      pushToTalk?.reset()
+      dictationPushToTalk?.reset()
+    }
   })
+
 
   // The main window should also learn about turns even while hidden; the log is
   // replayed the next time it opens.
@@ -849,11 +993,16 @@ async function initialize(): Promise<void> {
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
     callback(permission === 'media')
   })
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === 'media'
+  })
 
   createPushToTalk()
+  createDictationPushToTalk()
   registerIpc()
   createMainWindow()
   createTray()
+  createDictationPill()
   createNotch()
   sidebarWindow = createSidebarWindow()
   sidebarWindow.show()
@@ -873,11 +1022,21 @@ async function initialize(): Promise<void> {
     `[hotkey] ${settings.hotkey} registered=${registered}${registered ? '' : ` (${hotkeyError ?? 'unknown error'})`}`
   )
   if (!registered) {
-    globalShortcut.unregister(settings.hotkey)
+    safeUnregisterChord(settings.hotkey)
+  }
+
+  const dictationShortcut = settings.dictationHotkey || DEFAULT_DICTATION_HOTKEY
+  if (isElectronAccelerator(dictationShortcut)) {
+    const dictationRegistered = registerChord(dictationShortcut)
+    if (!dictationRegistered) {
+      safeUnregisterChord(dictationShortcut)
+    }
   }
 
   await ensureKeyHook()
+  await ensureDictationKeyHook()
   void restartAsr()
+
 
   updateTray()
   broadcastState()
@@ -920,7 +1079,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     stopKeyHook()
     pushToTalk?.dispose()
+    dictationPushToTalk?.dispose()
     globalShortcut.unregisterAll()
+
     screenService?.dispose()
     screenService = null
     overlayPresenter?.dispose()
@@ -928,6 +1089,10 @@ if (!app.requestSingleInstanceLock()) {
     notchPresenter?.dispose()
     notchPresenter = null
     notchWindow = null
+    pillController?.dispose()
+    pillController = null
+    pillPresenter?.dispose()
+    pillPresenter = null
     sidebarWindow?.dispose()
     sidebarWindow = null
     notchController = null

@@ -1,5 +1,6 @@
 export const DEFAULT_HOTKEY = 'Control+Space'
 export const HOTKEY = DEFAULT_HOTKEY
+export const DEFAULT_DICTATION_HOTKEY = 'Control+Shift'
 export const TAP_THRESHOLD_MS = 300
 
 export function hotkeyLabel(hotkey: string): string[] {
@@ -12,8 +13,10 @@ export type AsrMode = 'nemo' | 'fake'
 
 export interface KestrelSettings {
   hotkey: string
+  dictationHotkey?: string
   asrMode: AsrMode
 }
+
 
 export const IPC = {
   getState: 'kestrel:get-state',
@@ -37,6 +40,11 @@ export const IPC = {
   dictationAudio: 'kestrel:dictation-audio',
   dictationAudioError: 'kestrel:dictation-audio-error',
   dictationReady: 'kestrel:dictation-ready',
+  pillShow: 'kestrel:pill-show',
+  pillHide: 'kestrel:pill-hide',
+  pillState: 'kestrel:pill-state',
+  pillAudioWave: 'kestrel:pill-audio-wave',
+  pillReady: 'kestrel:pill-ready',
   notchShow: 'kestrel:notch-show',
   notchHide: 'kestrel:notch-hide',
   notchDismiss: 'kestrel:notch-dismiss',
@@ -153,6 +161,20 @@ export interface DictationAudioPayload {
 
 export interface DictationAudioErrorPayload {
   message: string
+}
+
+export type PillMode = 'idle' | 'recording' | 'transcribing' | 'success' | 'error'
+
+export interface PillTargetApp {
+  name: string
+  bundleId?: string
+  icon?: string
+}
+
+export interface PillStatePayload {
+  mode: PillMode
+  targetApp?: PillTargetApp | null
+  error?: string | null
 }
 
 export type NotchPhase = 'listening' | 'processing' | 'acting' | 'result' | 'error'
@@ -628,4 +650,9 @@ export interface KestrelApi {
   onSpeechChunk: (callback: (payload: SpeechChunkPayload) => void) => () => void
   onSpeechStreamDone: (callback: (payload: SpeechStreamDonePayload) => void) => () => void
   onSpeechStreamError: (callback: (payload: SpeechStreamErrorPayload) => void) => () => void
+  onPillShow?: (callback: () => void) => () => void
+  onPillHide?: (callback: () => void) => () => void
+  onPillState?: (callback: (state: PillStatePayload) => void) => () => void
+  onPillAudioWave?: (callback: (level: number) => void) => () => void
+  notifyPillReady?: () => void
 }
