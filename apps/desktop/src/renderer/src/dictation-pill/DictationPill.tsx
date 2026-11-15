@@ -1,9 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import React, { useEffect, useRef, useState } from 'react'
 import type { PillStatePayload } from '../../../shared/types'
+import { AudioBars } from './AudioBars'
+import { AppIcon } from './AppIcon'
+import { DictationProgressRing } from './DictationProgressRing'
+import { PillContentBlurSwap } from './PillContentBlurSwap'
 
-const NUM_BARS = 7
-const BAR_MULTIPLIERS = [0.45, 0.75, 1.0, 0.85, 0.65, 0.9, 0.5]
+const DICTATION_BAR_WIDTH = 80
+const DICTATION_BAR_NO_ICON_WIDTH = 60
+const DICTATION_PILL_HEIGHT = 30
+const PROCESSING_CIRCLE_SIZE = 30
+
+const PILL_GLASS_BACKGROUND =
+  'linear-gradient(180deg, rgba(22,22,27,0.96) 0%, rgba(12,12,15,0.96) 100%)'
 
 export interface DictationPillProps {
   initialState?: PillStatePayload
@@ -13,9 +21,9 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
   const [state, setState] = useState<PillStatePayload>(
     initialState ?? { mode: 'idle', targetApp: null, error: null }
   )
-  const [audioLevel, setAudioLevel] = useState<number>(0)
-  const [liveBars, setLiveBars] = useState<number[]>(() => new Array(NUM_BARS).fill(4))
-  const smoothedLevelRef = useRef<number>(0)
+  const [volumeHistory, setVolumeHistory] = useState<number[]>([])
+  const volumeHistoryRef = useRef<number[]>([])
+  const recordingStartTimeRef = useRef<number>(0)
 
   const streamRef = useRef<MediaStream | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -23,6 +31,15 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
   const processorRef = useRef<ScriptProcessorNode | null>(null)
   const sinkRef = useRef<GainNode | null>(null)
   const sessionRef = useRef<number>(0)
+
+  const pushVolume = (vol: number): void => {
+    const next = [...volumeHistoryRef.current, vol]
+    while (next.length > 16) {
+      next.shift()
+    }
+    volumeHistoryRef.current = next
+    setVolumeHistory(next)
+  }
 
   useEffect(() => {
     const kestrel = window.kestrel
@@ -33,7 +50,7 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
     })
 
     const unsubAudio = kestrel.onPillAudioWave?.((level) => {
-      setAudioLevel(level)
+      pushVolume(level)
     })
 
     kestrel.notifyPillReady?.()
@@ -63,9 +80,16 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
         streamRef.current = null
       }
 
+      volumeHistoryRef.current = []
+      setVolumeHistory([])
+
       window.kestrel?.sendNotchAudioEnd?.()
       return
     }
+
+    recordingStartTimeRef.current = Date.now()
+    volumeHistoryRef.current = []
+    setVolumeHistory([])
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       return
@@ -128,7 +152,7 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
           }
           const rms = Math.sqrt(sum / (channel.length / 4))
           const level = Math.min(1, rms * 6)
-          setAudioLevel(level)
+          pushVolume(level)
 
           window.kestrel?.sendNotchAudio?.(new Float32Array(channel), context.sampleRate)
         }
@@ -182,162 +206,183 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
     }
   }, [])
 
-  // Smooth animation for wave bars
-  useEffect(() => {
-    if (state.mode !== 'recording') {
-      smoothedLevelRef.current = 0
-      setLiveBars(new Array(NUM_BARS).fill(4))
-      return
-    }
-
-    let animationFrameId: number
-    let frame = 0
-
-    const updateBars = (): void => {
-      frame += 1
-      const target = audioLevel > 0 ? audioLevel : 0.08 + 0.05 * Math.sin(frame * 0.15)
-      smoothedLevelRef.current += (target - smoothedLevelRef.current) * 0.25
-      const currentLevel = smoothedLevelRef.current
-
-      const newHeights = BAR_MULTIPLIERS.map((mult, i) => {
-        const jitter = 0.85 + 0.3 * Math.sin(frame * 0.2 + i)
-        const rawHeight = 4 + currentLevel * 20 * mult * jitter
-        return Math.max(3, Math.min(22, Math.round(rawHeight)))
-      })
-
-      setLiveBars(newHeights)
-      animationFrameId = requestAnimationFrame(updateBars)
-    }
-
-    animationFrameId = requestAnimationFrame(updateBars)
-
-    return () => {
-      cancelAnimationFrame(animationFrameId)
-    }
-  }, [state.mode, audioLevel])
-
-  const appName = useMemo(() => {
-    return state.targetApp?.name || 'Active App'
-  }, [state.targetApp])
-
   const isVisible = state.mode !== 'idle'
+  const hasAppIcon = Boolean(state.targetApp?.icon)
+
+  let width: number
+  let height: number = DICTATION_PILL_HEIGHT
+
+  if (state.mode === 'recording') {
+    width = hasAppIcon ? DICTATION_BAR_WIDTH : DICTATION_BAR_NO_ICON_WIDTH
+    height = DICTATION_PILL_HEIGHT
+  } else if (state.mode === 'transcribing' || state.mode === 'success') {
+    width = PROCESSING_CIRCLE_SIZE
+    height = PROCESSING_CIRCLE_SIZE
+  } else if (state.mode === 'error') {
+    const errorText = state.error || 'Failed'
+    width = Math.min(280, Math.max(136, 44 + errorText.length * 8))
+    height = DICTATION_PILL_HEIGHT
+  } else {
+    width = 36
+    height = 8
+  }
+
+  const wrapperStyle: React.CSSProperties = {
+    opacity: isVisible ? 1 : 0,
+    transform: isVisible ? 'scale(1)' : 'scale(0.8)',
+    transformOrigin: 'center center',
+    visibility: isVisible ? 'visible' : 'hidden',
+    transition: 'opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease',
+    marginBottom: '0px'
+  }
+
+  const pillOuterStyle: React.CSSProperties = {
+    position: 'relative',
+    overflow: 'hidden',
+    width: `${width}px`,
+    height: `${height}px`,
+    background: PILL_GLASS_BACKGROUND,
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    borderRadius: '24px',
+    boxSizing: 'border-box',
+    pointerEvents: 'auto',
+    cursor: 'default',
+    transition:
+      'width 0.15s ease, height 0.15s ease, background-color 0.15s ease, border-radius 0.15s ease, box-shadow 0.15s ease'
+  }
+
+  const renderContent = (): React.JSX.Element | null => {
+    if (state.mode === 'recording') {
+      return (
+        <PillContentBlurSwap swapKey="recording" animate={false}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4.5px',
+              padding: hasAppIcon ? '0 10.5px 0 6px' : '0 10.5px',
+              height: '100%',
+              opacity: 0,
+              animation: 'pillContentFadeIn 100ms ease-out 100ms forwards'
+            }}
+          >
+            {hasAppIcon && (
+              <div
+                style={{
+                  width: 20,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <AppIcon
+                  appIcon={state.targetApp?.icon}
+                  appName={state.targetApp?.name}
+                  size={20}
+                  recordingStartTime={recordingStartTimeRef.current}
+                  isFavicon={Boolean(state.targetApp?.name?.includes('.'))}
+                />
+              </div>
+            )}
+            <AudioBars
+              volumeHistory={volumeHistory}
+              barColor="#ffffff"
+              barCount={7}
+              direction="right-to-left"
+              maxBarHeight={18}
+              barWidth={2.5}
+              barGap={1.5}
+              marginLeft={0}
+              marginRight={0}
+            />
+          </div>
+        </PillContentBlurSwap>
+      )
+    }
+
+    if (state.mode === 'transcribing' || state.mode === 'success') {
+      return (
+        <PillContentBlurSwap swapKey="processing" animate={true}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            <DictationProgressRing
+              size={16}
+              strokeWidth={2.5}
+              complete={state.mode === 'success'}
+              insertionSucceeded={state.mode === 'success'}
+            />
+          </div>
+        </PillContentBlurSwap>
+      )
+    }
+
+    if (state.mode === 'error') {
+      return (
+        <PillContentBlurSwap swapKey="error" animate={true}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%',
+              padding: '0 12px'
+            }}
+          >
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: 500,
+                color: '#fca5a5',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              {state.error || 'Failed'}
+            </span>
+          </div>
+        </PillContentBlurSwap>
+      )
+    }
+
+    return null
+  }
 
   return (
     <div className="w-full h-full flex items-end justify-center pb-3 pointer-events-none select-none">
-      <AnimatePresence>
-        {isVisible && (
-          <motion.div
-            key="dictation-pill"
-            initial={{ opacity: 0, y: 14, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95, transition: { duration: 0.18 } }}
-            transition={{ type: 'spring', stiffness: 450, damping: 28 }}
-            className="relative flex items-center gap-3 px-4 py-2 rounded-[24px] bg-[#0c101a]/90 backdrop-blur-xl border border-white/12 shadow-[0_8px_32px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.18)] pointer-events-auto"
-            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      <div style={wrapperStyle}>
+        <div
+          className="pill-gradient-border"
+          style={pillOuterStyle}
+          {...({ 'data-pill-hover-zone': '' } as React.HTMLAttributes<HTMLDivElement>)}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              borderRadius: 'inherit'
+            }}
           >
-            {/* Ambient glass sheen */}
-            <div
-              className="absolute inset-0 rounded-[24px] pointer-events-none"
-              style={{
-                background:
-                  'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.12) 0%, transparent 70%)'
-              }}
-            />
-
-            {/* Target App Badge */}
-            <div className="flex items-center gap-2 pr-1 border-r border-white/10 z-10">
-              {state.targetApp?.icon ? (
-                <img
-                  src={state.targetApp.icon}
-                  alt={appName}
-                  className="w-4 h-4 rounded-sm object-contain"
-                />
-              ) : (
-                <div className="w-4 h-4 rounded-sm bg-white/15 flex items-center justify-center text-[10px] font-semibold text-white/90">
-                  {appName.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span className="text-xs font-medium text-white/80 max-w-[110px] truncate">
-                {appName}
-              </span>
-            </div>
-
-            {/* Mode-specific content */}
-            <div className="flex items-center gap-2 z-10">
-              {state.mode === 'recording' && (
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                  <div className="flex items-center gap-[3px] h-5 min-w-[32px] justify-center">
-                    {liveBars.map((height, idx) => (
-                      <span
-                        key={idx}
-                        style={{ height: `${height}px` }}
-                        className="w-[3px] rounded-full bg-white transition-[height] duration-75 ease-out"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {state.mode === 'transcribing' && (
-                <div className="flex items-center gap-2 text-white/80">
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Transcribing…</span>
-                </div>
-              )}
-
-              {state.mode === 'success' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center gap-1.5 text-emerald-400"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    viewBox="0 0 24 24"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span className="text-xs font-semibold text-emerald-300 tracking-wide">
-                    Pasted
-                  </span>
-                </motion.div>
-              )}
-
-              {state.mode === 'error' && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center gap-1.5 text-rose-400"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  <span className="text-xs font-medium text-rose-300 max-w-[140px] truncate">
-                    {state.error || 'Failed'}
-                  </span>
-                </motion.div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {renderContent()}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
+
 export default DictationPill

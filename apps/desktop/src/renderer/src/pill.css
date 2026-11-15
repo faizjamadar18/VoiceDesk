@@ -1,11 +1,8 @@
 /*
  * Kestrel dictation pill entry styles.
  *
- * The pill component (`dictation-pill/DictationPill.tsx`) is styled entirely
- * with Tailwind utility classes, so this entry must pull Tailwind in. Tailwind
- * v4 auto-detects source files, so the import alone is enough to emit every
- * utility the component uses. The reset below only ensures a full-height flex
- * layout can fill a transparent, frameless window.
+ * The pill component (`dictation-pill/DictationPill.tsx`) matches the VoiceOS
+ * dictation pill styling and dimensions.
  */
 
 @import "tailwindcss";
@@ -29,4 +26,72 @@ body {
   overflow: hidden;
   background: transparent;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Gradient border with corner radial highlights matching VoiceOS */
+.pill-gradient-border {
+  interpolate-size: allow-keywords;
+}
+
+.pill-gradient-border::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background:
+    radial-gradient(
+      ellipse at 0% 0%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.08) 30%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 100% 100%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.08) 30%,
+      transparent 60%
+    ),
+    rgba(255, 255, 255, 0.07);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes pillBlurSwapOut {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.7);
+  }
+}
+
+@keyframes pillBlurSwapIn {
+  0% {
+    opacity: 0;
+    filter: blur(5px);
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes pillContentFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
