@@ -1,3 +1,7 @@
+import type { DictationSettings } from './dictation'
+
+export type { DictationSettings } from './dictation'
+
 export const DEFAULT_HOTKEY = 'Control+Space'
 export const HOTKEY = DEFAULT_HOTKEY
 export const DEFAULT_DICTATION_HOTKEY = 'Control+Shift'
@@ -15,6 +19,7 @@ export interface KestrelSettings {
   hotkey: string
   dictationHotkey?: string
   asrMode: AsrMode
+  dictation: DictationSettings
 }
 
 

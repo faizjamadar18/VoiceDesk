@@ -1,16 +1,29 @@
-import type { PolishStyle } from './polish'
-import type { WritingContextType } from './window-context'
+import type { PolishDictionaryEntry, PolishStyle } from './polish'
+import type { WritingContextType, WritingStructure } from './window-context'
 
 export const DEFAULT_POLISH_MODEL = 'openai/gpt-oss-20b'
 export const DEFAULT_POLISH_BASE_URL = 'https://api.groq.com/openai/v1'
 export const POLISH_TIMEOUT_MS = 8000
 
+export const MAX_PROMPT_DICTIONARY_ENTRIES = 100
+export const MAX_PROMPT_REPLACEMENTS = 50
+export const MAX_PROMPT_REPLACEMENT_CHARS = 500
+export const MAX_PROMPT_REPLACEMENTS_SECTION_CHARS = 6000
+
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
+
+export interface PolishReplacement {
+  title: string
+  content: string
+}
 
 export interface PolishRequest {
   text: string
   contextType: WritingContextType
   style: PolishStyle
+  structure?: WritingStructure
+  dictionary?: PolishDictionaryEntry[]
+  replacements?: PolishReplacement[]
 }
 
 export interface TranscriptPolisher {
@@ -47,12 +60,64 @@ const CHANNEL_LINES: Record<WritingContextType, string> = {
 
 /** Build the system/user pair sent to the cleanup model. Pure and loggable. */
 export function buildPolishPrompt(request: PolishRequest): { system: string; user: string } {
+  const sections = [BASE_PROMPT, STYLE_LINES[request.style], CHANNEL_LINES[request.contextType]]
+
+  sections.push(...buildDictionarySections(request.dictionary))
+  const replacements = buildReplacementSection(request.replacements)
+  if (replacements) sections.push(replacements)
+  const formatting = buildFormattingSection(request.structure)
+  if (formatting) sections.push(formatting)
+
   return {
-    system: [BASE_PROMPT, STYLE_LINES[request.style], CHANNEL_LINES[request.contextType]].join(
-      '\n\n'
-    ),
+    system: sections.join('\n\n'),
     user: request.text
   }
+}
+
+function buildDictionarySections(dictionary?: PolishDictionaryEntry[]): string[] {
+  const entries = (dictionary ?? [])
+    .filter((entry) => typeof entry?.text === 'string' && entry.text.trim() !== '')
+    .slice(0, MAX_PROMPT_DICTIONARY_ENTRIES)
+  if (entries.length === 0) return []
+
+  const sections = [`Always spell these exactly: ${entries.map((entry) => entry.text).join(', ')}.`]
+
+  const spokenForms = entries
+    .filter((entry) => entry.description?.trim())
+    .map((entry) => `"${entry.description?.trim()}" must be written as "${entry.text}"`)
+  if (spokenForms.length > 0) sections.push(spokenForms.join('\n'))
+
+  return sections
+}
+
+function buildReplacementSection(replacements?: PolishReplacement[]): string | null {
+  const lines: string[] = []
+  let used = 0
+
+  for (const replacement of (replacements ?? []).slice(0, MAX_PROMPT_REPLACEMENTS)) {
+    const title = replacement.title?.trim()
+    const content = replacement.content?.trim()
+    if (!title || !content) continue
+
+    const shown = content.slice(0, MAX_PROMPT_REPLACEMENT_CHARS)
+    const line = `When the speaker says "${title}", write "${shown}" exactly (links and line breaks included).`
+    if (used + line.length > MAX_PROMPT_REPLACEMENTS_SECTION_CHARS) break
+    lines.push(line)
+    used += line.length + 1
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
+function buildFormattingSection(structure?: WritingStructure): string | null {
+  if (!structure) return null
+  return [
+    'Formatting:',
+    `capitalization ${structure.capitalization};`,
+    `sentence endings ${structure.sentenceEndings};`,
+    `exclamation ${structure.exclamation};`,
+    `greeting ${structure.greeting}.`
+  ].join(' ')
 }
 
 /** Words that only appear in model chatter about the task, never in dictation. */

@@ -1,9 +1,9 @@
+import {
+  WRITING_STYLE_PRESET_STRUCTURES,
+  presetsForContext
+} from '@shared/dictation'
 import type {
-  DictationSettings,
   PolishStyle,
-  ReplacementEntry,
-  SpellingEntry,
-  WritingContext,
   WritingContextType,
   WritingStylePreset,
   WritingStylePresetId
@@ -57,84 +57,29 @@ export const WRITING_CONTEXT_TABS: Array<{ id: WritingContextType; label: string
   { id: 'other', label: 'Other' }
 ]
 
-export const PERSONAL_CHAT_PRESETS: WritingStylePreset[] = [
-  {
-    id: 'formal',
-    label: 'Formal',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    }
-  },
-  {
-    id: 'casual',
-    label: 'Casual',
-    structure: {
-      capitalization: 'auto',
-      sentenceEndings: 'light',
-      exclamation: 'off',
-      greeting: 'newline'
-    }
-  },
-  {
-    id: 'veryCasual',
-    label: 'Very Casual',
-    structure: {
-      capitalization: 'never',
-      sentenceEndings: 'none',
-      exclamation: 'off',
-      greeting: 'inline'
-    }
-  },
-  {
-    id: 'excited',
-    label: 'Excited',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'on',
-      greeting: 'newline'
-    }
-  }
-]
+const PRESET_LABELS: Record<WritingStylePresetId, string> = {
+  formal: 'Formal',
+  casual: 'Casual',
+  veryCasual: 'Very Casual',
+  excited: 'Excited'
+}
 
-export const STANDARD_PRESETS: WritingStylePreset[] = [
-  {
-    id: 'formal',
-    label: 'Formal',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    }
-  },
-  {
-    id: 'casual',
-    label: 'Casual',
-    structure: {
-      capitalization: 'auto',
-      sentenceEndings: 'light',
-      exclamation: 'off',
-      greeting: 'newline'
-    }
-  },
-  {
-    id: 'excited',
-    label: 'Excited',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'on',
-      greeting: 'newline'
-    }
-  }
-]
+function buildPresets(ids: WritingStylePresetId[]): WritingStylePreset[] {
+  return ids.map((id) => ({
+    id,
+    label: PRESET_LABELS[id],
+    structure: { ...WRITING_STYLE_PRESET_STRUCTURES[id] }
+  }))
+}
+
+export const PERSONAL_CHAT_PRESETS: WritingStylePreset[] = buildPresets(
+  presetsForContext('personal_chat')
+)
+
+export const STANDARD_PRESETS: WritingStylePreset[] = buildPresets(presetsForContext('work_chat'))
 
 export function getPresetsForContext(contextType: WritingContextType): WritingStylePreset[] {
-  return contextType === 'personal_chat' ? PERSONAL_CHAT_PRESETS : STANDARD_PRESETS
+  return buildPresets(presetsForContext(contextType))
 }
 
 export function getPreviewText(
@@ -211,66 +156,3 @@ export const REPLACEMENT_EXAMPLES: Array<{ title: string; content: string }> = [
     content: 'Rewrite this to be concise, warm, and clear. Keep my tone.'
   }
 ]
-
-export const DEFAULT_WRITING_CONTEXTS: WritingContext[] = [
-  {
-    type: 'personal_chat',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    },
-    assignedApps: ['Messages', 'WhatsApp', 'Telegram']
-  },
-  {
-    type: 'work_chat',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    },
-    assignedApps: ['Slack', 'Teams']
-  },
-  {
-    type: 'email',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    },
-    assignedApps: ['Mail', 'Outlook', 'Gmail']
-  },
-  {
-    type: 'other',
-    structure: {
-      capitalization: 'always',
-      sentenceEndings: 'proper',
-      exclamation: 'off',
-      greeting: 'newline'
-    },
-    assignedApps: []
-  }
-]
-
-export const DEFAULT_SPELLING_ENTRIES: SpellingEntry[] = []
-
-export const DEFAULT_REPLACEMENT_ENTRIES: ReplacementEntry[] = []
-
-export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
-  polishStyle: 'light',
-  activeContextType: 'personal_chat',
-  writingContexts: DEFAULT_WRITING_CONTEXTS,
-  selectedPresets: {
-    personal_chat: 'formal',
-    work_chat: 'formal',
-    email: 'formal',
-    other: 'formal'
-  },
-  spellingEntries: DEFAULT_SPELLING_ENTRIES,
-  replacementEntries: DEFAULT_REPLACEMENT_ENTRIES,
-  showSpellingExamples: true,
-  showReplacementExamples: true
-}

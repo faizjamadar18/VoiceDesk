@@ -459,7 +459,9 @@ function DashboardApp(): JSX.Element {
                   />
                 )}
 
-                {activeTab === 'dictation' && <DictationPage />}
+                {activeTab === 'dictation' && (
+                  <DictationPage userName={userName} userEmail={userEmail} />
+                )}
 
                 {activeTab === 'agent' && <AgentPage />}
 

@@ -30,6 +30,7 @@ import {
   type NotchOpenResult,
   type SaveSettingsResult
 } from '../shared/types'
+import { normalizeDictationSettings } from '../shared/dictation'
 import { HttpActionClient } from './action-client'
 import { loadOrCreateUserId } from './assistant/composio/identity'
 import {
@@ -559,6 +560,13 @@ async function saveSettings(patch: Partial<KestrelSettings>): Promise<SaveSettin
     }
   }
 
+  if (patch.dictation !== undefined) {
+    if (typeof patch.dictation !== 'object' || patch.dictation === null || Array.isArray(patch.dictation)) {
+      throw new Error('Invalid dictation settings.')
+    }
+    settings = { ...settings, dictation: normalizeDictationSettings(patch.dictation) }
+  }
+
   settingsStore.save(settings)
   updateTray()
   broadcastSettings()
@@ -844,7 +852,7 @@ function createNotch(): void {
     audioCapture: dictationAudioCapture,
     transcriptionClient: new NemoTranscriptionClient({ getTranscriber: () => transcriber }),
     pasteService: nativePaste,
-    polishStyle: 'light',
+    getDictationSettings: () => settings.dictation,
     polishLlm: createTranscriptPolisher() ?? undefined,
     pillController: pillController ?? undefined,
     onTranscript: (raw, polished, meta) => {

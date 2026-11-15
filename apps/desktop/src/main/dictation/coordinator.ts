@@ -6,9 +6,11 @@ import type { TranscriptPolisher } from './llm-polish'
 import {
   classifyWindowContext,
   getActiveWindowInfo,
+  resolveWritingContextForSettings,
   type WindowInfo,
   type WritingContextType
 } from './window-context'
+import type { DictationSettings, ReplacementEntry } from '../../shared/dictation'
 import { encodePcm16, encodeWav } from '../pcm'
 import type { PillWindowController } from './pill-window'
 
@@ -22,6 +24,17 @@ function targetAppName(context: WindowInfo | null): string {
     context?.processName ||
     DEFAULT_TARGET_APP_NAME
   )
+}
+
+/** Personal replacements reach the rule layer as spoken-title shortcuts. */
+function shortcutsFor(entries: ReplacementEntry[]): Record<string, string> {
+  const shortcuts: Record<string, string> = {}
+  for (const entry of entries) {
+    const title = entry.title.trim()
+    if (!title) continue
+    shortcuts[title] = entry.content
+  }
+  return shortcuts
 }
 
 /**
@@ -108,6 +121,8 @@ export interface DictationCoordinatorOptions {
   polishOptions?: PolishOptions
   polishLlm?: TranscriptPolisher
   polishStyle?: PolishStyle
+  /** Read on every transcript so settings changes apply without a restart. */
+  getDictationSettings?: () => DictationSettings
   onStateChange?: (state: DictationState) => void
   onTranscript?: (raw: string, polished: string, meta: DictationTranscriptMeta) => void
   onError?: (error: Error) => void
@@ -124,6 +139,7 @@ export class DictationCoordinator {
   private readonly polishOptions?: PolishOptions
   private readonly polishLlm?: TranscriptPolisher
   private readonly polishStyle?: PolishStyle
+  private readonly getDictationSettings?: () => DictationSettings
   private readonly onStateChange?: (state: DictationState) => void
   private readonly onTranscript?: (raw: string, polished: string, meta: DictationTranscriptMeta) => void
   private readonly onError?: (error: Error) => void
@@ -142,6 +158,7 @@ export class DictationCoordinator {
     this.polishOptions = options.polishOptions
     this.polishLlm = options.polishLlm
     this.polishStyle = options.polishStyle
+    this.getDictationSettings = options.getDictationSettings
     this.onStateChange = options.onStateChange
     this.onTranscript = options.onTranscript
     this.onError = options.onError
@@ -271,11 +288,29 @@ export class DictationCoordinator {
     // Whatever context arrived by now is final; a later resolver must not
     // retroactively change this session's classification.
     this.windowContextConsumed = true
-    const contextType = this.capturedWindowContext
-      ? classifyWindowContext(this.capturedWindowContext, this.customMappings)
-      : 'other'
 
-    const style = this.polishStyle ?? 'light'
+    // Read the store per transcript, like VoiceOS: edits made while the pill
+    // was showing still apply to this dictation.
+    const settings = this.getDictationSettings?.()
+    const resolvedContext = settings
+      ? resolveWritingContextForSettings(
+          this.capturedWindowContext,
+          settings,
+          this.customMappings
+        )
+      : null
+
+    const contextType: WritingContextType = resolvedContext
+      ? resolvedContext.type
+      : this.capturedWindowContext
+        ? classifyWindowContext(this.capturedWindowContext, this.customMappings)
+        : 'other'
+
+    const style = settings?.polishStyle ?? this.polishStyle ?? 'light'
+    const structure = resolvedContext?.structure
+    const dictionary = settings?.spellingEntries
+    const shortcuts = settings ? shortcutsFor(settings.replacementEntries) : undefined
+
     let draft = transcriptResult.text
     let polishedBy: 'llm' | 'rules' = 'rules'
 
@@ -287,7 +322,10 @@ export class DictationCoordinator {
         const candidate = await this.polishLlm.polish({
           text: transcriptResult.text,
           contextType,
-          style
+          style,
+          ...(structure ? { structure } : {}),
+          ...(dictionary ? { dictionary } : {}),
+          ...(settings ? { replacements: settings.replacementEntries } : {})
         })
         if (candidate && candidate.trim()) {
           draft = candidate
@@ -298,11 +336,18 @@ export class DictationCoordinator {
       }
     }
 
-    const polished = polishTranscript(draft, {
+    const ruleOptions: PolishOptions = {
       ...this.polishOptions,
       style,
       contextType
-    })
+    }
+    if (structure) ruleOptions.structure = structure
+    if (dictionary) ruleOptions.dictionary = dictionary
+    if (shortcuts) {
+      ruleOptions.shortcuts = { ...this.polishOptions?.shortcuts, ...shortcuts }
+    }
+
+    const polished = polishTranscript(draft, ruleOptions)
 
     // A silent hold can make the model return bare punctuation (e.g. ".").
     // Guard the final text so nothing unspoken reaches the paste service.

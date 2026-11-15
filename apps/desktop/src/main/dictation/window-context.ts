@@ -1,19 +1,18 @@
 import { execFile } from 'node:child_process'
+import type {
+  DictationSettings,
+  WritingContextType,
+  WritingStructure
+} from '../../shared/dictation'
+import { WRITING_CONTEXT_TYPES } from '../../shared/dictation'
 
-export type WritingContextType = 'email' | 'work_chat' | 'personal_chat' | 'other'
+export type { WritingContextType, WritingStructure }
 
 export interface WindowInfo {
   processName?: string
   appName?: string
   windowTitle?: string
   url?: string
-}
-
-export interface WritingStructure {
-  capitalization: 'always' | 'auto' | 'never'
-  sentenceEndings: 'proper' | 'light' | 'none'
-  greeting: 'newline' | 'inline'
-  exclamation: 'on' | 'off'
 }
 
 export const DEFAULT_STRUCTURES: Record<WritingContextType, WritingStructure> = {
@@ -212,6 +211,140 @@ export function resolveWritingContext(
   return {
     type,
     structure: { ...DEFAULT_STRUCTURES[type] }
+  }
+}
+
+/** Apps only recognisable by host: the pin names a product, the window names a URL. */
+const EXPLICIT_ASSIGNMENT_HOST_ALIASES: Record<string, string[]> = {
+  slack: ['app.slack.com'],
+  'microsoft teams': ['teams.microsoft.com'],
+  'microsoft outlook': ['outlook.live.com', 'outlook.office.com'],
+  'google chat': ['chat.google.com'],
+  'google messages': ['messages.google.com'],
+  'line works': ['line.worksmobile.com'],
+  lineworks: ['line.worksmobile.com'],
+  'apple mail': ['mail.icloud.com'],
+  'visual studio code': ['code', 'com.microsoft.vscode']
+}
+
+/** Vendor and product words that appear in half the pins, so they never decide a match. */
+const GENERIC_APP_TOKENS = new Set([
+  'app',
+  'apple',
+  'desktop',
+  'facebook',
+  'google',
+  'chat',
+  'line',
+  'mail',
+  'messages',
+  'meta',
+  'microsoft',
+  'office',
+  'web',
+  'works'
+])
+
+function normalizeTarget(value: string | undefined): string {
+  if (typeof value !== 'string') return ''
+  return value.toLowerCase().trim().replace(/\.exe$/, '').trim()
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+}
+
+function hostnameOf(url?: string): string {
+  if (!url) return ''
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Every name a window can be recognised by: process, app, URL, title and the
+ * URL host. Normalized once so pins and targets are compared the same way.
+ */
+export function normalizeWindowTargets(info: WindowInfo | null): string[] {
+  const candidates = [
+    info?.processName,
+    info?.appName,
+    info?.url,
+    info?.windowTitle,
+    hostnameOf(info?.url)
+  ]
+
+  const targets: string[] = []
+  for (const candidate of candidates) {
+    const normalized = normalizeTarget(candidate)
+    if (normalized) targets.push(normalized)
+  }
+  return targets
+}
+
+/**
+ * A pin matches when it equals a target or when each of its distinctive tokens
+ * appears among a target's tokens, so "Teams" finds "microsoft teams" and
+ * "Slack" finds "slack.exe".
+ */
+function pinMatches(pin: string, targets: string[]): boolean {
+  const normalizedPin = normalizeTarget(pin)
+  if (!normalizedPin) return false
+  if (targets.includes(normalizedPin)) return true
+
+  const aliases = EXPLICIT_ASSIGNMENT_HOST_ALIASES[normalizedPin]
+  if (aliases?.some((alias) => targets.includes(alias))) return true
+
+  const distinctiveTokens = tokenize(normalizedPin).filter(
+    (token) => token.length >= 4 && !GENERIC_APP_TOKENS.has(token)
+  )
+  if (distinctiveTokens.length === 0) return false
+
+  return targets.some((target) => {
+    const targetTokens = tokenize(target)
+    return distinctiveTokens.every((token) => targetTokens.includes(token))
+  })
+}
+
+function findPinnedContext(
+  targets: string[],
+  contexts: DictationSettings['writingContexts']
+): WritingContextType | undefined {
+  if (targets.length === 0) return undefined
+
+  for (const type of WRITING_CONTEXT_TYPES) {
+    const context = contexts.find((candidate) => candidate.type === type)
+    if (!context) continue
+    for (const pin of context.assignedApps) {
+      if (pinMatches(pin, targets)) return type
+    }
+  }
+  return undefined
+}
+
+/**
+ * The live-settings resolver used per transcript: a pinned app wins over the
+ * heuristic, and the structure is the one stored for the resolved context.
+ * Null windows still get the `other` structure from settings.
+ */
+export function resolveWritingContextForSettings(
+  info: WindowInfo | null,
+  settings: DictationSettings,
+  customMappings?: Record<string, WritingContextType>
+): ResolvedWritingContext {
+  const targets = normalizeWindowTargets(info)
+  const pinned = findPinnedContext(targets, settings.writingContexts)
+  const type = pinned ?? classifyWindowContext(info ?? {}, customMappings)
+  const context = settings.writingContexts.find((candidate) => candidate.type === type)
+
+  return {
+    type,
+    structure: { ...(context?.structure ?? DEFAULT_STRUCTURES[type]) }
   }
 }
 

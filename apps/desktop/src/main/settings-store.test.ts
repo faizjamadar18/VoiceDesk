@@ -35,13 +35,39 @@ describe('SettingsStore', () => {
     expect(DEFAULT_SETTINGS.dictationHotkey).toBe('Control+Shift')
   })
 
+  it('includes the default dictation settings', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    const settings = store.load()
+
+    expect(settings.dictation).toEqual(DEFAULT_SETTINGS.dictation)
+    expect(settings.dictation.polishStyle).toBe('light')
+    expect(settings.dictation.writingContexts).toHaveLength(4)
+  })
+
+  it('does not share the default dictation objects between loads', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    const first = store.load()
+    first.dictation.writingContexts[0].assignedApps.push('Slack')
+
+    expect(store.load().dictation.writingContexts[0].assignedApps).toEqual([])
+  })
+
   it('persists and reloads a valid hotkey and mode', () => {
     const { file } = setup()
     const store = new SettingsStore(file)
 
     const saved = store.save({ hotkey: 'Alt+F8', asrMode: 'fake' })
 
-    expect(saved).toEqual({ hotkey: 'Alt+F8', dictationHotkey: 'Control+Shift', asrMode: 'fake' })
+    expect(saved).toEqual({
+      hotkey: 'Alt+F8',
+      dictationHotkey: 'Control+Shift',
+      asrMode: 'fake',
+      dictation: DEFAULT_SETTINGS.dictation
+    })
     expect(store.exists()).toBe(true)
     expect(new SettingsStore(file).load()).toEqual(saved)
   })
@@ -61,6 +87,71 @@ describe('SettingsStore', () => {
 
     writeFileSync(file, JSON.stringify({ hotkey: 'A', asrMode: 'cloud' }), 'utf8')
     expect(new SettingsStore(file).load()).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('loads dictation defaults from a settings file written before dictation existed', () => {
+    const { file } = setup()
+    writeFileSync(
+      file,
+      JSON.stringify({ hotkey: 'Alt+F8', dictationHotkey: 'Alt+Shift', asrMode: 'fake' }),
+      'utf8'
+    )
+
+    const settings = new SettingsStore(file).load()
+
+    expect(settings.hotkey).toBe('Alt+F8')
+    expect(settings.dictationHotkey).toBe('Alt+Shift')
+    expect(settings.asrMode).toBe('fake')
+    expect(settings.dictation).toEqual(DEFAULT_SETTINGS.dictation)
+  })
+
+  it('persists a dictation patch and reloads it', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    store.save({
+      dictation: {
+        ...DEFAULT_SETTINGS.dictation,
+        polishStyle: 'polished',
+        activeContextType: 'work_chat',
+        spellingEntries: [{ id: 'spell-1', text: 'Kestrel', auto_added: true }],
+        showSpellingExamples: false
+      }
+    })
+
+    const reloaded = new SettingsStore(file).load()
+
+    expect(reloaded.dictation.polishStyle).toBe('polished')
+    expect(reloaded.dictation.activeContextType).toBe('work_chat')
+    expect(reloaded.dictation.spellingEntries).toEqual([
+      { id: 'spell-1', text: 'Kestrel', description: undefined, auto_added: true }
+    ])
+    expect(reloaded.dictation.showSpellingExamples).toBe(false)
+    expect(reloaded.hotkey).toBe(DEFAULT_SETTINGS.hotkey)
+  })
+
+  it('normalizes a corrupt dictation value without losing other fields', () => {
+    const { file } = setup()
+    writeFileSync(file, JSON.stringify({ hotkey: 'Alt+F8', asrMode: 'fake', dictation: 'nope' }), 'utf8')
+
+    const settings = new SettingsStore(file).load()
+
+    expect(settings.hotkey).toBe('Alt+F8')
+    expect(settings.asrMode).toBe('fake')
+    expect(settings.dictation).toEqual(DEFAULT_SETTINGS.dictation)
+
+    writeFileSync(
+      file,
+      JSON.stringify({ hotkey: 'Alt+F8', asrMode: 'fake', dictation: { polishStyle: 'shiny', activeContextType: 'meeting' } }),
+      'utf8'
+    )
+
+    const partial = new SettingsStore(file).load()
+
+    expect(partial.hotkey).toBe('Alt+F8')
+    expect(partial.asrMode).toBe('fake')
+    expect(partial.dictation.polishStyle).toBe('light')
+    expect(partial.dictation.activeContextType).toBe('personal_chat')
   })
 
   it('keeps existing fields when saving a partial patch', () => {

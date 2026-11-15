@@ -1,21 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { DEFAULT_DICTATION_SETTINGS, normalizeDictationSettings } from '../shared/dictation'
 import { DEFAULT_DICTATION_HOTKEY } from '../shared/types'
+import type { AsrMode, KestrelSettings } from '../shared/types'
 import { parseHotkey } from './hotkey'
 
-export type AsrMode = 'nemo' | 'fake'
-
-export interface KestrelSettings {
-  hotkey: string
-  dictationHotkey?: string
-  asrMode: AsrMode
-}
-
+export type { AsrMode, KestrelSettings }
 
 export const DEFAULT_SETTINGS: KestrelSettings = {
   hotkey: 'Control+Space',
   dictationHotkey: DEFAULT_DICTATION_HOTKEY,
-  asrMode: 'nemo'
+  asrMode: 'nemo',
+  dictation: DEFAULT_DICTATION_SETTINGS
 }
 
 /**
@@ -34,14 +30,14 @@ export class SettingsStore {
   }
 
   load(): KestrelSettings {
-    if (!this.exists()) return { ...DEFAULT_SETTINGS }
+    if (!this.exists()) return this.normalize({})
 
     try {
       const raw = JSON.parse(readFileSync(this.filePath, 'utf8')) as Partial<KestrelSettings>
       return this.normalize(raw)
     } catch (error) {
       console.warn(`[settings] could not read ${this.filePath}:`, error)
-      return { ...DEFAULT_SETTINGS }
+      return this.normalize({})
     }
   }
 
@@ -73,8 +69,8 @@ export class SettingsStore {
     return {
       hotkey,
       ...(dictationHotkey ? { dictationHotkey } : {}),
-      asrMode
+      asrMode,
+      dictation: normalizeDictationSettings(raw.dictation)
     }
   }
-
 }

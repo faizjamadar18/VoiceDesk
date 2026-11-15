@@ -145,6 +145,118 @@ describe('polishTranscript', () => {
         })
       ).toBe('Send it to team@incredible.ai please')
     })
+
+    it('expands shortcuts literally, so dollar signs are not capture references', () => {
+      expect(
+        polishTranscript('charge my card', {
+          shortcuts: { 'my card': 'Visa ending $5 & $&' }
+        })
+      ).toBe('Charge Visa ending $5 & $&')
+    })
+  })
+
+  describe('dictionary handling', () => {
+    it('replaces a spoken description with the dictionary text', () => {
+      expect(
+        polishTranscript('send it to kay null please', {
+          dictionary: [{ text: 'Kanuel', description: 'kay null' }]
+        })
+      ).toBe('Send it to Kanuel please')
+    })
+
+    it('restores the canonical casing of a dictionary word', () => {
+      expect(
+        polishTranscript('i use github daily', {
+          dictionary: [{ text: 'GitHub' }]
+        })
+      ).toBe('I use GitHub daily')
+    })
+
+    it('restores the canonical form of a lowercase abbreviation', () => {
+      expect(
+        polishTranscript('i sent LMK to the team', {
+          dictionary: [{ text: 'lmk' }]
+        })
+      ).toBe('I sent lmk to the team')
+    })
+
+    it('prefers the longer description when two entries overlap', () => {
+      expect(
+        polishTranscript('open slack app workspace now', {
+          dictionary: [
+            { text: 'Slack', description: 'slack app' },
+            { text: 'Slack workspace', description: 'slack app workspace' }
+          ]
+        })
+      ).toBe('Open Slack workspace now')
+    })
+
+    it('treats the replacement text literally, including dollar signs', () => {
+      expect(
+        polishTranscript('send five dollars now', {
+          dictionary: [{ text: '$5', description: 'five dollars' }]
+        })
+      ).toBe('Send $5 now')
+    })
+
+    it('keeps the taught spelling even when the structure never capitalizes', () => {
+      expect(
+        polishTranscript('i use github', {
+          style: 'light',
+          structure: { capitalization: 'never' },
+          dictionary: [{ text: 'GitHub' }]
+        })
+      ).toBe('i use GitHub')
+    })
+
+    it('keeps saved autofill content verbatim, including line breaks', () => {
+      expect(
+        polishTranscript('send my email', {
+          style: 'light',
+          structure: {
+            capitalization: 'never',
+            sentenceEndings: 'none',
+            exclamation: 'off',
+            greeting: 'inline'
+          },
+          shortcuts: { 'my email': 'Hi Sarah,\n\nBest,\nFaiz' }
+        })
+      ).toBe('send Hi Sarah,\n\nBest,\nFaiz')
+    })
+
+    it('preserves the leading boundary character around a description', () => {
+      expect(
+        polishTranscript('i will, ask   the team about it', {
+          dictionary: [{ text: 'AskTeam', description: 'ask the team' }]
+        })
+      ).toBe('I will, AskTeam about it')
+    })
+
+    it('keeps dictionary changes when style is none', () => {
+      expect(
+        polishTranscript('send it to kay null', {
+          style: 'none',
+          dictionary: [{ text: 'Kanuel', description: 'kay null' }]
+        })
+      ).toBe('send it to Kanuel')
+    })
+
+    it('keeps replacements when style is none', () => {
+      expect(
+        polishTranscript('i love github and vscode', {
+          style: 'none',
+          replacements: { github: 'GitHub', vscode: 'VS Code' }
+        })
+      ).toBe('i love GitHub and VS Code')
+    })
+
+    it('leaves a message that is only a URL untouched', () => {
+      expect(
+        polishTranscript('https://example.com/Path?q=1', {
+          dictionary: [{ text: 'Example', description: 'example' }]
+        })
+      ).toBe('https://example.com/Path?q=1')
+    })
   })
 })
 
