@@ -19,7 +19,7 @@ export const GROQ_FALLBACK_MODELS = [
   'openai/gpt-oss-120b',
   'qwen/qwen3.8-27b'
 ] as const
-export const GROQ_TIMEOUT_SECONDS = 5.0
+export const GROQ_TIMEOUT_SECONDS = 15.0
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 
@@ -106,9 +106,12 @@ export class GroqClient implements LlmClient {
 
     let remaining = [...specs]
     let response: Response | undefined
+    let elapsedMs = 0
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const body = this.buildBody(transcript, remaining, history)
+      const startedAt = this.clock().getTime()
       response = await this.post(url, headers, body)
+      elapsedMs = this.clock().getTime() - startedAt
       if (response.status === 400 && attempt === 0) {
         const dropped = await offendingTool(response, remaining)
         if (dropped !== null) {
@@ -146,6 +149,11 @@ export class GroqClient implements LlmClient {
     } catch {
       throw new GroqError('Groq response was not valid JSON.')
     }
+
+    const usage = usageFrom(data)
+    console.info(
+      `[groq] ${this.model} prompt=${usage.prompt} completion=${usage.completion} in ${elapsedMs}ms`
+    )
 
     return replyFromResponse(data)
   }
@@ -278,6 +286,24 @@ export function replyFromResponse(data: unknown): LlmReply {
   return {
     calls: toolCallsFromResponse(data),
     content: contentFromResponse(data)
+  }
+}
+
+/**
+ * Token counts for the usage log line. Numbers pass through as their decimal
+ * form; anything missing or malformed renders as `?` so a reply still flows.
+ */
+function usageFrom(data: unknown): { prompt: string; completion: string } {
+  const missing = { prompt: '?', completion: '?' }
+  if (!isRecord(data)) return missing
+  const usage = data.usage
+  if (!isRecord(usage)) return missing
+
+  const prompt = usage.prompt_tokens
+  const completion = usage.completion_tokens
+  return {
+    prompt: typeof prompt === 'number' ? String(prompt) : '?',
+    completion: typeof completion === 'number' ? String(completion) : '?'
   }
 }
 
@@ -430,6 +456,7 @@ export function modelChainFromEnv(): string[] {
 
 export interface ResilientLlmClientOptions {
   attempts?: number
+  maxAttempts?: number
   backoff?: number
   cooldown?: number
   clock?: () => number
@@ -439,6 +466,7 @@ export interface ResilientLlmClientOptions {
 export class ResilientLlmClient implements LlmClient {
   private readonly clients: GroqClient[]
   private readonly attempts: number
+  private readonly maxAttempts: number
   private readonly backoff: number
   private readonly cooldown: number
   private readonly clock: () => number
@@ -451,6 +479,7 @@ export class ResilientLlmClient implements LlmClient {
   ) {
     this.clients = [...clients]
     this.attempts = Math.max(1, options.attempts ?? 2)
+    this.maxAttempts = Math.max(1, options.maxAttempts ?? 2)
     this.backoff = options.backoff ?? 0.3
     this.cooldown = options.cooldown ?? 120.0
     this.clock =
@@ -485,11 +514,29 @@ export class ResilientLlmClient implements LlmClient {
   ): Promise<LlmReply> {
     const failures: string[] = []
     const now = this.clock()
-    for (const client of this.ordered()) {
-      const cooling = (this.skipUntil.get(client.model) ?? 0) > now
-      const attempts = cooling ? 1 : this.attempts
-      for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const order = this.ordered()
+    const spent = new Map<string, number>()
+    let remainingAttempts = this.maxAttempts
+
+    // Spread the budget across models before retrying any one of them: each
+    // pass gives every model one attempt, so a single unhealthy model cannot
+    // burn the whole budget while its fallbacks sit idle.
+    while (remainingAttempts > 0) {
+      let progressed = false
+      for (const client of order) {
+        if (remainingAttempts <= 0) break
+        const cooling = (this.skipUntil.get(client.model) ?? 0) > now
+        const limit = cooling ? 1 : this.attempts
+        const used = spent.get(client.model) ?? 0
+        if (used >= limit) continue
+
+        progressed = true
+        remainingAttempts -= 1
+        spent.set(client.model, used + 1)
         try {
+          if (used > 0) {
+            await this.sleep(this.backoff * used)
+          }
           return await client.choose(transcript, specs, history)
         } catch (error) {
           if (error instanceof GroqQuotaError) {
@@ -498,21 +545,19 @@ export class ResilientLlmClient implements LlmClient {
             console.warn(
               `Groq model ${client.model} is out of quota; skipping it for ${Math.trunc(this.cooldown)}s.`
             )
-            break
+            continue
           }
           if (error instanceof GroqError) {
             failures.push(`${client.model}: ${error.message}`)
             console.warn(
-              `Groq model ${client.model} failed (attempt ${attempt + 1}/${attempts}): ${error.message}`
+              `Groq model ${client.model} failed (attempt ${used + 1}/${limit}): ${error.message}`
             )
-            if (attempt + 1 < attempts) {
-              await this.sleep(this.backoff * (attempt + 1))
-            }
             continue
           }
           throw error
         }
       }
+      if (!progressed) break
     }
     throw new GroqError('All Groq models failed: ' + failures.join('; '))
   }

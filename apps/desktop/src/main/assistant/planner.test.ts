@@ -15,7 +15,6 @@ import type {
   Planner,
   Tool,
   ToolCall,
-  ToolSelector,
   ToolSpec
 } from './types'
 
@@ -42,18 +41,6 @@ class FakeLlmClient implements LlmClient {
   ): Promise<LlmReply> {
     this.seen = { transcript, specs, history }
     return { calls: this.calls, content: this.content }
-  }
-}
-
-class FakeSelector implements ToolSelector {
-  private readonly keep: Set<string>
-
-  constructor(keep: Set<string>) {
-    this.keep = keep
-  }
-
-  select(_transcript: string, specs: ToolSpec[]): ToolSpec[] {
-    return specs.filter((spec) => this.keep.has(spec.name))
   }
 }
 
@@ -327,33 +314,11 @@ describe('GroqPlanner', () => {
     })
     expect(client.seen).not.toBeNull()
     expect(client.seen?.transcript).toBe('open calc')
+    expect(client.seen?.specs).toHaveLength(registry.specs().length + 1)
     expect(new Set(client.seen?.specs.map((spec) => spec.name))).toEqual(
       new Set([...registry.specs().map((spec) => spec.name), 'look_at_screen'])
     )
     expect(registry.get('look_at_screen')).toBeUndefined()
-  })
-
-  it('applies the selector to registry specs', async () => {
-    const registry = buildRegistry()
-    const client = new FakeLlmClient([
-      { name: 'open_app', arguments: { app: 'calculator' } }
-    ])
-    const selector = new FakeSelector(new Set(['open_app', 'web_search']))
-
-    const directive = await planWith(
-      new GroqPlanner(registry, client, selector),
-      'open calc'
-    )
-
-    expect(directive).toEqual({
-      kind: 'tool',
-      call: { name: 'open_app', arguments: { app: 'calculator' } }
-    })
-    expect(client.seen?.specs.map((spec) => spec.name)).toEqual([
-      'open_app',
-      'web_search',
-      'look_at_screen'
-    ])
   })
 
   it('passes the injected recent context as the third choose argument', async () => {
@@ -365,9 +330,7 @@ describe('GroqPlanner', () => {
       { role: 'user', content: '[3 minutes ago] open calc' },
       { role: 'assistant', content: 'Opening Calculator.' }
     ]
-    const planner = new GroqPlanner(registry, client, undefined, () => [
-      ...history
-    ])
+    const planner = new GroqPlanner(registry, client, () => [...history])
 
     await planWith(planner, 'open calc')
 

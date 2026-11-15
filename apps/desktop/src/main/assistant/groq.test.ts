@@ -358,6 +358,60 @@ describe('GroqClient', () => {
     expect(reply.content).toBe('Which page?')
   })
 
+  it('logs the real token usage once per successful reply', async () => {
+    let now = 1_000_000
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const { fetch, calls } = recordingFetch(() => {
+      now += 12
+      return jsonResponse({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 321, completion_tokens: 12 }
+      })
+    })
+    const client = new GroqClient('gsk_test', {
+      fetch,
+      clock: () => new Date(now)
+    })
+
+    await client.choose('open notepad', [])
+
+    expect(calls).toHaveLength(1)
+    expect(info).toHaveBeenCalledTimes(1)
+    expect(info).toHaveBeenCalledWith(
+      `[groq] ${DEFAULT_GROQ_MODEL} prompt=321 completion=12 in 12ms`
+    )
+  })
+
+  it('logs unknown usage instead of throwing when usage is missing or malformed', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const fixed = (): Date => new Date(1_000_000)
+    const missing = new GroqClient('gsk_test', {
+      fetch: recordingFetch(() =>
+        jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+      ).fetch,
+      clock: fixed
+    })
+    const malformed = new GroqClient('gsk_test', {
+      fetch: recordingFetch(() =>
+        jsonResponse({
+          choices: [{ message: { content: 'ok' } }],
+          usage: { prompt_tokens: 'lots', completion_tokens: null }
+        })
+      ).fetch,
+      clock: fixed
+    })
+
+    const first = await missing.choose('open notepad', [])
+    const second = await malformed.choose('open notepad', [])
+
+    expect(first.content).toBe('ok')
+    expect(second.content).toBe('ok')
+    expect(info).toHaveBeenCalledTimes(2)
+    expect(info).toHaveBeenCalledWith(
+      `[groq] ${DEFAULT_GROQ_MODEL} prompt=? completion=? in 0ms`
+    )
+  })
+
   it('maps HTTP 429 to a quota error without retrying', async () => {
     const { fetch, calls } = recordingFetch(() =>
       jsonResponse({ error: { message: 'Rate limit exceeded' } }, 429)
@@ -472,8 +526,20 @@ describe('GroqClient', () => {
     )
   })
 
-  it('uses a five second default timeout', () => {
-    expect(GROQ_TIMEOUT_SECONDS).toBe(5.0)
+  it('uses a fifteen second default timeout', () => {
+    expect(GROQ_TIMEOUT_SECONDS).toBe(15.0)
+  })
+
+  it('applies the fifteen second timeout to the request', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    const { fetch } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('open notepad', [])
+
+    expect(timeout).toHaveBeenCalledWith(15000)
   })
 
   it('reads the environment aliases and overrides', async () => {
@@ -620,5 +686,84 @@ describe('ResilientLlmClient', () => {
     await expect(resilient.choose('open calc', [])).rejects.toThrow(
       'All Groq models failed'
     )
+  })
+
+  it('caps total attempts at two across every model', async () => {
+    const first = new GroqClient('gsk_1', { model: 'openai/gpt-oss-20b' })
+    const second = new GroqClient('gsk_2', { model: 'openai/gpt-oss-120b' })
+    const third = new GroqClient('gsk_3', { model: 'qwen/qwen3.8-27b' })
+    vi.spyOn(first, 'choose').mockRejectedValue(
+      new GroqQuotaError('Quota exhausted', { status: 429 })
+    )
+    vi.spyOn(second, 'choose').mockRejectedValue(
+      new GroqQuotaError('Quota exhausted', { status: 429 })
+    )
+    vi.spyOn(third, 'choose').mockResolvedValue({
+      calls: [{ name: 'open_app', arguments: { app: 'calc' } }],
+      content: null
+    })
+    const resilient = new ResilientLlmClient([first, second, third], {
+      sleep: async () => undefined
+    })
+
+    await expect(resilient.choose('open calc', [])).rejects.toThrow(
+      'All Groq models failed'
+    )
+
+    expect(first.choose).toHaveBeenCalledTimes(1)
+    expect(second.choose).toHaveBeenCalledTimes(1)
+    expect(third.choose).not.toHaveBeenCalled()
+  })
+
+  it('spreads the budget across models before retrying any one of them', async () => {
+    const first = new GroqClient('gsk_1', { model: 'openai/gpt-oss-20b' })
+    const second = new GroqClient('gsk_2', { model: 'openai/gpt-oss-120b' })
+    const third = new GroqClient('gsk_3', { model: 'qwen/qwen3.8-27b' })
+    vi.spyOn(first, 'choose').mockRejectedValue(new GroqError('Network down'))
+    vi.spyOn(second, 'choose').mockResolvedValue({
+      calls: [{ name: 'open_app', arguments: { app: 'calc' } }],
+      content: null
+    })
+    vi.spyOn(third, 'choose').mockResolvedValue({
+      calls: [],
+      content: 'unused'
+    })
+    const resilient = new ResilientLlmClient([first, second, third])
+
+    const reply = await resilient.choose('open calc', [])
+
+    expect(reply.calls).toEqual([
+      { name: 'open_app', arguments: { app: 'calc' } }
+    ])
+    expect(first.choose).toHaveBeenCalledTimes(1)
+    expect(second.choose).toHaveBeenCalledTimes(1)
+    expect(third.choose).not.toHaveBeenCalled()
+  })
+
+  it('honours a raised maxAttempts budget', async () => {
+    const first = new GroqClient('gsk_1', { model: 'openai/gpt-oss-20b' })
+    const second = new GroqClient('gsk_2', { model: 'openai/gpt-oss-120b' })
+    const third = new GroqClient('gsk_3', { model: 'qwen/qwen3.8-27b' })
+    vi.spyOn(first, 'choose').mockRejectedValue(
+      new GroqQuotaError('Quota exhausted', { status: 429 })
+    )
+    vi.spyOn(second, 'choose').mockRejectedValue(
+      new GroqQuotaError('Quota exhausted', { status: 429 })
+    )
+    vi.spyOn(third, 'choose').mockResolvedValue({
+      calls: [{ name: 'open_app', arguments: { app: 'calc' } }],
+      content: null
+    })
+    const resilient = new ResilientLlmClient([first, second, third], {
+      maxAttempts: 3,
+      sleep: async () => undefined
+    })
+
+    const reply = await resilient.choose('open calc', [])
+
+    expect(reply.calls).toEqual([
+      { name: 'open_app', arguments: { app: 'calc' } }
+    ])
+    expect(third.choose).toHaveBeenCalledTimes(1)
   })
 })

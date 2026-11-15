@@ -1,6 +1,6 @@
 /**
  * In-memory tool registry, mirroring ToolRegistry in apps/api/app/tools.py.
- * Registration order is preserved because it is the order tools are offered.
+ * Tools are offered sorted by name, so the menu is stable across runs.
  */
 
 import type { JsonSchema, Tool, ToolSpec } from './types'
@@ -21,8 +21,11 @@ export class ToolRegistry {
     return this.tools.delete(name)
   }
 
+  /** Tools sorted by name (code-unit order), independent of registration order. */
   specs(): ToolSpec[] {
-    return [...this.tools.values()].map((tool) => tool.spec)
+    return [...this.tools.values()]
+      .map((tool) => tool.spec)
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   }
 
   functionDeclarations(): Array<{

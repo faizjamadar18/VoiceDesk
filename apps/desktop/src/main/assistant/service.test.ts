@@ -13,7 +13,7 @@ import type { ComposioIntegration } from './composio/integration'
 import type { ComposioStatus } from './composio/types'
 import { ToolRegistry } from './registry'
 import { AssistantService, emptyIntegrationsStatus } from './service'
-import type { Planner, Tool } from './types'
+import type { LlmClient, LlmReply, Planner, Tool, ToolSpec } from './types'
 import type { VisionClient } from './vision'
 
 function makeTool(name: string): Tool {
@@ -104,6 +104,16 @@ function plannerFor(name: string): Planner {
   }
 }
 
+/** Records the specs the planner sent to the model, and chooses nothing. */
+class RecordingLlmClient implements LlmClient {
+  seen: ToolSpec[] | null = null
+
+  async choose(_transcript: string, specs: ToolSpec[]): Promise<LlmReply> {
+    this.seen = specs
+    return { calls: [], content: null }
+  }
+}
+
 /** A confirmation-required write tool whose `prepare` optionally returns a card. */
 function makeWriteTool(
   name: string,
@@ -189,16 +199,6 @@ function makeFakeIntegration(initialTools: Tool[] = []) {
     },
     async waitForConnection(): Promise<boolean> {
       return true
-    },
-    toolGroups(): Array<{ provider: string; tools: string[] }> {
-      const groups = new Map<string, string[]>()
-      for (const tool of state.tools) {
-        const provider = tool.spec.name.split('_')[0]
-        const tools = groups.get(provider) ?? []
-        tools.push(tool.spec.name)
-        groups.set(provider, tools)
-      }
-      return [...groups].map(([provider, tools]) => ({ provider, tools }))
     },
     async close(): Promise<void> {}
   }
@@ -295,27 +295,26 @@ describe('AssistantService integrations', () => {
     )
   })
 
-  it('narrows integration tools with retrieval while keeping the app present', async () => {
-    vi.stubEnv('KESTREL_GROQ_API_KEY', 'test-key')
-    vi.stubEnv('KESTREL_TOOL_TOP_K', '1')
+  it('passes every integration tool through to the model', async () => {
     const registry = new ToolRegistry()
     const { integration } = makeFakeIntegration([CAL_CREATE, CAL_LIST])
-    const service = new AssistantService({ registry, integrations: integration })
+    const client = new RecordingLlmClient()
+    const service = new AssistantService({
+      registry,
+      integrations: integration,
+      client
+    })
 
     await service.refreshIntegrations()
+    await service.act('hello there')
 
-    const selector = service.activeToolSelector
-    if (selector === null) {
-      throw new Error('tool retrieval was not active')
-    }
-    const selected = selector
-      .select('hello there', registry.specs())
-      .map((spec) => spec.name)
-    const calendar = selected.filter((name) =>
-      name.startsWith('googlecalendar_')
+    const names = client.seen?.map((spec) => spec.name) ?? []
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'googlecalendar_create_event',
+        'googlecalendar_list_events'
+      ])
     )
-    // Retrieval narrows the app's tools, and the group floor keeps one present.
-    expect(calendar).toHaveLength(1)
   })
 })
 

@@ -387,39 +387,6 @@ describe('ComposioIntegration', () => {
     expect(harness.mcp.callToolCalls[0].name).toBe('NOTION_SEARCH_NOTION_PAGE')
   })
 
-  it('groups registered tool names by provider id', async () => {
-    const harness = makeHarness()
-    harness.store.save('composio-secret')
-    harness.client.listConnected = () => [
-      'googlecalendar',
-      'googlesuper',
-      'notion'
-    ]
-    harness.mcp.tools = [
-      ...CALENDAR_SLUGS,
-      ...DRIVE_SLUGS,
-      ...NOTION_SLUGS
-    ].map(mcpTool)
-
-    await harness.integration.initialize()
-
-    const groups = harness.integration.toolGroups()
-    expect(groups.map((group) => group.provider)).toEqual([
-      'googlecalendar',
-      'googlesuper',
-      'notion'
-    ])
-    const calendar = groups.find((group) => group.provider === 'googlecalendar')
-    expect(calendar?.tools).toContain('calendar_list_events')
-    expect(calendar?.tools).toHaveLength(4)
-    const drive = groups.find((group) => group.provider === 'googlesuper')
-    expect(drive?.tools).toContain('drive_find_files')
-    expect(drive?.tools).toHaveLength(4)
-    const notion = groups.find((group) => group.provider === 'notion')
-    expect(notion?.tools).toContain('notion_search')
-    expect(notion?.tools).toHaveLength(4)
-  })
-
   it('fails the whole provider when one required slug is missing', async () => {
     const harness = makeHarness()
     harness.store.save('composio-secret')

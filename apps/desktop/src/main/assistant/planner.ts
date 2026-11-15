@@ -15,7 +15,6 @@ import type {
   Directive,
   LlmClient,
   Planner,
-  ToolSelector,
   ToolSpec
 } from './types'
 
@@ -100,27 +99,20 @@ export const LOOK_AT_SCREEN_SPEC: ToolSpec = {
 export class GroqPlanner implements Planner {
   private readonly registry: ToolRegistry
   readonly client: LlmClient
-  private readonly selector: ToolSelector | undefined
   private readonly recentContext: (() => ChatTurn[]) | undefined
 
   constructor(
     registry: ToolRegistry,
     client: LlmClient,
-    selector?: ToolSelector,
     recentContext?: () => ChatTurn[]
   ) {
     this.registry = registry
     this.client = client
-    this.selector = selector
     this.recentContext = recentContext
   }
 
   async plan(transcript: string): Promise<Directive> {
-    let specs = this.registry.specs()
-    if (this.selector !== undefined) {
-      specs = this.selector.select(transcript, specs)
-    }
-    specs = [...specs, LOOK_AT_SCREEN_SPEC]
+    const specs = [...this.registry.specs(), LOOK_AT_SCREEN_SPEC]
     const history = this.recentContext?.() ?? []
     const reply = await this.client.choose(transcript, specs, history)
     for (const call of reply.calls) {

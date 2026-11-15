@@ -19,6 +19,35 @@ function toolNames(registry: ToolRegistry): string[] {
   return registry.specs().map((spec) => spec.name)
 }
 
+describe('ToolRegistry.specs', () => {
+  it('sorts by name, independent of registration order', () => {
+    const names = [
+      'web_search',
+      'open_app',
+      'create_file',
+      'current_time',
+      'delete_file'
+    ]
+    const first = new ToolRegistry()
+    for (const name of names) {
+      first.register(makeTool(name))
+    }
+    const second = new ToolRegistry()
+    for (const name of [...names].reverse()) {
+      second.register(makeTool(name))
+    }
+
+    expect(toolNames(first)).toEqual([
+      'create_file',
+      'current_time',
+      'delete_file',
+      'open_app',
+      'web_search'
+    ])
+    expect(toolNames(second)).toEqual(toolNames(first))
+  })
+})
+
 describe('ToolRegistry.delete', () => {
   it('removes a registered tool and reports it', () => {
     const registry = new ToolRegistry()

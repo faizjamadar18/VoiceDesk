@@ -35,7 +35,6 @@ import { McpManager } from './mcp/registry'
 import { PendingStore } from './pending'
 import { FallbackPlanner, GroqPlanner, RulePlanner } from './planner'
 import { ToolRegistry } from './registry'
-import { selectorFromEnv, type ToolSelector } from './retrieval'
 import {
   FakeTranscriber,
   GroqTranscriber,
@@ -280,7 +279,6 @@ export class AssistantService {
   private readonly client: LlmClient | null
   readonly plannerProvider: string
   private readonly integrations: ComposioIntegration | null
-  private readonly toolSelector: ToolSelector | null
   private integrationToolNames: string[] = []
   private integrationRefresh: Promise<IntegrationsStatus> | null = null
   private manager: McpManager | null
@@ -319,7 +317,7 @@ export class AssistantService {
 
     this.integrations = options.integrations ?? null
     this.history = options.history ?? null
-    const prepared = buildPlanner(
+    this.planner = buildPlanner(
       options.planner,
       this.registry,
       this.clock,
@@ -329,21 +327,11 @@ export class AssistantService {
           : [],
       options.client
     )
-    this.planner = prepared.planner
     this.client =
       options.client ??
       extractLlmClient(this.planner) ??
       (groqKeyPresent() ? resilientFromEnv() : null)
-    this.toolSelector = prepared.selector
     this.plannerProvider = plannerProvider(this.planner)
-  }
-
-  /**
-   * The tool selector the planner uses, or null when tool retrieval is off.
-   * A host may need to know whether retrieval is active.
-   */
-  get activeToolSelector(): ToolSelector | null {
-    return this.toolSelector
   }
 
   /**
@@ -759,7 +747,6 @@ export class AssistantService {
   private applyIntegrationTools(): void {
     const integration = this.integrations
     if (integration === null) {
-      this.toolSelector?.setGroups([])
       return
     }
     for (const name of this.integrationToolNames) this.registry.delete(name)
@@ -768,14 +755,6 @@ export class AssistantService {
       this.registry.register(tool)
       this.integrationToolNames.push(tool.spec.name)
     }
-    // Connected apps are not pinned. Each app's tools form a group, so retrieval
-    // ranks them but keeps at least one per app and caps how many it sends.
-    this.toolSelector?.setGroups(
-      integration.toolGroups().map((group) => ({
-        name: group.provider,
-        tools: group.tools
-      }))
-    )
   }
 
   async transcribe(
@@ -986,27 +965,18 @@ function buildPlanner(
   clock: () => Date,
   recentContext: () => ChatTurn[],
   injectedClient?: LlmClient
-): { planner: Planner; selector: ToolSelector | null } {
+): Planner {
   if (injected !== undefined) {
-    return { planner: injected, selector: null }
+    return injected
   }
   if (injectedClient !== undefined || groqKeyPresent()) {
     const client = injectedClient ?? resilientFromEnv()
-    const selector = toolRetrievalEnabled() ? selectorFromEnv() : null
-    return {
-      planner: new FallbackPlanner(
-        new GroqPlanner(
-          registry,
-          client,
-          selector ?? undefined,
-          recentContext
-        ),
-        new RulePlanner(clock)
-      ),
-      selector
-    }
+    return new FallbackPlanner(
+      new GroqPlanner(registry, client, recentContext),
+      new RulePlanner(clock)
+    )
   }
-  return { planner: new RulePlanner(clock), selector: null }
+  return new RulePlanner(clock)
 }
 
 function plannerProvider(planner: Planner): string {
@@ -1200,12 +1170,6 @@ function actionDryRun(): boolean {
 export function mcpEnabled(): boolean {
   const raw = (process.env.KESTREL_MCP_ENABLED ?? '').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
-}
-
-/** Tool retrieval is on by default; only explicit falsy values turn it off. */
-function toolRetrievalEnabled(): boolean {
-  const raw = (process.env.KESTREL_TOOL_RETRIEVAL ?? '').trim().toLowerCase()
-  return !['0', 'false', 'off', 'no'].includes(raw)
 }
 
 function groqKeyPresent(): boolean {

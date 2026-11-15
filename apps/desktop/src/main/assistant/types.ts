@@ -180,10 +180,6 @@ export interface LlmClient {
   ): Promise<LlmReply>
 }
 
-export interface ToolSelector {
-  select(transcript: string, specs: ToolSpec[]): ToolSpec[]
-}
-
 export interface PendingRecord {
   planId: string
   tool: string
