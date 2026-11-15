@@ -5,7 +5,8 @@ import {
   extractBlockText,
   extractItems,
   extractRows,
-  matchItem
+  matchItem,
+  parseSpokenTarget
 } from './notion'
 
 const PAGE_ID = '11111111-1111-1111-1111-111111111111'
@@ -147,7 +148,14 @@ describe('notion tool specs', () => {
       'Read, search, and filter rows or entries from a Notion database or table.'
     )
     expect(byName.get('notion_create_page')?.description).toBe(
-      'Create a new Notion page under a parent page with a title and optional text.'
+      'Create a new Notion page inside a parent page or database, with a title and optional text.'
+    )
+
+    const createParams = byName.get('notion_create_page')?.parameters as {
+      properties: Record<string, { description: string }>
+    }
+    expect(createParams.properties.parent.description).toBe(
+      'The parent page or database to put it under, as the user named it, or its id.'
     )
 
     const readParams = byName.get('notion_read_page')?.parameters as {
@@ -325,14 +333,17 @@ describe('notion_read_page', () => {
   })
 
   it('reports an unknown page name as an error', async () => {
-    const { tools, calls } = makeTools([{ text: resultsPayload([]) }])
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([]) },
+      { text: resultsPayload([]) }
+    ])
 
     const outcome = await toolNamed(tools, 'notion_read_page').run(
       { page: 'Ghost' },
       makeContext()
     )
 
-    expect(calls).toHaveLength(1)
+    expect(calls).toHaveLength(2)
     expect(outcome.status).toBe('error')
     expect(outcome.message).toBe(
       'I couldn\'t find a Notion page called "Ghost".'
@@ -387,6 +398,26 @@ describe('notion_query_database', () => {
 
     expect(outcome.status).toBe('ok')
     expect(outcome.message).toBe('That database has no rows.')
+  })
+
+  it('strips a spoken "table" hint from the searched query', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([databaseRecord(DATABASE_ID, 'Tasks')]) },
+      { text: resultsPayload([rowRecord('Ship it')]) }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_query_database').run(
+      { database: 'tasks table' },
+      makeContext()
+    )
+
+    expect(calls[0].slug).toBe('NOTION_SEARCH_NOTION_PAGE')
+    expect(calls[0].args).toEqual({
+      query: 'tasks',
+      filter_value: 'database',
+      page_size: 25
+    })
+    expect(outcome.status).toBe('ok')
   })
 })
 
@@ -456,6 +487,120 @@ describe('notion_create_page', () => {
     expect(calls).toHaveLength(0)
     expect(outcome.status).toBe('ok')
     expect(outcome.message).toBe('Would run notion_create_page.')
+  })
+})
+
+describe('notion_create_page parent kinds', () => {
+  it('creates inside a database named with a spoken hint', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([databaseRecord(DATABASE_ID, 'Notes')]) },
+      { text: okPayload({ id: 'new-page' }) }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_create_page').run(
+      { title: 'Hello World', parent: 'notes database' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0].args).toEqual({
+      query: 'notes',
+      filter_value: 'database',
+      page_size: 25
+    })
+    expect(calls[1].slug).toBe('NOTION_CREATE_NOTION_PAGE')
+    expect(calls[1].args).toEqual({
+      title: 'Hello World',
+      parent_id: DATABASE_ID
+    })
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe(
+      'Created "Hello World" in Notion under "Notes".'
+    )
+  })
+
+  it('creates under a page parent without a kind hint and sends no filter', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([pageRecord(PARENT_ID, 'Projects')]) },
+      { text: okPayload({ id: 'new-page' }) }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_create_page').run(
+      { title: 'Launch plan', parent: 'Projects' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(2)
+    expect(calls[0].args).toEqual({ query: 'Projects', page_size: 25 })
+    expect(calls[0].args).not.toHaveProperty('filter_value')
+    expect(calls[1].args).toEqual({
+      title: 'Launch plan',
+      parent_id: PARENT_ID
+    })
+    expect(outcome.status).toBe('ok')
+  })
+
+  it('falls back to an empty database search when the named query finds nothing', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([]) },
+      { text: resultsPayload([databaseRecord(DATABASE_ID, 'Notes')]) },
+      { text: okPayload({ id: 'new-page' }) }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_create_page').run(
+      { title: 'Hello World', parent: 'notes database' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(3)
+    expect(calls[1].args).toEqual({ page_size: 25, filter_value: 'database' })
+    expect(calls[1].args).not.toHaveProperty('query')
+    expect(calls[2].slug).toBe('NOTION_CREATE_NOTION_PAGE')
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe(
+      'Created "Hello World" in Notion under "Notes".'
+    )
+  })
+
+  it('reports an unknown database phrase as an error', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([]) },
+      { text: resultsPayload([]) }
+    ])
+
+    const outcome = await toolNamed(tools, 'notion_create_page').run(
+      { title: 'Orphan', parent: 'notes database' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(2)
+    expect(outcome.status).toBe('error')
+    expect(outcome.message).toBe(
+      'I couldn\'t find a Notion database called "notes database".'
+    )
+  })
+})
+
+describe('parseSpokenTarget', () => {
+  it('splits a spoken name into the search query and the named kind', () => {
+    expect(parseSpokenTarget('notes database')).toEqual({
+      query: 'notes',
+      kind: 'database'
+    })
+    expect(parseSpokenTarget('DP page')).toEqual({ query: 'DP', kind: 'page' })
+    expect(parseSpokenTarget('Tasks table')).toEqual({
+      query: 'Tasks',
+      kind: 'database'
+    })
+    expect(parseSpokenTarget('Meeting notes')).toEqual({
+      query: 'Meeting notes',
+      kind: null
+    })
+    expect(parseSpokenTarget('Docs')).toEqual({ query: 'Docs', kind: 'page' })
+    expect(parseSpokenTarget('Project Alpha')).toEqual({
+      query: 'Project Alpha',
+      kind: null
+    })
   })
 })
 

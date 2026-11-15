@@ -531,7 +531,7 @@ export const APP_ACTIONS_CATALOG: Record<string, AppActionItem[]> = {
     {
       "id": "page-create",
       "name": "Create a page",
-      "description": "Start a new page under a parent you name.",
+      "description": "Start a new page under a parent page, or inside a database you name.",
       "asksFirst": true
     }
   ],

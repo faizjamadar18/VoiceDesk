@@ -11,7 +11,7 @@
  */
 
 import type { Tool, ToolOutcome } from '../types'
-import type { CallTool } from './support'
+import type { CallTool, InvokeResult } from './support'
 import {
   MESSAGE_LIMIT,
   SPOKEN_LIMIT,
@@ -31,6 +31,9 @@ export interface NotionItem {
   readonly title: string
   readonly type: 'page' | 'database'
 }
+
+/** The Notion object kinds a spoken name can point at. */
+export type NotionKind = 'page' | 'database'
 
 export interface NotionToolOptions {
   /** Calls one Composio tool by its exact slug over MCP. */
@@ -257,6 +260,44 @@ export function matchItem(
   return null
 }
 
+const PAGE_HINTS = new Set(['page', 'pages', 'doc', 'docs'])
+const DATABASE_HINTS = new Set([
+  'database',
+  'databases',
+  'db',
+  'dbs',
+  'table',
+  'tables'
+])
+
+/**
+ * Splits a spoken name like "notes database" into the words Notion should
+ * search ("notes") and the kind the user named, or null when they named none.
+ * Trailing kind words are stripped, but never every word: a name of "docs"
+ * alone keeps searching for "docs".
+ */
+export function parseSpokenTarget(name: string): {
+  query: string
+  kind: NotionKind | null
+} {
+  const tokens = name.trim().split(/\s+/).filter(Boolean)
+  let end = tokens.length
+  let kind: NotionKind | null = null
+  while (end > 0) {
+    const word = tokens[end - 1].toLowerCase().replace(/[.,!?;:]+$/, '')
+    const found: NotionKind | null = PAGE_HINTS.has(word)
+      ? 'page'
+      : DATABASE_HINTS.has(word)
+        ? 'database'
+        : null
+    if (found === null) break
+    if (kind === null) kind = found
+    if (end === 1) break
+    end -= 1
+  }
+  return { query: tokens.slice(0, end).join(' '), kind }
+}
+
 // --- tool schemas ------------------------------------------------------
 
 const SEARCH_DESCRIPTION =
@@ -266,20 +307,74 @@ const READ_DESCRIPTION =
 const QUERY_DESCRIPTION =
   'Read, search, and filter rows or entries from a Notion database or table.'
 const CREATE_DESCRIPTION =
-  'Create a new Notion page under a parent page with a title and optional text.'
+  'Create a new Notion page inside a parent page or database, with a title and optional text.'
 
 export function createNotionTools(options: NotionToolOptions): Tool[] {
   const callTool = options.callTool
   const invoke = createInvoker(callTool, 'Notion returned an error.', 'Notion')
 
+  async function searchPage(
+    query: string,
+    filter: NotionKind | null,
+    action: string
+  ): Promise<InvokeResult> {
+    const callArgs: Record<string, unknown> = { page_size: RESULT_LIMIT }
+    if (query !== '') callArgs['query'] = query
+    if (filter !== null) callArgs['filter_value'] = filter
+    return invoke(SLUG.search, callArgs, action)
+  }
+
+  /**
+   * Runs the searches a spoken name needs and returns every distinct item
+   * found. When the user named a kind, only that kind is searched; otherwise
+   * the search is unfiltered, and if nothing turns up we also try databases
+   * explicitly, because Composio's search defaults to pages.
+   */
+  async function searchForItems(
+    query: string,
+    kind: NotionKind | null,
+    action: string
+  ): Promise<
+    { ok: true; items: NotionItem[] } | { ok: false; outcome: ToolOutcome }
+  > {
+    const attempts: Array<{ query: string; filter: NotionKind | null }> =
+      kind !== null
+        ? [
+            { query, filter: kind },
+            { query: '', filter: kind }
+          ]
+        : [
+            { query, filter: null },
+            { query: '', filter: null },
+            { query, filter: 'database' },
+            { query: '', filter: 'database' }
+          ]
+
+    const items: NotionItem[] = []
+    const seen = new Set<string>()
+    for (const attempt of attempts) {
+      const found = await searchPage(attempt.query, attempt.filter, action)
+      if (!found.ok) return { ok: false, outcome: found.outcome }
+      const batch = extractItems(found.data)
+      for (const item of batch) {
+        if (seen.has(item.id)) continue
+        seen.add(item.id)
+        items.push(item)
+      }
+      if (items.length > 0) break
+    }
+    return { ok: true, items }
+  }
+
   /**
    * Turns a spoken name into an id, or uses the id directly when the argument
    * already looks like one. A resolved item also carries the title, so a reply
-   * can name it back; a direct id has none.
+   * can name it back; a direct id has none. `preferredKind` narrows the search
+   * when the user's words did not name a kind themselves.
    */
   async function resolveTarget(
     name: string,
-    kind: 'page' | 'database',
+    preferredKind: NotionKind | null,
     action: string
   ): Promise<
     | { ok: true; id: string; title: string | null }
@@ -289,21 +384,27 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
     const direct = notionId(trimmed)
     if (direct !== null) return { ok: true, id: direct, title: null }
 
-    const searched = await invoke(
-      SLUG.search,
-      { query: trimmed, filter_value: kind, page_size: RESULT_LIMIT },
-      action
-    )
+    const spoken = parseSpokenTarget(trimmed)
+    const kind = spoken.kind ?? preferredKind
+    const searched = await searchForItems(spoken.query, kind, action)
     if (!searched.ok) return { ok: false, outcome: searched.outcome }
 
-    const items = extractItems(searched.data)
-    const matched = matchItem(items, trimmed)
+    const items = searched.items
+    const wanted = spoken.query !== '' ? spoken.query : trimmed
+    const matched =
+      matchItem(items, wanted) ??
+      (wanted !== trimmed ? matchItem(items, trimmed) : null)
     if (matched !== null) {
       return { ok: true, id: matched.id, title: matched.title }
     }
 
-    const noun = kind === 'page' ? 'page' : 'database'
-    const lower = trimmed.toLowerCase()
+    const noun =
+      kind === 'database'
+        ? 'database'
+        : kind === 'page'
+          ? 'page'
+          : 'page or database'
+    const lower = wanted.toLowerCase()
     const candidates = items.filter((item) =>
       item.title.toLowerCase().includes(lower)
     )
@@ -537,7 +638,7 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
           parent: {
             type: 'string',
             description:
-              'The page to put it under, as the user named it, or its id.'
+              'The parent page or database to put it under, as the user named it, or its id.'
           }
         },
         ['title']
@@ -563,7 +664,7 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
         return { status: 'error', action, message, spokenResponse: message }
       }
 
-      const resolved = await resolveTarget(parent, 'page', action)
+      const resolved = await resolveTarget(parent, null, action)
       if (!resolved.ok) return resolved.outcome
 
       const callArgs: Record<string, unknown> = {
