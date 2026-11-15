@@ -3,6 +3,7 @@ import type {
   NotchEmailComposeCard,
   NotchDriveCard,
   NotchDriveFormat,
+  NotchNotionCard,
   NotchDecision
 } from '../../shared/types'
 
@@ -17,6 +18,7 @@ export interface DerivedCards {
   calendarCard: NotchCalendarCard | null
   emailComposeCard: NotchEmailComposeCard | null
   driveCard: NotchDriveCard | null
+  notionCard?: NotchNotionCard | null
 }
 
 const SCHEDULE_PATTERN =
@@ -34,6 +36,9 @@ const REPLY_EMAIL_PATTERN =
 
 const CREATE_DRIVE_PATTERN =
   /(?:Create)\s+"([^"]+)"\s+in\s+Google\s+Drive(?:\s+inside\s+"?([^"?]+)"?)?\?(?:\s*Approval needed)?/i
+
+const CREATE_NOTION_PATTERN =
+  /(?:Create)\s+"([^"]+)"\s+in\s+Notion(?:\s+under\s+"?([^"?]+)"?)?\?(?:\s*Approval needed)?/i
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0')
@@ -285,17 +290,72 @@ export function resolveDriveFormat(
   )
 }
 
+export function deriveNotionCard(input: CardDerivationInput): NotchNotionCard | null {
+  const message = input.message?.trim() ?? ''
+  const transcript = input.transcript?.toLowerCase() ?? ''
+  const decisionTarget = input.decision?.target ?? ''
+
+  let title = ''
+  let parentName: string | undefined = undefined
+
+  const createMatch = message.match(CREATE_NOTION_PATTERN)
+  if (createMatch) {
+    title = createMatch[1]
+    parentName = createMatch[2]?.trim() || undefined
+  } else if (
+    input.decision !== null &&
+    (transcript.includes('notion') || message.toLowerCase().includes('notion')) &&
+    (transcript.includes('create') ||
+      transcript.includes('make') ||
+      transcript.includes('new') ||
+      transcript.includes('add') ||
+      message.toLowerCase().includes('create'))
+  ) {
+    if (decisionTarget.includes(' under ')) {
+      const parts = decisionTarget.split(' under ')
+      title = parts[0]?.trim() || 'Untitled'
+      parentName = parts[1]?.trim() || undefined
+    } else {
+      title = decisionTarget || 'Untitled'
+    }
+  } else {
+    return null
+  }
+
+  if (!title) {
+    title = 'Untitled'
+  }
+
+  const isDatabase =
+    Boolean(parentName && /\b(?:database|databases|db|table|tables)\b/i.test(parentName)) ||
+    /\b(?:database|databases|db|table|tables)\b/i.test(transcript)
+
+  return {
+    kind: 'notion_page',
+    mode: 'create',
+    title,
+    parentName,
+    isDatabase,
+    content: ''
+  }
+}
+
 export function deriveCardFromDecisionOrMessage(input: CardDerivationInput): DerivedCards {
+  const notionCard = deriveNotionCard(input)
+  if (notionCard !== null) {
+    return { calendarCard: null, emailComposeCard: null, driveCard: null, notionCard }
+  }
+
   const driveCard = deriveDriveCard(input)
   if (driveCard !== null) {
-    return { calendarCard: null, emailComposeCard: null, driveCard }
+    return { calendarCard: null, emailComposeCard: null, driveCard, notionCard: null }
   }
 
   const calendarCard = deriveCalendarCard(input)
   if (calendarCard !== null) {
-    return { calendarCard, emailComposeCard: null, driveCard: null }
+    return { calendarCard, emailComposeCard: null, driveCard: null, notionCard: null }
   }
 
   const emailComposeCard = deriveEmailComposeCard(input)
-  return { calendarCard: null, emailComposeCard, driveCard: null }
+  return { calendarCard: null, emailComposeCard, driveCard: null, notionCard: null }
 }

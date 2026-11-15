@@ -184,6 +184,17 @@ export interface NotchDriveCard {
   fileId?: string | null
 }
 
+/** A Notion page preview / confirmation card in the notch. */
+export interface NotchNotionCard {
+  kind: 'notion_page'
+  mode: 'create'
+  title: string
+  parentName?: string
+  isDatabase?: boolean
+  content?: string
+  parentId?: string
+}
+
 /**
  * A drafted reply shown for review: editable text with a copy button, exactly
  * like VoiceOS. Nothing is sent or pasted by the app.
@@ -202,6 +213,7 @@ export type NotchCard =
   | NotchEmailReplyCard
   | NotchCalendarCard
   | NotchDriveCard
+  | NotchNotionCard
   | Record<string, unknown>
 
 /** One email row in {@link NotchEmailListCard}. Display-only. */

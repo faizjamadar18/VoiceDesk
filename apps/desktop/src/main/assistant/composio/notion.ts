@@ -10,7 +10,8 @@
  * needs, so the model never sees Composio's raw surface.
  */
 
-import type { Tool, ToolOutcome } from '../types'
+import type { Tool, ToolOutcome, ToolPreparation } from '../types'
+import type { NotchNotionCard } from '../../../shared/types'
 import type { CallTool, InvokeResult } from './support'
 import {
   MESSAGE_LIMIT,
@@ -377,12 +378,14 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
     preferredKind: NotionKind | null,
     action: string
   ): Promise<
-    | { ok: true; id: string; title: string | null }
+    | { ok: true; id: string; title: string | null; type: NotionKind }
     | { ok: false; outcome: ToolOutcome }
   > {
     const trimmed = name.trim()
     const direct = notionId(trimmed)
-    if (direct !== null) return { ok: true, id: direct, title: null }
+    if (direct !== null) {
+      return { ok: true, id: direct, title: null, type: preferredKind ?? 'page' }
+    }
 
     const spoken = parseSpokenTarget(trimmed)
     const kind = spoken.kind ?? preferredKind
@@ -395,7 +398,7 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
       matchItem(items, wanted) ??
       (wanted !== trimmed ? matchItem(items, trimmed) : null)
     if (matched !== null) {
-      return { ok: true, id: matched.id, title: matched.title }
+      return { ok: true, id: matched.id, title: matched.title, type: matched.type }
     }
 
     const noun =
@@ -647,6 +650,86 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
       true,
       'create a Notion page'
     ),
+    async prepare(args, ctx): Promise<ToolPreparation> {
+      const action = 'create a Notion page'
+      const title = (optionalString(args, 'title') ?? '').trim()
+      if (title === '') {
+        const message = 'I need a title for that page.'
+        return {
+          arguments: args,
+          outcome: { status: 'error', action, message, spokenResponse: message }
+        }
+      }
+
+      const parent = (optionalString(args, 'parent') ?? '').trim()
+      if (parent === '') {
+        const message = 'Where should I create that page?'
+        return {
+          arguments: args,
+          outcome: { status: 'error', action, message, spokenResponse: message }
+        }
+      }
+
+      const content = optionalString(args, 'content') ?? ''
+
+      if (ctx.dryRun) {
+        const card: NotchNotionCard = {
+          kind: 'notion_page',
+          mode: 'create',
+          title,
+          parentName: parent,
+          isDatabase: false,
+          content
+        }
+        return {
+          arguments: { title, content, parent },
+          display: `${title} under ${parent}`,
+          card: card as unknown as Record<string, unknown>
+        }
+      }
+
+      const resolved = await resolveTarget(parent, null, action)
+      if (!resolved.ok) return { arguments: args, outcome: resolved.outcome }
+
+      const parentId = resolved.id
+      const parentName = resolved.title ?? parent
+      const isDatabase = resolved.type === 'database'
+
+      const card: NotchNotionCard = {
+        kind: 'notion_page',
+        mode: 'create',
+        title,
+        parentName,
+        isDatabase,
+        content,
+        parentId
+      }
+
+      const prepared: Record<string, unknown> = {
+        title,
+        parent_id: parentId,
+        parent: parentName,
+        content
+      }
+
+      const message = `Create "${title}" in Notion under "${parentName}"?`
+      return {
+        arguments: prepared,
+        display: `${title} under ${parentName}`,
+        message,
+        card: card as unknown as Record<string, unknown>
+      }
+    },
+    applyEdits(args, edits): Record<string, unknown> {
+      const next = { ...args }
+
+      const title = optionalString(edits, 'title')
+      if (title !== null) next['title'] = title
+
+      if (typeof edits['content'] === 'string') next['content'] = edits['content']
+
+      return next
+    },
     async run(args, ctx) {
       const action = 'create a Notion page'
       const skipped = dryRun(ctx, action, 'notion_create_page')
@@ -658,20 +741,28 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
         return { status: 'error', action, message, spokenResponse: message }
       }
 
-      const parent = optionalString(args, 'parent') ?? ''
-      if (parent.trim() === '') {
-        const message = 'Where should I create that page?'
-        return { status: 'error', action, message, spokenResponse: message }
-      }
+      let parentId = optionalString(args, 'parent_id')
+      let parentName = optionalString(args, 'parent')
 
-      const resolved = await resolveTarget(parent, null, action)
-      if (!resolved.ok) return resolved.outcome
+      if (parentId === null) {
+        const parent = optionalString(args, 'parent') ?? ''
+        if (parent.trim() === '') {
+          const message = 'Where should I create that page?'
+          return { status: 'error', action, message, spokenResponse: message }
+        }
+
+        const resolved = await resolveTarget(parent, null, action)
+        if (!resolved.ok) return resolved.outcome
+        parentId = resolved.id
+        parentName = resolved.title
+      }
 
       const callArgs: Record<string, unknown> = {
         title: title.trim(),
-        parent_id: resolved.id
+        parent_id: parentId
       }
-      const content = optionalString(args, 'content')
+      const content =
+        optionalString(args, 'content') ?? optionalString(args, 'markdown')
       if (content !== null && content.trim() !== '') {
         callArgs['markdown'] = content
       }
@@ -679,9 +770,8 @@ export function createNotionTools(options: NotionToolOptions): Tool[] {
       const created = await invoke(SLUG.create, callArgs, action)
       if (!created.ok) return created.outcome
 
-      const parentName = resolved.title
       const message =
-        parentName !== null
+        parentName !== null && parentName !== undefined && parentName.trim() !== ''
           ? `Created "${title.trim()}" in Notion under "${parentName}".`
           : `Created "${title.trim()}" in Notion.`
       return {

@@ -581,6 +581,147 @@ describe('notion_create_page parent kinds', () => {
   })
 })
 
+describe('notion_create_page prepare and applyEdits', () => {
+  it('prepares a Notion page card under a parent page', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([pageRecord(PARENT_ID, 'Projects')]) }
+    ])
+    const tool = toolNamed(tools, 'notion_create_page')
+    expect(tool.prepare).toBeDefined()
+
+    const prep = await tool.prepare!(
+      { title: 'Launch plan', parent: 'Projects', content: '# Hello' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(prep.outcome).toBeUndefined()
+    expect(prep.display).toBe('Launch plan under Projects')
+    expect(prep.message).toBe('Create "Launch plan" in Notion under "Projects"?')
+    expect(prep.arguments).toEqual({
+      title: 'Launch plan',
+      parent_id: PARENT_ID,
+      parent: 'Projects',
+      content: '# Hello'
+    })
+    expect(prep.card).toEqual({
+      kind: 'notion_page',
+      mode: 'create',
+      title: 'Launch plan',
+      parentName: 'Projects',
+      isDatabase: false,
+      content: '# Hello',
+      parentId: PARENT_ID
+    })
+  })
+
+  it('prepares a Notion database entry card when parent is a database', async () => {
+    const { tools, calls } = makeTools([
+      { text: resultsPayload([databaseRecord(DATABASE_ID, 'Tasks')]) }
+    ])
+    const tool = toolNamed(tools, 'notion_create_page')
+
+    const prep = await tool.prepare!(
+      { title: 'New task', parent: 'Tasks database' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(prep.outcome).toBeUndefined()
+    expect(prep.card).toEqual({
+      kind: 'notion_page',
+      mode: 'create',
+      title: 'New task',
+      parentName: 'Tasks',
+      isDatabase: true,
+      content: '',
+      parentId: DATABASE_ID
+    })
+  })
+
+  it('fails prepare when title is missing', async () => {
+    const { tools, calls } = makeTools([])
+    const tool = toolNamed(tools, 'notion_create_page')
+
+    const prep = await tool.prepare!(
+      { parent: 'Projects' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(0)
+    expect(prep.outcome).toBeDefined()
+    expect(prep.outcome?.status).toBe('error')
+    expect(prep.outcome?.message).toBe('I need a title for that page.')
+  })
+
+  it('fails prepare when parent is missing', async () => {
+    const { tools, calls } = makeTools([])
+    const tool = toolNamed(tools, 'notion_create_page')
+
+    const prep = await tool.prepare!(
+      { title: 'Lonely page' },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(0)
+    expect(prep.outcome).toBeDefined()
+    expect(prep.outcome?.status).toBe('error')
+    expect(prep.outcome?.message).toBe('Where should I create that page?')
+  })
+
+  it('updates title and content with applyEdits', () => {
+    const { tools } = makeTools([])
+    const tool = toolNamed(tools, 'notion_create_page')
+    expect(tool.applyEdits).toBeDefined()
+
+    const initial = {
+      title: 'Old Title',
+      parent_id: PARENT_ID,
+      parent: 'Projects',
+      content: 'Old Content'
+    }
+
+    const applied = tool.applyEdits!(initial, {
+      title: 'New Title',
+      content: 'New Content'
+    })
+
+    expect(applied).toEqual({
+      title: 'New Title',
+      parent_id: PARENT_ID,
+      parent: 'Projects',
+      content: 'New Content'
+    })
+  })
+
+  it('runs directly with prepared parent_id without repeating parent resolution', async () => {
+    const { tools, calls } = makeTools([
+      { text: okPayload({ id: 'page-123' }) }
+    ])
+    const tool = toolNamed(tools, 'notion_create_page')
+
+    const outcome = await tool.run(
+      {
+        title: 'New Title',
+        parent_id: PARENT_ID,
+        parent: 'Projects',
+        content: 'New Content'
+      },
+      makeContext()
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].slug).toBe('NOTION_CREATE_NOTION_PAGE')
+    expect(calls[0].args).toEqual({
+      title: 'New Title',
+      parent_id: PARENT_ID,
+      markdown: 'New Content'
+    })
+    expect(outcome.status).toBe('ok')
+    expect(outcome.message).toBe('Created "New Title" in Notion under "Projects".')
+  })
+})
+
 describe('parseSpokenTarget', () => {
   it('splits a spoken name into the search query and the named kind', () => {
     expect(parseSpokenTarget('notes database')).toEqual({

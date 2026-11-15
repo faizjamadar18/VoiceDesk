@@ -15,12 +15,14 @@ import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GmailComposeCard } from './components/GmailComposeCard'
 import { EmailReplyCard } from './components/EmailReplyCard'
 import { GoogleDriveCard } from './components/GoogleDriveCard'
+import { NotionConfirmationCard } from './components/NotionConfirmationCard'
 import { deriveCardFromDecisionOrMessage } from './card-derivation'
 import type {
   HistoryRestorePayload,
   NotchDecision,
   NotchDecisionAction,
   NotchDriveCard,
+  NotchNotionCard,
   NotchEmailReplyCard
 } from '../../shared/types'
 
@@ -534,6 +536,134 @@ describe('Notch history restore', () => {
           hasPreviewModel: true
         })
       ).toBe(true)
+    })
+
+    it('derives NotionConfirmationCard when Notion create action is requested and eliminates generic decision modal', () => {
+      const message = 'Create "Hello World" in Notion under "Database"? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-notion-1',
+        target: 'Hello World under Database',
+        busy: false
+      }
+      const transcript = 'create a new entry in my database called Hello World'
+
+      const derivedCards = deriveCardFromDecisionOrMessage({
+        message,
+        decision,
+        transcript
+      })
+
+      expect(derivedCards.notionCard).not.toBeNull()
+      expect(derivedCards.notionCard?.title).toBe('Hello World')
+      expect(derivedCards.notionCard?.parentName).toBe('Database')
+      expect(derivedCards.notionCard?.isDatabase).toBe(true)
+
+      const resolved = deriveNotchCards(null, derivedCards)
+      expect(resolved.notionCard).not.toBeNull()
+      expect(resolved.notionCard?.title).toBe('Hello World')
+      expect(resolved.hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const answer = message.trim()
+      const showAnswer = showCards && answer.length > 0 && !resolved.hasPreviewModel
+      const showGenericDecision = showCards && decision !== null && !resolved.hasPreviewModel
+
+      // Text bubble and generic decision card are suppressed when preview model is active
+      expect(showAnswer).toBe(false)
+      expect(showGenericDecision).toBe(false)
+
+      const cardHtml = renderToStaticMarkup(
+        createElement(NotionConfirmationCard, {
+          card: resolved.notionCard!,
+          busy: decision.busy,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('New Database Entry')
+      expect(cardHtml).toContain('Database')
+      expect(cardHtml).toContain('Hello World')
+      expect(cardHtml).toContain('Content will be added in the next step.')
+      expect(cardHtml).toContain('Create')
+    })
+
+    it('derives NotionConfirmationCard from direct card payload and suppresses generic decision', () => {
+      const card: NotchNotionCard = {
+        kind: 'notion_page',
+        mode: 'create',
+        title: 'Project Roadmap',
+        parentName: 'Product',
+        isDatabase: false,
+        content: '# Roadmap\n- Q1 Goals'
+      }
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'plan-notion-2',
+        target: 'Project Roadmap under Product',
+        busy: false
+      }
+
+      const emptyDerived = {
+        calendarCard: null,
+        emailComposeCard: null,
+        driveCard: null,
+        notionCard: null
+      }
+
+      const resolved = deriveNotchCards(card, emptyDerived)
+      expect(resolved.notionCard).toEqual(card)
+      expect(resolved.hasPreviewModel).toBe(true)
+
+      const isSynthesizing = false
+      const phase = 'result'
+      const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
+      const showGenericDecision = showCards && decision !== null && !resolved.hasPreviewModel
+      expect(showGenericDecision).toBe(false)
+
+      const cardHtml = renderToStaticMarkup(
+        createElement(NotionConfirmationCard, {
+          card: resolved.notionCard!,
+          busy: decision.busy,
+          onConfirm: () => {},
+          onDiscard: () => {}
+        })
+      )
+      expect(cardHtml).toContain('New Page')
+      expect(cardHtml).toContain('Product')
+      expect(cardHtml).toContain('Project Roadmap')
+      expect(cardHtml).toContain('# Roadmap\n- Q1 Goals')
+    })
+
+    it('invokes appropriate decision callback when confirming or discarding NotionConfirmationCard', () => {
+      const decide = vi.fn()
+      const card: NotchNotionCard = {
+        kind: 'notion_page',
+        mode: 'create',
+        title: 'Meeting Notes',
+        parentName: 'Notes',
+        isDatabase: true
+      }
+
+      // Handler wiring from Notch.tsx:
+      // onConfirm={(data) => decide('confirm', data)}
+      // onDiscard={() => decide('cancel')}
+      const onConfirm = (data?: { title: string; content?: string }) =>
+        decide('confirm', data)
+      const onDiscard = () => decide('cancel')
+
+      onConfirm({ title: card.title, content: 'Some content' })
+      expect(decide).toHaveBeenCalledTimes(1)
+      expect(decide).toHaveBeenCalledWith('confirm', {
+        title: 'Meeting Notes',
+        content: 'Some content'
+      })
+
+      onDiscard()
+      expect(decide).toHaveBeenCalledTimes(2)
+      expect(decide).toHaveBeenCalledWith('cancel')
     })
   })
 })

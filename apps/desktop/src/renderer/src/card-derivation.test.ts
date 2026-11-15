@@ -3,6 +3,7 @@ import {
   deriveCalendarCard,
   deriveEmailComposeCard,
   deriveDriveCard,
+  deriveNotionCard,
   deriveCardFromDecisionOrMessage
 } from './card-derivation'
 import type { NotchDecision } from '../../shared/types'
@@ -220,7 +221,71 @@ describe('card-derivation', () => {
     })
   })
 
+  describe('deriveNotionCard', () => {
+    it('derives notion card with isDatabase true when parent is a database', () => {
+      const message = 'Create "Hello World" in Notion under "Database"? Approval needed.'
+      const decision: NotchDecision = {
+        kind: 'confirm',
+        planId: 'notion-1',
+        target: 'Hello World under Database',
+        busy: false
+      }
+
+      const card = deriveNotionCard({
+        message,
+        decision,
+        transcript: 'create a new entry in my database called Hello World'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('notion_page')
+      expect(card?.mode).toBe('create')
+      expect(card?.title).toBe('Hello World')
+      expect(card?.parentName).toBe('Database')
+      expect(card?.isDatabase).toBe(true)
+    })
+
+    it('derives notion card with isDatabase false when parent is a page', () => {
+      const message = 'Create "Launch Plan" in Notion under "Projects"?'
+      const card = deriveNotionCard({
+        message,
+        transcript: 'create Launch Plan in notion under Projects'
+      })
+
+      expect(card).not.toBeNull()
+      expect(card?.kind).toBe('notion_page')
+      expect(card?.mode).toBe('create')
+      expect(card?.title).toBe('Launch Plan')
+      expect(card?.parentName).toBe('Projects')
+      expect(card?.isDatabase).toBe(false)
+    })
+
+    it('returns null when message does not describe Notion page', () => {
+      const message = 'Create "README.md" in Google Drive?'
+      const card = deriveNotionCard({
+        message,
+        transcript: 'create README.md in google drive'
+      })
+      expect(card).toBeNull()
+    })
+  })
+
   describe('deriveCardFromDecisionOrMessage', () => {
+    it('returns derived notion card when Notion creation detected', () => {
+      const result = deriveCardFromDecisionOrMessage({
+        message: 'Create "Hello World" in Notion under "Database"?',
+        decision: { kind: 'confirm', planId: 'notion-1', target: 'Hello World under Database', busy: false },
+        transcript: 'create Hello World in notion'
+      })
+
+      expect(result.notionCard).not.toBeNull()
+      expect(result.notionCard?.kind).toBe('notion_page')
+      expect(result.notionCard?.title).toBe('Hello World')
+      expect(result.notionCard?.parentName).toBe('Database')
+      expect(result.calendarCard).toBeNull()
+      expect(result.emailComposeCard).toBeNull()
+      expect(result.driveCard).toBeNull()
+    })
     it('returns derived calendar card when calendar event detected', () => {
       const result = deriveCardFromDecisionOrMessage({
         message: 'Schedule "Sync" for tomorrow at 3:00 PM? Approval needed.',
@@ -232,6 +297,7 @@ describe('card-derivation', () => {
       expect(result.calendarCard?.title).toBe('Sync')
       expect(result.emailComposeCard).toBeNull()
       expect(result.driveCard).toBeNull()
+      expect(result.notionCard).toBeNull()
     })
 
     it('returns derived drive card when Google Drive file creation detected', () => {
@@ -247,6 +313,7 @@ describe('card-derivation', () => {
       expect(result.driveCard?.name).toBe('Research.docx')
       expect(result.calendarCard).toBeNull()
       expect(result.emailComposeCard).toBeNull()
+      expect(result.notionCard).toBeNull()
     })
 
     it('returns all nulls for unrelated message', () => {
@@ -267,6 +334,7 @@ describe('card-derivation', () => {
       expect(cards.calendarCard).toBeNull()
       expect(cards.emailComposeCard).toBeNull()
       expect(cards.driveCard).toBeNull()
+      expect(cards.notionCard).toBeNull()
     })
   })
 })

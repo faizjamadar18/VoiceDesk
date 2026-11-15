@@ -19,6 +19,7 @@ import {
   type NotchEmailListCard,
   type NotchCalendarCard,
   type NotchDriveCard,
+  type NotchNotionCard,
   type NotchFileResult,
   type NotchPhase,
   type NotchWeatherCard,
@@ -32,6 +33,7 @@ import { GmailComposeCard } from './components/GmailComposeCard'
 import { EmailReplyCard } from './components/EmailReplyCard'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GoogleDriveCard } from './components/GoogleDriveCard'
+import { NotionConfirmationCard } from './components/NotionConfirmationCard'
 import { deriveCardFromDecisionOrMessage } from './card-derivation'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
@@ -715,6 +717,7 @@ export interface NotchResolvedCards {
   emailReply: NotchEmailReplyCard | null
   calendarEvent: NotchCalendarCard | null
   driveCard: NotchDriveCard | null
+  notionCard: NotchNotionCard | null
   hasPreviewModel: boolean
 }
 
@@ -736,13 +739,25 @@ export function deriveNotchCards(
     card?.kind === 'drive_file'
       ? (card as NotchDriveCard)
       : derivedCards.driveCard
+  const notionCard =
+    card?.kind === 'notion_page'
+      ? (card as NotchNotionCard)
+      : (derivedCards.notionCard ?? null)
   const hasPreviewModel =
     emailCompose !== null ||
     emailReply !== null ||
     calendarEvent !== null ||
-    driveCard !== null
+    driveCard !== null ||
+    notionCard !== null
 
-  return { emailCompose, emailReply, calendarEvent, driveCard, hasPreviewModel }
+  return {
+    emailCompose,
+    emailReply,
+    calendarEvent,
+    driveCard,
+    notionCard,
+    hasPreviewModel
+  }
 }
 
 export default function Notch(): JSX.Element {
@@ -1300,8 +1315,14 @@ export default function Notch(): JSX.Element {
     decision,
     transcript
   })
-  const { emailCompose, emailReply, calendarEvent, driveCard, hasPreviewModel } =
-    deriveNotchCards(card, derivedCards)
+  const {
+    emailCompose,
+    emailReply,
+    calendarEvent,
+    driveCard,
+    notionCard,
+    hasPreviewModel
+  } = deriveNotchCards(card, derivedCards)
 
   const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
   const showAnswer = showCards && answer.length > 0 && !hasPreviewModel
@@ -1442,6 +1463,15 @@ export default function Notch(): JSX.Element {
       {showCards && driveCard && (
         <GoogleDriveCard
           card={driveCard}
+          busy={decision?.busy}
+          onConfirm={(data) => decide('confirm', data)}
+          onDiscard={() => decide('cancel')}
+        />
+      )}
+
+      {showCards && notionCard && (
+        <NotionConfirmationCard
+          card={notionCard}
           busy={decision?.busy}
           onConfirm={(data) => decide('confirm', data)}
           onDiscard={() => decide('cancel')}
