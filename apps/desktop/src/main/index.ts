@@ -57,6 +57,7 @@ import {
   DictationCoordinator,
   NotchAudioCaptureProvider
 } from './dictation/coordinator'
+import { getActiveWindowService } from './dictation/active-window-service'
 import {
   createPillWindow,
   ElectronPillWindowPresenter,
@@ -847,6 +848,7 @@ function createNotch(): void {
 
   const nativePaste = new NativePasteService()
   dictationAudioCapture = new NotchAudioCaptureProvider()
+  getActiveWindowService().start()
 
   dictationCoordinator = new DictationCoordinator({
     audioCapture: dictationAudioCapture,
@@ -1085,6 +1087,7 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.on('will-quit', () => {
+    getActiveWindowService().stop()
     stopKeyHook()
     pushToTalk?.dispose()
     dictationPushToTalk?.dispose()

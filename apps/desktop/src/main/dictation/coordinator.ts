@@ -6,6 +6,7 @@ import type { TranscriptPolisher } from './llm-polish'
 import {
   classifyWindowContext,
   getActiveWindowInfo,
+  getActiveWindowInfoSync,
   resolveWritingContextForSettings,
   type WindowInfo,
   type WritingContextType
@@ -190,14 +191,30 @@ export class DictationCoordinator {
   async start(): Promise<void> {
     if (this.session.state !== 'idle') return
 
-    // The pill must appear on keydown. Resolving the foreground window spawns
-    // PowerShell on Windows (up to ~1.5 s), so it runs concurrently instead of
-    // gating the pill and the microphone.
     const token = (this.contextToken += 1)
     this.capturedWindowContext = null
     this.windowContextConsumed = false
 
-    this.pillController?.startRecording({ targetApp: { name: DEFAULT_TARGET_APP_NAME } })
+    // Check if immediate synchronous context is available from cache or synchronous resolver
+    let initialContext: WindowInfo | null = null
+    try {
+      const immediate = this.resolveWindowContext()
+      if (immediate && !(immediate instanceof Promise)) {
+        initialContext = immediate
+      } else {
+        initialContext = getActiveWindowInfoSync()
+      }
+    } catch {
+      initialContext = null
+    }
+
+    if (initialContext) {
+      this.capturedWindowContext = initialContext
+    }
+
+    const name = initialContext ? targetAppName(initialContext) : DEFAULT_TARGET_APP_NAME
+    const icon = initialContext?.icon
+    this.pillController?.startRecording({ targetApp: { name, icon } })
     this.session.dispatch({ type: 'start' })
     this.onStateChange?.(this.session.state)
 
@@ -227,7 +244,10 @@ export class DictationCoordinator {
 
     this.capturedWindowContext = context
     if (context && (this.session.state === 'recording' || this.session.state === 'transcribing')) {
-      this.pillController?.updateTargetApp({ name: targetAppName(context) })
+      this.pillController?.updateTargetApp({
+        name: targetAppName(context),
+        icon: context.icon
+      })
     }
   }
 

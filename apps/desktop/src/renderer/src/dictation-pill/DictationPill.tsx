@@ -4,6 +4,7 @@ import { AudioBars } from './AudioBars'
 import { AppIcon } from './AppIcon'
 import { DictationProgressRing } from './DictationProgressRing'
 import { PillContentBlurSwap } from './PillContentBlurSwap'
+import { AgcNormalizer } from './audio-waveform'
 
 const DICTATION_BAR_WIDTH = 80
 const DICTATION_BAR_NO_ICON_WIDTH = 60
@@ -24,6 +25,9 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
   const [volumeHistory, setVolumeHistory] = useState<number[]>([])
   const volumeHistoryRef = useRef<number[]>([])
   const recordingStartTimeRef = useRef<number>(0)
+  const [recordingDurationMs, setRecordingDurationMs] = useState<number>(0)
+  const prevModeRef = useRef<string>(state.mode)
+  const agcRef = useRef<AgcNormalizer>(new AgcNormalizer())
 
   const streamRef = useRef<MediaStream | null>(null)
   const contextRef = useRef<AudioContext | null>(null)
@@ -42,6 +46,14 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
   }
 
   useEffect(() => {
+    if (prevModeRef.current === 'recording' && state.mode !== 'recording') {
+      const duration = Date.now() - recordingStartTimeRef.current
+      setRecordingDurationMs(Math.max(0, duration))
+    }
+    prevModeRef.current = state.mode
+  }, [state.mode])
+
+  useEffect(() => {
     const kestrel = window.kestrel
     if (!kestrel) return
 
@@ -50,6 +62,8 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
     })
 
     const unsubAudio = kestrel.onPillAudioWave?.((level) => {
+      // Ignore duplicate IPC wave events while local microphone capture is active
+      if (streamRef.current !== null) return
       pushVolume(level)
     })
 
@@ -88,6 +102,7 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
     }
 
     recordingStartTimeRef.current = Date.now()
+    agcRef.current.reset(recordingStartTimeRef.current)
     volumeHistoryRef.current = []
     setVolumeHistory([])
 
@@ -151,8 +166,8 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
             sum += channel[i] * channel[i]
           }
           const rms = Math.sqrt(sum / (channel.length / 4))
-          const level = Math.min(1, rms * 6)
-          pushVolume(level)
+          const volume = agcRef.current.normalizeVolume(rms)
+          pushVolume(volume)
 
           window.kestrel?.sendNotchAudio?.(new Float32Array(channel), context.sampleRate)
         }
@@ -289,7 +304,7 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
             <AudioBars
               volumeHistory={volumeHistory}
               barColor="#ffffff"
-              barCount={7}
+              barCount={5}
               direction="right-to-left"
               maxBarHeight={18}
               barWidth={2.5}
@@ -319,6 +334,7 @@ export function DictationPill({ initialState }: DictationPillProps): React.JSX.E
               strokeWidth={2.5}
               complete={state.mode === 'success'}
               insertionSucceeded={state.mode === 'success'}
+              recordingDurationMs={recordingDurationMs}
             />
           </div>
         </PillContentBlurSwap>

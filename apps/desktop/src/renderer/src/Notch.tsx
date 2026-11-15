@@ -35,6 +35,7 @@ import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GoogleDriveCard } from './components/GoogleDriveCard'
 import { NotionConfirmationCard } from './components/NotionConfirmationCard'
 import { deriveCardFromDecisionOrMessage } from './card-derivation'
+import { AgcNormalizer } from './dictation-pill/audio-waveform'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
   VoiceOsAnswer,
@@ -797,6 +798,7 @@ export default function Notch(): JSX.Element {
    * same shape: the audio callback writes here, the orb reads it each frame.
    */
   const audioLevelRef = useRef(0)
+  const agcRef = useRef<AgcNormalizer>(new AgcNormalizer())
   const soundGateRef = useRef<SoundGateState>(INITIAL_SOUND_GATE)
   const micAudioSentRef = useRef(false)
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -912,6 +914,7 @@ export default function Notch(): JSX.Element {
     const stopCaptureResources = (): void => {
       sessionRef.current = null
       audioLevelRef.current = 0
+      agcRef.current.reset()
       clearCountdown()
       endSoundGate()
 
@@ -943,6 +946,7 @@ export default function Notch(): JSX.Element {
 
     const startCapture = async (sessionId: number): Promise<void> => {
       try {
+        agcRef.current.reset()
         const stream = await acquire()
         if (sessionRef.current !== sessionId) {
           for (const track of stream.getTracks()) track.stop()
@@ -970,7 +974,8 @@ export default function Notch(): JSX.Element {
             sum += channel[i] * channel[i]
           }
           const rms = Math.sqrt(sum / (channel.length / 4))
-          audioLevelRef.current = Math.min(1, rms * 6)
+          const volume = agcRef.current.normalizeVolume(rms)
+          audioLevelRef.current = volume
 
           // First mic frame after the recording edge: play the open chirp.
           if (!micAudioSentRef.current) {

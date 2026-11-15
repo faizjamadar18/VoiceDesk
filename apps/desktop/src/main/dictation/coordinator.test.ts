@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DictationCoordinator,
   type AudioCaptureProvider,
@@ -8,6 +8,7 @@ import {
 import { FakePasteService } from './paste'
 import type { TranscriptionClient } from './transcription'
 import type { WindowInfo } from './window-context'
+import type { PillWindowController } from './pill-window'
 import {
   normalizeDictationSettings,
   type DictationSettings
@@ -168,5 +169,61 @@ describe('DictationCoordinator dictation settings', () => {
 
     expect(polished).toBe('Hello there')
     expect(paste.pasted).toEqual(['Hello there'])
+  })
+
+  it('passes target app name and icon to pillController and keeps transcribing state until showSuccess', async () => {
+    const paste = new FakePasteService()
+    const calls: string[] = []
+
+    const mockPillController = {
+      startRecording: vi.fn().mockImplementation((opt) => {
+        calls.push(`startRecording:${opt?.targetApp?.name}:${opt?.targetApp?.icon}`)
+      }),
+      updateTargetApp: vi.fn().mockImplementation((target) => {
+        calls.push(`updateTargetApp:${target?.name}:${target?.icon}`)
+      }),
+      startTranscribing: vi.fn().mockImplementation(() => {
+        calls.push('startTranscribing')
+      }),
+      showSuccess: vi.fn().mockImplementation(() => {
+        calls.push('showSuccess')
+      }),
+      showError: vi.fn(),
+      setAudioLevel: vi.fn()
+    } as unknown as PillWindowController
+
+    const windowInfo: WindowInfo = {
+      appName: 'Slack',
+      icon: 'data:image/png;base64,slack_icon'
+    }
+
+    const coordinator = new DictationCoordinator({
+      audioCapture: fakeAudioCapture(),
+      transcriptionClient: fakeTranscription('testing pill flow'),
+      pasteService: paste,
+      resolveWindowContext: () => windowInfo,
+      pillController: mockPillController
+    })
+
+    await coordinator.start()
+    expect(mockPillController.startRecording).toHaveBeenCalledWith({
+      targetApp: { name: 'Slack', icon: 'data:image/png;base64,slack_icon' }
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockPillController.updateTargetApp).toHaveBeenCalledWith({
+      name: 'Slack',
+      icon: 'data:image/png;base64,slack_icon'
+    })
+
+    await coordinator.stop()
+    expect(mockPillController.startTranscribing).toHaveBeenCalled()
+    expect(mockPillController.showSuccess).toHaveBeenCalled()
+
+    // Ensure startTranscribing happened before paste and showSuccess happened after paste
+    const transcribingIdx = calls.indexOf('startTranscribing')
+    const successIdx = calls.indexOf('showSuccess')
+    expect(transcribingIdx).toBeGreaterThan(-1)
+    expect(successIdx).toBeGreaterThan(transcribingIdx)
   })
 })

@@ -1,10 +1,10 @@
-import { execFile } from 'node:child_process'
 import type {
   DictationSettings,
   WritingContextType,
   WritingStructure
 } from '../../shared/dictation'
 import { WRITING_CONTEXT_TYPES } from '../../shared/dictation'
+import { getActiveWindowService } from './active-window-service'
 
 export type { WritingContextType, WritingStructure }
 
@@ -13,6 +13,7 @@ export interface WindowInfo {
   appName?: string
   windowTitle?: string
   url?: string
+  icon?: string
 }
 
 export const DEFAULT_STRUCTURES: Record<WritingContextType, WritingStructure> = {
@@ -349,54 +350,22 @@ export function resolveWritingContextForSettings(
 }
 
 /**
- * On Windows, attempts to fetch the foreground window process and title via PowerShell.
- * Returns null if unavailable or non-Windows.
+ * Returns synchronous active window info from the active-window-listener cache
+ * with 0ms latency.
  */
-export async function getActiveWindowInfo(timeoutMs = 1500): Promise<WindowInfo | null> {
-  if (process.platform !== 'win32') {
-    return null
+export function getActiveWindowInfoSync(): WindowInfo | null {
+  return getActiveWindowService().getActiveWindow()
+}
+
+/**
+ * Returns active window info with 0ms latency from the active window listener cache,
+ * or performs a fast one-shot query fallback if the monitor is not yet primed.
+ */
+export async function getActiveWindowInfo(timeoutMs = 500): Promise<WindowInfo | null> {
+  const cached = getActiveWindowService().getActiveWindow()
+  if (cached) {
+    return cached
   }
 
-  return new Promise((resolve) => {
-    const script = `
-$w = Add-Type -MemberDefinition '
-[DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-[DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
-[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-' -Name "Win32GetWindow" -Namespace Win32Functions -PassThru
-
-$hwnd = $w::GetForegroundWindow()
-if ($hwnd -ne [IntPtr]::Zero) {
-  $sb = New-Object System.Text.StringBuilder 256
-  $null = $w::GetWindowText($hwnd, $sb, $sb.Capacity)
-  $pidVal = 0
-  $null = $w::GetWindowThreadProcessId($hwnd, [ref]$pidVal)
-  $p = Get-Process -Id $pidVal -ErrorAction SilentlyContinue
-  @{
-    processName = if ($p) { $p.ProcessName } else { "" }
-    windowTitle = $sb.ToString()
-  } | ConvertTo-Json -Compress
-}
-`
-    execFile(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', script],
-      { timeout: timeoutMs, windowsHide: true },
-      (err, stdout) => {
-        if (err || !stdout.trim()) {
-          resolve(null)
-          return
-        }
-        try {
-          const parsed = JSON.parse(stdout.trim()) as { processName?: string; windowTitle?: string }
-          resolve({
-            processName: parsed.processName,
-            windowTitle: parsed.windowTitle
-          })
-        } catch {
-          resolve(null)
-        }
-      }
-    )
-  })
+  return getActiveWindowService().queryActiveWindowOnce(timeoutMs)
 }
