@@ -24,7 +24,9 @@ export interface AppActionItem {
   id: string
   name: string
   description: string
-  asksFirst: boolean
+  asksFirst?: boolean
+  confirmable?: boolean
+  pinned?: boolean
 }
 
 export type AppsTabMode = 'official' | 'custom'

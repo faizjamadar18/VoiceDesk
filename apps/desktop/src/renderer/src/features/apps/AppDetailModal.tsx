@@ -12,6 +12,7 @@ export interface AppDetailModalProps {
   onToggleConnect?: (id: string, connected: boolean) => void
   onToggleActionPermission?: (appId: string, actionId: string, asksFirst: boolean) => void
   isDarkMode?: boolean
+  portal?: boolean
 }
 
 function CloseIcon({ size = 18 }: { size?: number }): JSX.Element {
@@ -96,7 +97,8 @@ export function AppDetailModal({
   onClose,
   onToggleConnect,
   onToggleActionPermission,
-  isDarkMode: propIsDarkMode
+  isDarkMode: propIsDarkMode,
+  portal = true
 }: AppDetailModalProps): JSX.Element | null {
   const { isDarkMode: contextIsDarkMode } = useSystemTheme()
   const isDarkMode = propIsDarkMode ?? contextIsDarkMode
@@ -112,7 +114,9 @@ export function AppDetailModal({
     if (!app) return
     const initialPerms: Record<string, boolean> = {}
     for (const action of actions) {
-      initialPerms[action.id] = action.asksFirst
+      if (action.confirmable) {
+        initialPerms[action.id] = action.asksFirst ?? true
+      }
     }
     setPermissions(initialPerms)
   }, [app, actions])
@@ -253,7 +257,8 @@ export function AppDetailModal({
 
               <div className="app-actions-card">
                 {actions.map((action) => {
-                  const asksFirst = permissions[action.id] ?? action.asksFirst
+                  const isConfirmable = Boolean(action.confirmable)
+                  const asksFirst = permissions[action.id] ?? action.asksFirst ?? true
 
                   return (
                     <div key={action.id} className="app-action-row">
@@ -264,22 +269,25 @@ export function AppDetailModal({
                         )}
                       </div>
 
-                      <button
-                        type="button"
-                        aria-pressed={asksFirst}
-                        aria-label={`${action.name}: ${asksFirst ? 'Ask permission' : "Don't ask"}`}
-                        onClick={() => handleTogglePermission(action.id, asksFirst)}
-                        className={`app-action-pill ${
-                          asksFirst ? 'app-action-pill--active' : 'app-action-pill--inactive'
-                        }`}
-                      >
-                        {asksFirst ? (
-                          <LockIcon size={11} />
-                        ) : (
-                          <LockOpenIcon size={11} />
-                        )}
-                        <span>{asksFirst ? 'Ask permission' : "Don't ask"}</span>
-                      </button>
+                      {isConfirmable && (
+                        <button
+                          type="button"
+                          disabled={action.pinned}
+                          aria-pressed={asksFirst}
+                          aria-label={`${action.name}: ${asksFirst ? 'Ask permission' : "Don't ask"}`}
+                          onClick={() => handleTogglePermission(action.id, asksFirst)}
+                          className={`app-action-pill ${
+                            asksFirst ? 'app-action-pill--active' : 'app-action-pill--inactive'
+                          }`}
+                        >
+                          {asksFirst ? (
+                            <LockIcon size={11} />
+                          ) : (
+                            <LockOpenIcon size={11} />
+                          )}
+                          <span>{asksFirst ? 'Ask permission' : "Don't ask"}</span>
+                        </button>
+                      )}
                     </div>
                   )
                 })}
@@ -291,7 +299,7 @@ export function AppDetailModal({
     </div>
   )
 
-  if (typeof document !== 'undefined') {
+  if (portal && typeof document !== 'undefined' && document.body) {
     return createPortal(modalElement, document.body)
   }
 
