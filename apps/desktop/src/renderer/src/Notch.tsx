@@ -1134,10 +1134,6 @@ export default function Notch(): JSX.Element {
       }
     })
 
-    const offPartial = api.onNotchPartial((text) => {
-      setTranscript(text)
-    })
-
     const offHide = api.onNotchHide(() => {
       dismissAnimator.cancel()
       setIsDismissing(false)
@@ -1218,7 +1214,6 @@ export default function Notch(): JSX.Element {
       offStop()
       offCancel()
       offState()
-      offPartial()
       offHide()
       offRestore?.()
       teardown(false)

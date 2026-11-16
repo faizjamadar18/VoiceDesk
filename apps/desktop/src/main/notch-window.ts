@@ -103,7 +103,6 @@ export class NotchWindowPresenter implements NotchPresenter {
   private ready = false
   private pendingStart: number | null = null
   private lastState: NotchStatePayload | null = null
-  private lastPartial = ''
   private inputEnabled = false
   private speechActive = false
   private contentHeight = NOTCH_HEIGHT
@@ -141,7 +140,6 @@ export class NotchWindowPresenter implements NotchPresenter {
       this.pendingStart = null
     }
     if (this.lastState) this.send(IPC.notchState, this.lastState)
-    if (this.lastPartial) this.send(IPC.notchPartial, this.lastPartial)
   }
 
   show(): void {
@@ -179,7 +177,6 @@ export class NotchWindowPresenter implements NotchPresenter {
     this.contentHeight = NOTCH_HEIGHT
     this.applyBounds()
     this.lastState = null
-    this.lastPartial = ''
     this.send(IPC.notchHide)
     if (this.win.isFocused()) {
       this.win.blur()
@@ -310,7 +307,6 @@ export class NotchWindowPresenter implements NotchPresenter {
   }
 
   startSession(sessionId: number): void {
-    this.lastPartial = ''
     this.lastState = null
     this.inputEnabled = false
     this.speechActive = false
@@ -329,7 +325,6 @@ export class NotchWindowPresenter implements NotchPresenter {
   }
 
   cancelSession(): void {
-    this.lastPartial = ''
     this.lastState = null
     this.inputEnabled = false
     this.speechActive = false
@@ -342,8 +337,6 @@ export class NotchWindowPresenter implements NotchPresenter {
 
   update(state: NotchStatePayload): void {
     this.lastState = state
-    if (state.transcript) this.lastPartial = state.transcript
-
     this.send(IPC.notchState, state)
     this.applyInputEnabled(this.shouldEnableInput(state))
   }
@@ -374,11 +367,6 @@ export class NotchWindowPresenter implements NotchPresenter {
     } else {
       this.clearInteraction()
     }
-  }
-
-  partial(text: string): void {
-    this.lastPartial = text
-    this.send(IPC.notchPartial, text)
   }
 
   dispose(): void {

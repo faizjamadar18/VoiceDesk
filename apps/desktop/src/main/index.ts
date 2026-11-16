@@ -848,6 +848,7 @@ function createNotch(): void {
 
   const nativePaste = new NativePasteService()
   dictationAudioCapture = new NotchAudioCaptureProvider()
+  const transcriptPolisher = createTranscriptPolisher() ?? undefined
   getActiveWindowService().start()
 
   dictationCoordinator = new DictationCoordinator({
@@ -855,7 +856,7 @@ function createNotch(): void {
     transcriptionClient: new NemoTranscriptionClient({ getTranscriber: () => transcriber }),
     pasteService: nativePaste,
     getDictationSettings: () => settings.dictation,
-    polishLlm: createTranscriptPolisher() ?? undefined,
+    polishLlm: transcriptPolisher,
     pillController: pillController ?? undefined,
     onTranscript: (raw, polished, meta) => {
       console.log(
@@ -876,6 +877,8 @@ function createNotch(): void {
     screen: screenService,
     dictationCoordinator,
     dictationCapture: dictationAudioCapture,
+    polishLlm: transcriptPolisher,
+    getDictationSettings: () => settings.dictation,
     onActivity: (activity: NotchActivity) => sendToMain(IPC.notchActivity, activity),
     onTurnComplete: () => {
       pushToTalk?.reset()

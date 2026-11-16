@@ -9,6 +9,8 @@ import type {
 import type { ActionClient } from './action-client'
 import type { PasteService } from './dictation/paste'
 import type { LiveTranscriber, LiveTurn, LiveTurnHandlers } from './live-asr'
+import type { PolishRequest, TranscriptPolisher } from './dictation/llm-polish'
+import { DEFAULT_DICTATION_SETTINGS, type DictationSettings } from '../shared/dictation'
 import type { ScreenFrame, ScreenService, ScreenTurn } from './screen-service'
 import {
   NotchController,
@@ -26,7 +28,6 @@ class FakePresenter implements NotchPresenter {
   cancels = 0
   states: { phase: string; transcript: string | null; message: string | null }[] = []
   payloads: NotchStatePayload[] = []
-  partials: string[] = []
 
   show(): void {
     this.shown += 1
@@ -59,10 +60,6 @@ class FakePresenter implements NotchPresenter {
   update(state: NotchStatePayload): void {
     this.states.push({ phase: state.phase, transcript: state.transcript, message: state.message })
     this.payloads.push(structuredClone(state))
-  }
-
-  partial(text: string): void {
-    this.partials.push(text)
   }
 }
 
@@ -233,6 +230,8 @@ class FakeScreenService implements ScreenService {
 function setup(options: {
   screen?: FakeScreenService
   screenResultVisibleMs?: number
+  polishLlm?: TranscriptPolisher
+  dictation?: DictationSettings
 } = {}) {
   const presenter = new FakePresenter()
   const transcriber = new FakeTranscriber()
@@ -249,6 +248,8 @@ function setup(options: {
     fileService: files,
     screen: options.screen,
     screenResultVisibleMs: options.screenResultVisibleMs,
+    polishLlm: options.polishLlm,
+    getDictationSettings: () => options.dictation ?? DEFAULT_DICTATION_SETTINGS,
     onActivity: (activity) => activities.push(activity.phase),
     onTurnComplete: () => {
       turnCompletes += 1
@@ -423,17 +424,71 @@ describe('NotchController', () => {
     controller.dispose()
   })
 
-  it('streams partial transcripts while listening', () => {
+  it('shows no live transcript while listening and a transcribing status until the final text', async () => {
     const { presenter, controller } = setup()
     controller.start()
     controller.pushAudio(speech(1), 16_000)
 
-    expect(presenter.partials).toEqual(['open'])
+    expect(presenter.states.every((state) => state.transcript === null)).toBe(true)
     expect(presenter.states.at(-1)).toEqual({
       phase: 'listening',
       transcript: null,
       message: null
     })
+
+    controller.stop()
+    expect(presenter.states.at(-1)).toEqual({
+      phase: 'processing',
+      transcript: null,
+      message: 'Transcribing...'
+    })
+
+    controller.dispose()
+  })
+
+  it('polishes the final text for the notch but sends the raw transcript to the action', async () => {
+    const requests: PolishRequest[] = []
+    const { presenter, controller, actionClient } = setup({
+      polishLlm: {
+        async polish(request) {
+          requests.push(request)
+          return 'Open notepad, please'
+        }
+      }
+    })
+
+    controller.start()
+    controller.pushAudio(speech(1), 16_000)
+    controller.stop()
+    controller.audioEnded()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(actionClient.transcripts).toEqual(['open notepad'])
+    expect(requests.map((request) => request.text)).toEqual(['open notepad'])
+    const acting = presenter.payloads.find((payload) => payload.phase === 'acting')
+    expect(acting?.transcript).toBe('Open notepad, please')
+    expect(presenter.states.at(-1)?.transcript).toBe('Open notepad, please')
+
+    controller.dispose()
+  })
+
+  it('falls back to the rule polish when the LLM polisher fails', async () => {
+    const { presenter, controller, actionClient } = setup({
+      polishLlm: {
+        async polish() {
+          throw new Error('polish is unavailable')
+        }
+      }
+    })
+
+    controller.start()
+    controller.pushAudio(speech(1), 16_000)
+    controller.stop()
+    controller.audioEnded()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(actionClient.transcripts).toEqual(['open notepad'])
+    expect(presenter.states.at(-1)?.transcript).toBe('Open notepad')
 
     controller.dispose()
   })
@@ -453,7 +508,7 @@ describe('NotchController', () => {
     expect(actionClient.transcripts).toEqual(['open notepad'])
     expect(presenter.states.at(-1)).toEqual({
       phase: 'result',
-      transcript: 'open notepad',
+      transcript: 'Open notepad',
       message: 'Opening Notepad.'
     })
     expect(presenter.hidden).toBe(0)
@@ -512,7 +567,7 @@ describe('NotchController', () => {
 
     expect(presenter.states.at(-1)).toEqual({
       phase: 'result',
-      transcript: 'open notepad',
+      transcript: 'Open notepad',
       message: 'I did not catch a command.'
     })
   })
@@ -534,7 +589,7 @@ describe('NotchController', () => {
 
     expect(presenter.states.at(-1)).toEqual({
       phase: 'error',
-      transcript: 'open notepad',
+      transcript: 'Open notepad',
       message: 'Windows Search is not available on this PC.'
     })
   })
@@ -1216,7 +1271,7 @@ describe('NotchController screen questions', () => {
     expect(result?.phase).toBe('result')
     expect(result?.message).toBe(context.actionClient.screenAnswer)
     expect(result?.spoken).toBe(context.actionClient.screenAnswer)
-    expect(result?.transcript).toBe('what does this error mean?')
+    expect(result?.transcript).toBe('What does this error mean?')
   })
 
   it('uses "What is this?" for a marked hold with no speech', async () => {
@@ -1607,8 +1662,7 @@ describe('NotchController escape & cancel', () => {
       startSession: () => undefined,
       stopSession: () => undefined,
       cancelSession: () => undefined,
-      update: () => undefined,
-      partial: () => undefined
+      update: () => undefined
     }
 
     const controller = new NotchController({

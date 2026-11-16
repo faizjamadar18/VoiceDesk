@@ -14,6 +14,9 @@ import type {
 import type { ActionClient } from './action-client'
 import type { PasteService } from './dictation/paste'
 import type { DictationCoordinator, NotchAudioCaptureProvider } from './dictation/coordinator'
+import type { TranscriptPolisher } from './dictation/llm-polish'
+import { polishTranscript } from './dictation/polish'
+import { DEFAULT_POLISH_STYLE, type DictationSettings } from '../shared/dictation'
 import { normalizeTranscript, type LiveTranscriber, type LiveTurn } from './live-asr'
 
 import { isScreenQuestion } from './screen-intent'
@@ -26,7 +29,6 @@ export interface NotchPresenter {
   stopSession(): void
   cancelSession(): void
   update(state: NotchStatePayload): void
-  partial(text: string): void
   setSpeechActive?(active: boolean): void
   dismissWithAnimation?(): void
   reposition?(targetDisplay?: unknown): void
@@ -68,6 +70,10 @@ export interface NotchControllerOptions {
   screen?: ScreenService
   dictationCoordinator?: DictationCoordinator
   dictationCapture?: NotchAudioCaptureProvider
+  /** Groq cleanup client, absent when no key is configured. */
+  polishLlm?: TranscriptPolisher
+  /** Read per final transcript so display polish follows the live setting. */
+  getDictationSettings?: () => DictationSettings
   onActivity?: (activity: NotchActivity) => void
 
   onTurnComplete?: () => void
@@ -107,7 +113,6 @@ interface ActiveSession {
   turn: LiveTurn | null
   sampleRate: number
   totalSamples: number
-  lastTranscript: string
   stopping: boolean
   finalizing: boolean
   endTimer: NodeJS.Timeout | null
@@ -162,9 +167,9 @@ function resultLabel(paths: string[]): string {
 }
 
 /**
- * Orchestrates one push-to-talk turn: notch visibility, streaming partials, the
- * final local transcription, and the backend action. Audio is pushed straight
- * to the local engine and dropped when the turn ends.
+ * Orchestrates one push-to-talk turn: notch visibility, the final local
+ * transcription, and the backend action. Audio is pushed straight to the local
+ * engine and dropped when the turn ends; only the final text reaches the notch.
  */
 export class NotchController {
   private readonly options: NotchControllerOptions
@@ -251,7 +256,6 @@ export class NotchController {
       turn: null,
       sampleRate: 48_000,
       totalSamples: 0,
-      lastTranscript: '',
       stopping: false,
       finalizing: false,
       endTimer: null,
@@ -268,9 +272,9 @@ export class NotchController {
     const transcriber = this.options.getTranscriber()
     if (transcriber) {
       try {
-        session.turn = transcriber.startTurn({
-          onPartial: (text) => this.handlePartial(session, text)
-        })
+        // Audio still streams into the ASR for low latency on release, but no
+        // live hypothesis is shown: the notch waits for the final transcript.
+        session.turn = transcriber.startTurn()
       } catch (error) {
         session.turnError = error instanceof Error ? error : new Error(String(error))
         console.error('[notch] could not start the speech stream', session.turnError)
@@ -315,7 +319,7 @@ export class NotchController {
 
     session.stopping = true
     this.options.presenter.stopSession()
-    this.emit('processing', session.lastTranscript || null, 'Transcribing locally…')
+    this.emit('processing', null, 'Transcribing...')
     this.finishScreen(session)
     console.log(`[notch] stop samples=${session.totalSamples} rate=${session.sampleRate}`)
 
@@ -346,7 +350,7 @@ export class NotchController {
       this.options.onTurnComplete?.()
       return
     }
-    void this.fail(session, message, session.lastTranscript || null)
+    void this.fail(session, message)
   }
 
   /**
@@ -686,15 +690,40 @@ export class NotchController {
     return null
   }
 
-  private handlePartial(session: ActiveSession, text: string): void {
-    if (this.session !== session || session.stopping || session.finalizing) return
-    const clean = normalizeTranscript(text)
-    if (!clean || clean === session.lastTranscript) return
+  /**
+   * Polish the final transcript for the notch only. The agent still receives
+   * the raw text. A missing or failing LLM client degrades to the rule pass,
+   * which itself falls back to the raw text rather than blocking the turn.
+   */
+  private async polishForDisplay(raw: string): Promise<string> {
+    if (!raw.trim()) return raw
 
-    session.lastTranscript = clean
-    this.options.presenter.partial(clean)
-    this.touch('listening', clean, null)
-    console.log(`[notch] partial chars=${clean.length}`)
+    const settings = this.options.getDictationSettings?.()
+    const style = settings?.polishStyle ?? DEFAULT_POLISH_STYLE
+    // Taught spellings reach the echo too, but personal replacements stay out:
+    // a replacement can expand into a whole paragraph the notch must not show.
+    const dictionary = settings?.spellingEntries
+    let draft = raw
+
+    if (style !== 'none' && this.options.polishLlm) {
+      try {
+        const candidate = await this.options.polishLlm.polish({
+          text: raw,
+          contextType: 'other',
+          style,
+          ...(dictionary ? { dictionary } : {})
+        })
+        if (candidate && candidate.trim()) draft = candidate
+      } catch {
+        // Keep the raw text; the rule layer below still runs.
+      }
+    }
+
+    const polished = polishTranscript(draft, {
+      style,
+      ...(dictionary ? { dictionary } : {})
+    })
+    return polished.trim() ? polished : raw
   }
 
   private async finalize(session: ActiveSession): Promise<void> {
@@ -730,11 +759,7 @@ export class NotchController {
         return
       }
       if (!turn) {
-        await this.fail(
-          session,
-          'Speech recognition is not ready yet.',
-          session.lastTranscript || null
-        )
+        await this.fail(session, 'Speech recognition is not ready yet.')
         return
       }
       if (session.totalSamples === 0) {
@@ -767,21 +792,23 @@ export class NotchController {
       return
     }
 
-    session.lastTranscript = transcript
     console.log(`[notch] final chars=${transcript.length}`)
+    // Display only. The action client below still receives the raw transcript.
+    const displayTranscript = await this.polishForDisplay(transcript)
+    if (this.session !== session) return
 
     if (marked) {
-      await this.finishMarkedScreen(session, transcript, screenTurn)
+      await this.finishMarkedScreen(session, transcript, displayTranscript, screenTurn)
       return
     }
 
     if (this.options.screen && isScreenQuestion(transcript)) {
-      await this.captureAndAskScreen(session, transcript)
+      await this.captureAndAskScreen(session, transcript, displayTranscript)
       return
     }
 
     this.acting = true
-    this.emit('acting', transcript, 'Working on it…')
+    this.emit('acting', displayTranscript, 'Working on it…')
 
     try {
       const response: ActionResponse = await this.options.actionClient.act(transcript)
@@ -799,14 +826,14 @@ export class NotchController {
         await this.fail(
           session,
           response.message,
-          transcript,
+          displayTranscript,
           response.spokenResponse || null
         )
         return
       }
 
       if (response.action === 'look_at_screen') {
-        await this.captureAndAskScreen(session, transcript)
+        await this.captureAndAskScreen(session, transcript, displayTranscript)
         return
       }
 
@@ -816,9 +843,9 @@ export class NotchController {
       const decision = this.pendingDecision(response)
 
       this.session = null
-      this.lastTranscript = transcript
+      this.lastTranscript = displayTranscript
       this.decision = decision
-      this.emit('result', transcript, response.message, response.status, {
+      this.emit('result', displayTranscript, response.message, response.status, {
         spoken: response.spokenResponse || response.message,
         card: response.card ?? null,
         results: fileResults?.results ?? null,
@@ -856,7 +883,7 @@ export class NotchController {
         this.scheduleHide(this.options.resultVisibleMs ?? 2_000)
       }
     } catch (error) {
-      await this.fail(session, `That didn't work: ${errorMessage(error)}`, transcript)
+      await this.fail(session, `That didn't work: ${errorMessage(error)}`, displayTranscript)
     } finally {
       this.acting = false
     }
@@ -874,6 +901,7 @@ export class NotchController {
   private async finishMarkedScreen(
     session: ActiveSession,
     transcript: string,
+    displayTranscript: string,
     screenTurn: ScreenTurn | null
   ): Promise<void> {
     const frame = screenTurn?.frame
@@ -881,12 +909,12 @@ export class NotchController {
       const detail = screenTurn?.error
         ? `Couldn't read your screen: ${screenTurn.error}`
         : "Couldn't read your screen. Try again."
-      await this.fail(session, detail, transcript || null)
+      await this.fail(session, detail, displayTranscript || null)
       return
     }
 
     const question = transcript.trim() || DEFAULT_SCREEN_QUESTION
-    await this.askScreen(session, question, {
+    await this.askScreen(session, displayTranscript.trim() || DEFAULT_SCREEN_QUESTION, {
       question,
       imageBase64: frame.imageBase64,
       marked: true
@@ -895,11 +923,12 @@ export class NotchController {
 
   private async captureAndAskScreen(
     session: ActiveSession,
-    transcript: string
+    transcript: string,
+    displayTranscript: string
   ): Promise<void> {
     const screen = this.options.screen
     if (!screen) {
-      await this.fail(session, 'Screen reading is not available.', transcript)
+      await this.fail(session, 'Screen reading is not available.', displayTranscript)
       return
     }
 
@@ -910,14 +939,14 @@ export class NotchController {
       await this.fail(
         session,
         `Couldn't read your screen: ${errorMessage(error)}`,
-        transcript
+        displayTranscript
       )
       return
     }
     if (this.session !== session) return
 
     const question = transcript.trim() || DEFAULT_SCREEN_QUESTION
-    await this.askScreen(session, question, {
+    await this.askScreen(session, displayTranscript.trim() || DEFAULT_SCREEN_QUESTION, {
       question,
       imageBase64: frame.imageBase64,
       marked: false
@@ -1076,22 +1105,6 @@ export class NotchController {
     }
     this.options.presenter.update(state)
     this.options.onActivity?.({ ...state })
-  }
-
-  /** Refresh the activity log without re-sending a full state transition. */
-  private touch(
-    phase: NotchPhase,
-    transcript: string | null,
-    message: string | null,
-    status?: string | null
-  ): void {
-    this.options.onActivity?.({
-      phase,
-      status: status ?? null,
-      transcript,
-      message,
-      at: this.options.now?.() ?? Date.now()
-    })
   }
 
   private showPresenter(): void {

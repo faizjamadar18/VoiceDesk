@@ -58,7 +58,6 @@ export const IPC = {
   notchStop: 'kestrel:notch-stop',
   notchCancel: 'kestrel:notch-cancel',
   notchState: 'kestrel:notch-state',
-  notchPartial: 'kestrel:notch-partial',
   notchAudio: 'kestrel:notch-audio',
   notchAudioEnd: 'kestrel:notch-audio-end',
   notchAudioError: 'kestrel:notch-audio-error',
@@ -611,7 +610,6 @@ export interface KestrelApi {
   onNotchStop: (callback: () => void) => () => void
   onNotchCancel: (callback: () => void) => () => void
   onNotchState: (callback: (state: NotchStatePayload) => void) => () => void
-  onNotchPartial: (callback: (text: string) => void) => () => void
   onNotchActivity: (callback: (activity: NotchActivity) => void) => () => void
   sendNotchAudio: (samples: Float32Array, sampleRate: number) => void
   sendNotchAudioEnd: () => void

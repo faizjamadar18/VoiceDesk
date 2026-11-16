@@ -60,7 +60,6 @@ const api: KestrelApi = {
   onNotchStop: (callback) => subscribeEvent(IPC.notchStop, callback),
   onNotchCancel: (callback) => subscribeEvent(IPC.notchCancel, callback),
   onNotchState: (callback) => subscribe<NotchStatePayload>(IPC.notchState, callback),
-  onNotchPartial: (callback) => subscribe<string>(IPC.notchPartial, callback),
   onNotchActivity: (callback) => subscribe<NotchActivity>(IPC.notchActivity, callback),
   sendNotchAudio: (samples, sampleRate) => {
     const payload: NotchAudioPayload = { samples, sampleRate }
