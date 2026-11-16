@@ -61,6 +61,26 @@ export const COMPOSIO_PROVIDERS: readonly ComposioProviderSpec[] = [
       'NOTION_CREATE_NOTION_PAGE'
     ],
     connectHint: 'Connect Notion to find, read, and create pages by voice.'
+  },
+  {
+    id: 'slack',
+    label: 'Slack',
+    toolkit: 'slack',
+    tools: [
+      'SLACK_SEND_MESSAGE',
+      'SLACK_SCHEDULE_MESSAGE',
+      'SLACK_FETCH_CONVERSATION_HISTORY',
+      'SLACK_FETCH_MESSAGE_THREAD_FROM_A_CONVERSATION',
+      'SLACK_FIND_CHANNELS',
+      'SLACK_LIST_ALL_CHANNELS',
+      'SLACK_FIND_USERS',
+      'SLACK_FIND_USER_BY_EMAIL_ADDRESS',
+      'SLACK_OPEN_DM',
+      'SLACK_CREATE_A_REMINDER',
+      'SLACK_RETRIEVE_DETAILED_USER_INFORMATION'
+    ],
+    connectHint:
+      'Connect Slack to send, schedule, and read messages by voice.'
   }
 ]
 

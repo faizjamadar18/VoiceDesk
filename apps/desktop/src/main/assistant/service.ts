@@ -136,6 +136,8 @@ export interface AssistantServiceOptions {
   history?: HistoryStore
   /** Called with each saved turn, so a host can mirror it. */
   onHistoryRecorded?: (record: HistoryRecord) => void
+  /** Optional resolver for the currently active window's app name and icon. */
+  getActiveAppContext?: () => { appName?: string | null; appIcon?: string | null }
 }
 
 export interface HealthResponse {
@@ -375,7 +377,17 @@ export class AssistantService {
       response.action === 'answer' || response.action === 'none'
         ? null
         : response.action
-    const saved = this.history?.record({ prompt, reply, tool })
+    const appContext = this.options.getActiveAppContext?.()
+    const appName = appContext?.appName || 'VoiceOS'
+    const appIcon = appContext?.appIcon ?? null
+    const saved = this.history?.record({
+      prompt,
+      reply,
+      tool,
+      mode: 'agent',
+      appName,
+      appIcon
+    })
     if (saved) {
       this.options.onHistoryRecorded?.(saved)
     }
@@ -600,10 +612,16 @@ export class AssistantService {
     }
 
     const cleaned = answer.trim()
+    const appContext = this.options.getActiveAppContext?.()
+    const appName = appContext?.appName || 'VoiceOS'
+    const appIcon = appContext?.appIcon ?? null
     const saved = this.history?.record({
       prompt: input.question.trim(),
       reply: cleaned,
-      tool: 'look_at_screen'
+      tool: 'look_at_screen',
+      mode: 'agent',
+      appName,
+      appIcon
     })
     if (saved) {
       this.options.onHistoryRecorded?.(saved)

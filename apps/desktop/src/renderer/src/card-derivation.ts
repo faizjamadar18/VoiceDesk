@@ -1,361 +1,266 @@
 import type {
   NotchCalendarCard,
-  NotchEmailComposeCard,
+  NotchCard,
+  NotchDecision,
   NotchDriveCard,
-  NotchDriveFormat,
+  NotchEmailComposeCard,
+  NotchEmailListCard,
+  NotchEmailReplyCard,
   NotchNotionCard,
-  NotchDecision
+  NotchPhase,
+  NotchSlackCard,
+  NotchWeatherCard
 } from '../../shared/types'
 
-export interface CardDerivationInput {
-  message?: string | null
-  decision?: NotchDecision | null
-  transcript?: string | null
-  now?: () => Date
+/** Kinds the notch can draw straight from a backend `card` event. */
+const PAYLOAD_CARD_KINDS: ReadonlySet<string> = new Set([
+  'weather',
+  'email_list',
+  'email_compose',
+  'email_reply',
+  'calendar_event',
+  'drive_file',
+  'notion_page',
+  'slack_message'
+])
+
+/** Kinds that show a result and ask for nothing. */
+const DISPLAY_CARD_KINDS: ReadonlySet<string> = new Set(['weather', 'email_list'])
+
+/** Kinds whose card is the surface for a write waiting on the user's choice. */
+const APPROVAL_CARD_KINDS: ReadonlySet<string> = new Set([
+  'email_compose',
+  'calendar_event',
+  'drive_file',
+  'notion_page',
+  'slack_message'
+])
+
+/** How many answered plan ids a single answer keeps around. */
+const ANSWERED_PLAN_LIMIT = 8
+
+function cardKind(card: NotchCard | null): string {
+  if (card === null) return ''
+  const kind = (card as { kind?: unknown }).kind
+  return typeof kind === 'string' ? kind : ''
 }
 
-export interface DerivedCards {
-  calendarCard: NotchCalendarCard | null
-  emailComposeCard: NotchEmailComposeCard | null
+/** True when this is one of the cards the backend is allowed to mount. */
+export function isKnownPayloadCard(card: NotchCard | null): boolean {
+  return PAYLOAD_CARD_KINDS.has(cardKind(card))
+}
+
+/** True when the card only shows a result: weather and the email list. */
+function isDisplayOnlyCard(card: NotchCard): boolean {
+  return DISPLAY_CARD_KINDS.has(cardKind(card))
+}
+
+/** True when the card is the approval surface for a write. */
+function isApprovalCard(card: NotchCard | null): card is NotchCard {
+  return card !== null && APPROVAL_CARD_KINDS.has(cardKind(card))
+}
+
+/** The structured state the notch renders from. */
+export interface NotchCardState {
+  /** The structured card event from the backend, or null. */
+  card: NotchCard | null
+  /** The write waiting on the user, or null. Kestrel carries at most one. */
+  decision: NotchDecision | null
+  /** Plan ids the user already answered on this turn, oldest first. */
+  answeredPlanIds: readonly string[]
+  /** The result message, shown only when no card owns the body. */
+  message: string | null
+  /** The notch phase the state belongs to. */
+  phase: NotchPhase
+}
+
+/** What owns the notch body. Exactly one of these is ever current. */
+export type NotchCardSource = 'payload' | 'decision' | 'text' | 'none'
+
+/** The one thing the notch body may show. */
+export interface NotchCardResolution {
+  source: NotchCardSource
+  weather: NotchWeatherCard | null
+  emailList: NotchEmailListCard | null
+  emailCompose: NotchEmailComposeCard | null
+  emailReply: NotchEmailReplyCard | null
+  calendarEvent: NotchCalendarCard | null
   driveCard: NotchDriveCard | null
-  notionCard?: NotchNotionCard | null
+  notionCard: NotchNotionCard | null
+  slackCard: NotchSlackCard | null
+  /** The pending write when the body is a decision surface, else null. */
+  decision: NotchDecision | null
+  /** The plain answer text; always empty while a card owns the body. */
+  text: string
+  /** True when a card other than weather / the email list owns the body. */
+  hasPreviewModel: boolean
+  /** True when any card owns the body, so the answer bubble must not render. */
+  showsCard: boolean
 }
 
-const SCHEDULE_PATTERN =
-  /(?:Schedule|Set\s+up|Create)\s+"([^"]+)"(?:\s+for\s+([^?]+))?\?\s*Approval needed/i
-const MOVE_PATTERN =
-  /(?:Move|Reschedule)\s+"([^"]+)"(?:\s+to\s+([^?]+))?\?\s*Approval needed/i
-const CANCEL_PATTERN = /(?:Cancel)\s+"([^"]+)"\?\s*Approval needed/i
-
-const SEND_EMAIL_PATTERN =
-  /(?:Send)\s+"?([^"]*)"?\s+to\s+([^?]+)\?\s*Approval needed/i
-const DRAFT_EMAIL_PATTERN =
-  /(?:Save a draft to)\s+([^]+?)\s+with subject\s+"?([^"?]*)"?\s*\?\s*Approval needed/i
-const REPLY_EMAIL_PATTERN =
-  /(?:Reply to)\s+"?([^"]*)"?\s+from\s+([^?]+)\?\s*Approval needed/i
-
-const CREATE_DRIVE_PATTERN =
-  /(?:Create)\s+"([^"]+)"\s+in\s+Google\s+Drive(?:\s+inside\s+"?([^"?]+)"?)?\?(?:\s*Approval needed)?/i
-
-const CREATE_NOTION_PATTERN =
-  /(?:Create)\s+"([^"]+)"\s+in\s+Notion(?:\s+under\s+"?([^"?]+)"?)?\?(?:\s*Approval needed)?/i
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0')
+function emptyResolution(): NotchCardResolution {
+  return {
+    source: 'none',
+    weather: null,
+    emailList: null,
+    emailCompose: null,
+    emailReply: null,
+    calendarEvent: null,
+    driveCard: null,
+    notionCard: null,
+    slackCard: null,
+    decision: null,
+    text: '',
+    hasPreviewModel: false,
+    showsCard: false
+  }
 }
 
-function formatIso(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
-}
+/**
+ * Resolves the one card the notch may mount, or the plain answer text.
+ *
+ * VoiceOS keeps one confirmation record keyed by id plus one visible
+ * confirmation id, and never builds a card from prose. Kestrel's state has the
+ * same shape: one structured `card` event and one `decision` record, both
+ * supplied by the backend. This is the only place that decides what the body
+ * shows, through a single ladder:
+ *
+ *   1. payload card      the backend's structured `card` event.
+ *   2. pending decision  a write still waiting on the user.
+ *   3. plain result text the message, when neither of the above is current.
+ *
+ * A rung is only reached when every rung above it is empty, so a card and text
+ * can never co-exist. Nothing here reads the confirmation sentence: the old
+ * regex fallback could read a Slack approval as a Gmail send and mount a card
+ * nobody asked for, so it is deleted rather than made smarter.
+ *
+ * Kestrel carries at most one decision, so there is no list to stack and no
+ * "Confirmation 1 of N" to mount.
+ */
+export function resolveNotchCards(state: NotchCardState): NotchCardResolution {
+  const message = state.message?.trim() ?? ''
+  // An error ends the turn: whatever was pending is cleared, and only the
+  // error text is left to show.
+  const isError = state.phase === 'error'
 
-export function parseNaturalWhen(whenStr: string | null | undefined, baseDate: Date): { start: string; end: string } {
-  const d = new Date(baseDate.getTime())
-  const normalized = (whenStr ?? '').toLowerCase().trim()
-
-  if (normalized.includes('tomorrow')) {
-    d.setDate(d.getDate() + 1)
+  if (!isError && isKnownPayloadCard(state.card)) {
+    return payloadResolution(state.card as NotchCard, state.decision)
   }
 
-  const timeMatch = normalized.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
-  if (timeMatch) {
-    let hour = parseInt(timeMatch[1], 10)
-    const minute = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0
-    const ampm = timeMatch[3]
-
-    if (ampm === 'pm' && hour < 12) {
-      hour += 12
-    } else if (ampm === 'am' && hour === 12) {
-      hour = 0
+  if (!isError) {
+    const decision = pendingDecision(state)
+    if (decision !== null) {
+      return {
+        ...emptyResolution(),
+        source: 'decision',
+        decision,
+        showsCard: true
+      }
     }
-    d.setHours(hour, minute, 0, 0)
-  } else {
-    // Default to next full hour or 14:00
-    d.setHours(14, 0, 0, 0)
   }
 
-  const end = new Date(d.getTime() + 60 * 60 * 1000)
   return {
-    start: formatIso(d),
-    end: formatIso(end)
+    ...emptyResolution(),
+    source: message.length > 0 ? 'text' : 'none',
+    text: message
   }
 }
 
-export function deriveCalendarCard(input: CardDerivationInput): NotchCalendarCard | null {
-  const message = input.message?.trim() ?? ''
-  const transcript = input.transcript?.toLowerCase() ?? ''
-  const decisionTarget = input.decision?.target ?? ''
-  const baseDate = input.now?.() ?? new Date()
+/**
+ * The write waiting on the user, or null.
+ *
+ * A decision is a surface only on the result screen. It survives a normal
+ * completion while still pending, and cannot come back once the user answered
+ * it: answered plan ids are remembered, so a late or duplicate response cannot
+ * resurrect the card. The card the user clicked is kept by
+ * {@link retainConfirmation} and never re-derived from prose.
+ */
+function pendingDecision(state: NotchCardState): NotchDecision | null {
+  const decision = state.decision
+  if (decision === null) return null
+  if (state.phase !== 'result') return null
+  // The user already answered this plan: the decision surface is cleared and
+  // cannot come back, even while the answer is still in flight. The card they
+  // clicked is kept separately by `retainConfirmation`, not re-derived here.
+  if (state.answeredPlanIds.indexOf(decision.planId) !== -1) return null
+  // A decision still in flight that the user has not answered stays visible,
+  // and the cards disable themselves on `busy`.
+  return decision
+}
 
-  let title = ''
-  let whenStr = ''
-  let mode: 'create' | 'patch' | 'delete' = 'create'
-
-  const scheduleMatch = message.match(SCHEDULE_PATTERN)
-  const moveMatch = message.match(MOVE_PATTERN)
-  const cancelMatch = message.match(CANCEL_PATTERN)
-
-  if (scheduleMatch) {
-    mode = 'create'
-    title = scheduleMatch[1]
-    whenStr = scheduleMatch[2] ?? ''
-  } else if (moveMatch) {
-    mode = 'patch'
-    title = moveMatch[1]
-    whenStr = moveMatch[2] ?? ''
-  } else if (cancelMatch) {
-    mode = 'delete'
-    title = cancelMatch[1]
-  } else if (
-    input.decision !== null &&
-    !SEND_EMAIL_PATTERN.test(message) &&
-    !DRAFT_EMAIL_PATTERN.test(message) &&
-    !REPLY_EMAIL_PATTERN.test(message) &&
-    (transcript.includes('calendar') ||
-      transcript.includes('schedule a meeting') ||
-      message.toLowerCase().includes('google calendar'))
-  ) {
-    title = decisionTarget || 'Meeting'
-    if (transcript.includes('cancel') || transcript.includes('delete')) {
-      mode = 'delete'
-    } else if (transcript.includes('move') || transcript.includes('reschedule')) {
-      mode = 'patch'
-    } else {
-      mode = 'create'
-    }
-    whenStr = message
-  } else {
-    return null
-  }
-
-  if (!title) {
-    title = decisionTarget || 'Meeting'
-  }
-
-  const { start, end } = parseNaturalWhen(whenStr, baseDate)
-
+/** The payload rung: one card, chosen by its kind, with the text suppressed. */
+function payloadResolution(
+  card: NotchCard,
+  decision: NotchDecision | null
+): NotchCardResolution {
+  const kind = cardKind(card)
   return {
-    kind: 'calendar_event',
-    mode,
-    title,
-    start,
-    end,
-    durationMinutes: 60,
-    calendarName: 'Google Calendar'
+    source: 'payload',
+    weather: kind === 'weather' ? (card as NotchWeatherCard) : null,
+    emailList: kind === 'email_list' ? (card as NotchEmailListCard) : null,
+    emailCompose: kind === 'email_compose' ? (card as NotchEmailComposeCard) : null,
+    emailReply: kind === 'email_reply' ? (card as NotchEmailReplyCard) : null,
+    calendarEvent: kind === 'calendar_event' ? (card as NotchCalendarCard) : null,
+    driveCard: kind === 'drive_file' ? (card as NotchDriveCard) : null,
+    notionCard: kind === 'notion_page' ? (card as NotchNotionCard) : null,
+    slackCard: kind === 'slack_message' ? (card as NotchSlackCard) : null,
+    // A display card asks for nothing, so a stale decision must not light the
+    // generic confirm/cancel row behind it.
+    decision: isApprovalCard(card) ? decision : null,
+    text: '',
+    hasPreviewModel: !isDisplayOnlyCard(card),
+    showsCard: true
   }
 }
 
-export function deriveEmailComposeCard(input: CardDerivationInput): NotchEmailComposeCard | null {
-  const message = input.message?.trim() ?? ''
-  const transcript = input.transcript?.toLowerCase() ?? ''
-  const decisionTarget = input.decision?.target ?? ''
-
-  let subject = ''
-  let recipient = ''
-  let mode: 'send' | 'draft' | 'reply' = 'send'
-
-  const sendMatch = message.match(SEND_EMAIL_PATTERN)
-  const draftMatch = message.match(DRAFT_EMAIL_PATTERN)
-  const replyMatch = message.match(REPLY_EMAIL_PATTERN)
-
-  if (sendMatch) {
-    mode = 'send'
-    subject = sendMatch[1]
-    recipient = sendMatch[2]
-  } else if (draftMatch) {
-    mode = 'draft'
-    recipient = draftMatch[1]
-    subject = draftMatch[2]
-  } else if (replyMatch) {
-    mode = 'reply'
-    subject = replyMatch[1]
-    recipient = replyMatch[2]
-  } else if (
-    input.decision !== null &&
-    (transcript.includes('email') ||
-      transcript.includes('gmail') ||
-      transcript.includes('mail') ||
-      message.toLowerCase().includes('email') ||
-      message.toLowerCase().includes('mail'))
-  ) {
-    recipient = decisionTarget
-    subject = 'New Message'
-  } else {
-    return null
-  }
-
-  const cleanRecipient = recipient.replace(/[?.,]$/, '').trim()
-
-  return {
-    kind: 'email_compose',
-    mode: mode === 'reply' ? 'reply' : 'send',
-    title: mode === 'reply' ? 'Reply' : 'New Message',
-    to: cleanRecipient ? [cleanRecipient] : [],
-    cc: [],
-    bcc: [],
-    subject: subject || '',
-    body: '',
-    threadCount: null
-  }
+/** Record an answered plan id, newest last, keeping the set small. */
+export function rememberAnsweredPlanId(
+  ids: readonly string[],
+  planId: string
+): readonly string[] {
+  if (ids.indexOf(planId) !== -1) return ids
+  return [...ids, planId].slice(-ANSWERED_PLAN_LIMIT)
 }
 
-export function deriveDriveCard(input: CardDerivationInput): NotchDriveCard | null {
-  const message = input.message?.trim() ?? ''
-  const transcript = input.transcript?.toLowerCase() ?? ''
-  const decisionTarget = input.decision?.target ?? ''
-
-  let name = ''
-  let folder: string | null = null
-
-  const createMatch = message.match(CREATE_DRIVE_PATTERN)
-  if (createMatch) {
-    name = createMatch[1]
-    folder = createMatch[2]?.trim() || null
-  } else if (
-    input.decision !== null &&
-    (transcript.includes('google drive') ||
-      transcript.includes('drive') ||
-      message.toLowerCase().includes('google drive') ||
-      message.toLowerCase().includes('drive')) &&
-    (transcript.includes('create') ||
-      transcript.includes('make') ||
-      transcript.includes('new') ||
-      message.toLowerCase().includes('create'))
-  ) {
-    name = decisionTarget || 'Untitled'
-  } else {
-    return null
-  }
-
-  if (!name) {
-    name = decisionTarget || 'Untitled'
-  }
-
-  const format = resolveDriveFormat(name, input.transcript, decisionTarget)
-
-  return {
-    kind: 'drive_file',
-    mode: 'create',
-    format,
-    name,
-    folder
-  }
+/** The structured card behind a pending decision, kept while it is answered. */
+export interface RetainedConfirmation {
+  planId: string
+  card: NotchCard
 }
 
-function formatFromName(name: string): NotchDriveFormat | null {
-  const lower = name.trim().toLowerCase()
-  if (/\.(?:md|markdown)$/.test(lower)) return 'markdown'
-  if (/\.(?:txt|text)$/.test(lower)) return 'text'
-  if (/\.(?:docx?|gdoc)$/.test(lower)) return 'document'
-  if (/\.(?:xlsx?|csv|gsheet)$/.test(lower)) return 'spreadsheet'
-  if (/\.(?:pptx?|gslides)$/.test(lower)) return 'presentation'
+/** The card / decision pair a state update carried. */
+export interface ConfirmationArrival {
+  card: NotchCard | null
+  decision: NotchDecision | null
+  phase: NotchPhase
+}
+
+/**
+ * Keep the structured card behind a pending decision so it survives the busy
+ * emit. The backend sends the decision again without its card once the answer
+ * is in flight, and a card that vanished there would leave the notch empty.
+ *
+ * This is the renderer half of VoiceOS's id-keyed confirmation record: the
+ * record belongs to `planId`, and every clear checks the id first, so a
+ * response for one plan never clears another's card.
+ */
+export function retainConfirmation(
+  current: RetainedConfirmation | null,
+  incoming: ConfirmationArrival
+): RetainedConfirmation | null {
+  // Errors clear the slot outright.
+  if (incoming.phase === 'error') return null
+
+  const decision = incoming.decision
+  if (decision === null) return null
+
+  const card = incoming.card
+  if (card !== null && isApprovalCard(card)) {
+    return { planId: decision.planId, card }
+  }
+
+  // A later state for the same plan keeps the card it already had.
+  if (current !== null && current.planId === decision.planId) return current
+
   return null
-}
-
-function formatFromText(text: string): NotchDriveFormat | null {
-  const said = text
-    .toLowerCase()
-    .replace(/[._-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-  if (/\b(?:markdown|md)\b/.test(said)) return 'markdown'
-  if (
-    /\b(?:google\s+sheets?|spreadsheets?|sheets?|gsheets?|excel|xlsx?|csv)\b/.test(
-      said
-    )
-  ) {
-    return 'spreadsheet'
-  }
-  if (
-    /\b(?:google\s+slides?|presentations?|slides?|pptx?|powerpoint)\b/.test(said)
-  ) {
-    return 'presentation'
-  }
-  if (/\b(?:google\s+docs?|gdocs?|documents?|docs?|docx?|word)\b/.test(said)) {
-    return 'document'
-  }
-  if (/\b(?:text\s+files?|plain\s+text|txt|text)\b/.test(said)) return 'text'
-  return null
-}
-
-export function resolveDriveFormat(
-  name: string,
-  transcript?: string | null,
-  target?: string | null
-): NotchDriveFormat {
-  return (
-    formatFromName(name) ??
-    formatFromName(target ?? '') ??
-    formatFromText(transcript ?? '') ??
-    formatFromText(name) ??
-    'text'
-  )
-}
-
-export function deriveNotionCard(input: CardDerivationInput): NotchNotionCard | null {
-  const message = input.message?.trim() ?? ''
-  const transcript = input.transcript?.toLowerCase() ?? ''
-  const decisionTarget = input.decision?.target ?? ''
-
-  let title = ''
-  let parentName: string | undefined = undefined
-
-  const createMatch = message.match(CREATE_NOTION_PATTERN)
-  if (createMatch) {
-    title = createMatch[1]
-    parentName = createMatch[2]?.trim() || undefined
-  } else if (
-    input.decision !== null &&
-    (transcript.includes('notion') || message.toLowerCase().includes('notion')) &&
-    (transcript.includes('create') ||
-      transcript.includes('make') ||
-      transcript.includes('new') ||
-      transcript.includes('add') ||
-      message.toLowerCase().includes('create'))
-  ) {
-    if (decisionTarget.includes(' under ')) {
-      const parts = decisionTarget.split(' under ')
-      title = parts[0]?.trim() || 'Untitled'
-      parentName = parts[1]?.trim() || undefined
-    } else {
-      title = decisionTarget || 'Untitled'
-    }
-  } else {
-    return null
-  }
-
-  if (!title) {
-    title = 'Untitled'
-  }
-
-  const isDatabase =
-    Boolean(parentName && /\b(?:database|databases|db|table|tables)\b/i.test(parentName)) ||
-    /\b(?:database|databases|db|table|tables)\b/i.test(transcript)
-
-  return {
-    kind: 'notion_page',
-    mode: 'create',
-    title,
-    parentName,
-    isDatabase,
-    content: ''
-  }
-}
-
-export function deriveCardFromDecisionOrMessage(input: CardDerivationInput): DerivedCards {
-  const notionCard = deriveNotionCard(input)
-  if (notionCard !== null) {
-    return { calendarCard: null, emailComposeCard: null, driveCard: null, notionCard }
-  }
-
-  const driveCard = deriveDriveCard(input)
-  if (driveCard !== null) {
-    return { calendarCard: null, emailComposeCard: null, driveCard, notionCard: null }
-  }
-
-  const calendarCard = deriveCalendarCard(input)
-  if (calendarCard !== null) {
-    return { calendarCard, emailComposeCard: null, driveCard: null, notionCard: null }
-  }
-
-  const emailComposeCard = deriveEmailComposeCard(input)
-  return { calendarCard: null, emailComposeCard, driveCard: null, notionCard: null }
 }

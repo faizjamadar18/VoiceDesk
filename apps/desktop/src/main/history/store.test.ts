@@ -112,4 +112,50 @@ describe('HistoryStore', () => {
     expect(raw.endsWith('\n')).toBe(true)
     expect(JSON.parse(raw)).toHaveLength(1)
   })
+
+  it('records mode, appName, and appIcon', () => {
+    const { file } = setup()
+    const store = new HistoryStore(file)
+    const saved = store.record({
+      prompt: 'test dictate',
+      reply: '',
+      mode: 'dictate',
+      appName: 'Slack',
+      appIcon: 'data:image/png;base64,abc'
+    })
+
+    expect(saved.mode).toBe('dictate')
+    expect(saved.appName).toBe('Slack')
+    expect(saved.appIcon).toBe('data:image/png;base64,abc')
+
+    const reloaded = new HistoryStore(file).list()[0]
+    expect(reloaded?.mode).toBe('dictate')
+    expect(reloaded?.appName).toBe('Slack')
+    expect(reloaded?.appIcon).toBe('data:image/png;base64,abc')
+  })
+
+  it('preserves backwards compatibility when records lack mode, appName, or appIcon', () => {
+    const { file } = setup()
+    // Simulate legacy record without mode, appName, appIcon
+    writeFileSync(
+      file,
+      JSON.stringify([
+        {
+          id: 'legacy-1',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          prompt: 'old prompt',
+          reply: 'old reply',
+          tool: null
+        }
+      ]),
+      'utf8'
+    )
+
+    const store = new HistoryStore(file)
+    const records = store.list()
+    expect(records).toHaveLength(1)
+    expect(records[0]?.mode).toBe('agent')
+    expect(records[0]?.appName).toBeNull()
+    expect(records[0]?.appIcon).toBeNull()
+  })
 })

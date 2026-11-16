@@ -862,6 +862,19 @@ function createNotch(): void {
       console.log(
         `[dictation] context=${meta.contextType} style=${meta.style} polish=${meta.polishedBy} raw: "${raw}" -> polished: "${polished}"`
       )
+      const activeWindow = getActiveWindowService().getActiveWindow()
+      const appName = activeWindow?.appName || 'VoiceOS'
+      const appIcon = activeWindow?.appName ? getActiveWindowService().getCachedAppIcon(activeWindow.appName) : null
+      historyStore?.record({
+        prompt: polished,
+        reply: '',
+        tool: null,
+        mode: 'dictate',
+        appName,
+        appIcon
+      })
+      sendToMain(IPC.historyChanged)
+      sidebarWindow?.send(IPC.historyChanged)
     },
     onError: (err) => {
       console.error('[dictation] error:', err)
@@ -958,6 +971,12 @@ async function initialize(): Promise<void> {
     mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json'),
     integrations: composioIntegration,
     history: historyStore,
+    getActiveAppContext: () => {
+      const activeWindow = getActiveWindowService().getActiveWindow()
+      const appName = activeWindow?.appName || 'VoiceOS'
+      const appIcon = activeWindow?.appName ? getActiveWindowService().getCachedAppIcon(activeWindow.appName) : null
+      return { appName, appIcon }
+    },
     onHistoryRecorded: () => {
       sendToMain(IPC.historyChanged)
       sidebarWindow?.send(IPC.historyChanged)

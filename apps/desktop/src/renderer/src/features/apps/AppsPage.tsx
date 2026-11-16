@@ -13,7 +13,8 @@ const INTEGRATION_IDS: readonly IntegrationId[] = [
   'googlecalendar',
   'gmail',
   'googlesuper',
-  'notion'
+  'notion',
+  'slack'
 ]
 
 const NO_KEY_MESSAGE = 'Paste your Composio key above first, then connect an app.'

@@ -221,6 +221,17 @@ export interface NotchNotionCard {
   parentId?: string
 }
 
+/** A Slack message or reminder waiting on the user's approval. */
+export interface NotchSlackCard {
+  kind: 'slack_message'
+  mode: 'send' | 'schedule' | 'reminder'
+  /** Channel name/handle or person name the message goes to. */
+  target: string
+  message: string
+  /** Human-readable time for schedule/reminder, null for send. */
+  when: string | null
+}
+
 /**
  * A drafted reply shown for review: editable text with a copy button, exactly
  * like VoiceOS. Nothing is sent or pasted by the app.
@@ -240,6 +251,7 @@ export type NotchCard =
   | NotchCalendarCard
   | NotchDriveCard
   | NotchNotionCard
+  | NotchSlackCard
   | Record<string, unknown>
 
 /** One email row in {@link NotchEmailListCard}. Display-only. */
@@ -452,7 +464,8 @@ export const INTEGRATION_IDS = [
   'googlecalendar',
   'gmail',
   'googlesuper',
-  'notion'
+  'notion',
+  'slack'
 ] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
@@ -541,6 +554,9 @@ export interface HistoryRecord {
   reply: string
   /** The action/tool label that produced the reply, or null for a plain answer. */
   tool: string | null
+  mode?: 'dictate' | 'agent'
+  appName?: string | null
+  appIcon?: string | null
 }
 
 /** The fields a caller supplies; the store adds `id` and `createdAt`. */
@@ -548,6 +564,9 @@ export interface NewHistoryRecord {
   prompt: string
   reply: string
   tool?: string | null
+  mode?: 'dictate' | 'agent'
+  appName?: string | null
+  appIcon?: string | null
 }
 
 export interface HistoryRestorePayload {

@@ -17,7 +17,9 @@ const CALENDAR: readonly ComposioProviderSpec[] = COMPOSIO_PROVIDERS
 
 const SESSION_BODY = {
   user_id: 'user-1',
-  toolkits: { enable: ['googlecalendar', 'gmail', 'googlesuper', 'notion'] },
+  toolkits: {
+    enable: ['googlecalendar', 'gmail', 'googlesuper', 'notion', 'slack']
+  },
   tools: {
     googlecalendar: {
       enable: [
@@ -50,6 +52,21 @@ const SESSION_BODY = {
         'NOTION_FETCH_BLOCK_CONTENTS',
         'NOTION_QUERY_DATABASE',
         'NOTION_CREATE_NOTION_PAGE'
+      ]
+    },
+    slack: {
+      enable: [
+        'SLACK_SEND_MESSAGE',
+        'SLACK_SCHEDULE_MESSAGE',
+        'SLACK_FETCH_CONVERSATION_HISTORY',
+        'SLACK_FETCH_MESSAGE_THREAD_FROM_A_CONVERSATION',
+        'SLACK_FIND_CHANNELS',
+        'SLACK_LIST_ALL_CHANNELS',
+        'SLACK_FIND_USERS',
+        'SLACK_FIND_USER_BY_EMAIL_ADDRESS',
+        'SLACK_OPEN_DM',
+        'SLACK_CREATE_A_REMINDER',
+        'SLACK_RETRIEVE_DETAILED_USER_INFORMATION'
       ]
     }
   },

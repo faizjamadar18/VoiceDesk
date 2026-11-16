@@ -1,340 +1,497 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deriveCalendarCard,
-  deriveEmailComposeCard,
-  deriveDriveCard,
-  deriveNotionCard,
-  deriveCardFromDecisionOrMessage
+  isKnownPayloadCard,
+  rememberAnsweredPlanId,
+  resolveNotchCards,
+  retainConfirmation,
+  type NotchCardState
 } from './card-derivation'
-import type { NotchDecision } from '../../shared/types'
+import type {
+  NotchCard,
+  NotchDecision,
+  NotchEmailComposeCard,
+  NotchSlackCard,
+  NotchWeatherCard
+} from '../../shared/types'
 
-describe('card-derivation', () => {
-  describe('deriveCalendarCard', () => {
-    it('derives calendar_create_event from standard schedule approval message', () => {
-      const message = 'Schedule "Meeting" for tomorrow at 2:00 PM? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-123',
-        target: 'Meeting',
-        busy: false
-      }
+const slackSentence =
+  'Send "Be Ready with the launch version four" to #all-faiz-hq? Approval needed.'
 
-      const card = deriveCalendarCard({
-        message,
-        decision,
-        transcript: 'I mean schedule a meeting tomorrow at two PM in Google Calendar'
-      })
+const slackDecision: NotchDecision = {
+  kind: 'confirm',
+  planId: 'slack-plan-1',
+  target: '#all-faiz-hq',
+  busy: false
+}
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('calendar_event')
-      expect(card?.mode).toBe('create')
-      expect(card?.title).toBe('Meeting')
-      expect(card?.calendarName).toBe('Google Calendar')
-      expect(card?.durationMinutes).toBe(60)
-      expect(card?.start).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
-      expect(card?.end).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
-      expect(card?.start).toContain('T14:00:00')
+const slackCard: NotchSlackCard = {
+  kind: 'slack_message',
+  mode: 'send',
+  target: '#all-faiz-hq',
+  message: 'Be Ready with the launch version four',
+  when: null
+}
+
+const gmailCard: NotchEmailComposeCard = {
+  kind: 'email_compose',
+  mode: 'send',
+  title: 'New Message',
+  to: ['team@company.com'],
+  cc: [],
+  bcc: [],
+  subject: 'Meeting Notes',
+  body: '',
+  threadCount: null
+}
+
+const weatherCard: NotchWeatherCard = {
+  kind: 'weather',
+  location: 'Frisco',
+  temperature: '72°',
+  low: '64°',
+  condition: 'Sunny',
+  icon: 'sun'
+}
+
+function notchState(overrides: Partial<NotchCardState> = {}): NotchCardState {
+  return {
+    card: null,
+    decision: null,
+    answeredPlanIds: [],
+    message: null,
+    phase: 'result',
+    ...overrides
+  }
+}
+
+function cardCount(resolved: ReturnType<typeof resolveNotchCards>): number {
+  const cards: Array<NotchCard | null> = [
+    resolved.weather,
+    resolved.emailList,
+    resolved.emailCompose,
+    resolved.emailReply,
+    resolved.calendarEvent,
+    resolved.driveCard,
+    resolved.notionCard,
+    resolved.slackCard
+  ]
+  return cards.filter((card) => card !== null).length
+}
+
+describe('resolveNotchCards', () => {
+  describe('the observed Slack approval sequence', () => {
+    it('resolves no card once the approval is answered and the payload card is gone', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: null,
+          decision: { ...slackDecision, busy: true },
+          answeredPlanIds: [slackDecision.planId],
+          message: slackSentence
+        })
+      )
+
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.source).toBe('text')
+      expect(resolved.showsCard).toBe(false)
+      expect(resolved.hasPreviewModel).toBe(false)
+      expect(resolved.text).toBe(slackSentence)
     })
 
-    it('derives delete calendar card from cancel message', () => {
-      const message = 'Cancel "Dentist"? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-456',
-        target: 'Dentist',
-        busy: false
-      }
+    it('mounts the Slack card, and only the Slack card, while the approval is pending', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: slackCard,
+          decision: slackDecision,
+          message: slackSentence
+        })
+      )
 
-      const card = deriveCalendarCard({
-        message,
-        decision,
-        transcript: 'cancel my dentist appointment'
-      })
-
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('calendar_event')
-      expect(card?.mode).toBe('delete')
-      expect(card?.title).toBe('Dentist')
+      expect(resolved.source).toBe('payload')
+      expect(resolved.slackCard).toEqual(slackCard)
+      expect(resolved.emailCompose).toBeNull()
+      expect(cardCount(resolved)).toBe(1)
+      expect(resolved.text).toBe('')
+      expect(resolved.showsCard).toBe(true)
     })
 
-    it('derives patch calendar card from move message', () => {
-      const message = 'Move "Team Sync" to tomorrow at 10:00 AM? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-789',
-        target: 'Team Sync',
-        busy: false
+    it('settles to plain text once the send is confirmed', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: null,
+          decision: null,
+          answeredPlanIds: [slackDecision.planId],
+          message: 'Message sent to #all-faiz-hq.'
+        })
+      )
+
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.source).toBe('text')
+      expect(resolved.text).toBe('Message sent to #all-faiz-hq.')
+    })
+  })
+
+  describe('no sentence ever derives a card', () => {
+    const sentences: Array<{ tool: string; sentence: string; target: string }> = [
+      {
+        tool: 'Gmail',
+        sentence: 'Send "Meeting Notes" to team@company.com? Approval needed.',
+        target: 'team@company.com'
+      },
+      {
+        tool: 'Calendar',
+        sentence: 'Schedule "Sync" for tomorrow at 3:00 PM? Approval needed.',
+        target: 'Sync'
+      },
+      {
+        tool: 'Drive',
+        sentence: 'Create "Roadmap" in Google Drive?',
+        target: 'Roadmap'
+      },
+      {
+        tool: 'Notion',
+        sentence: 'Create "Launch Plan" in Notion under "Projects"? Approval needed.',
+        target: 'Launch Plan under Projects'
       }
+    ]
 
-      const card = deriveCalendarCard({
-        message,
-        decision,
-        transcript: 'move team sync to 10am tomorrow'
+    for (const { tool, sentence, target } of sentences) {
+      it(`resolves no ${tool} card from its sentence after the decision was answered`, () => {
+        const decision: NotchDecision = {
+          kind: 'confirm',
+          planId: `${tool.toLowerCase()}-plan-1`,
+          target,
+          busy: true
+        }
+        const resolved = resolveNotchCards(
+          notchState({
+            decision,
+            answeredPlanIds: [decision.planId],
+            message: sentence
+          })
+        )
+
+        expect(cardCount(resolved)).toBe(0)
+        expect(resolved.source).toBe('text')
+        expect(resolved.text).toBe(sentence)
       })
+    }
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('calendar_event')
-      expect(card?.mode).toBe('patch')
-      expect(card?.title).toBe('Team Sync')
-      expect(card?.start).toContain('T10:00:00')
+    it('resolves no card from a sentence when no decision is pending', () => {
+      const resolved = resolveNotchCards(notchState({ message: slackSentence }))
+
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.source).toBe('text')
     })
 
-    it('returns null when message does not describe calendar event', () => {
-      const message = 'Delete "notes.txt"? Approval needed.'
+    it('resolves no card from a sentence while the turn is still acting', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          decision: slackDecision,
+          message: 'Create "Roadmap" in Google Drive?',
+          phase: 'acting'
+        })
+      )
+
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.text).toBe('Create "Roadmap" in Google Drive?')
+    })
+  })
+
+  describe('the pending decision rung', () => {
+    it('mounts the generic decision surface for a write with no preview card', () => {
       const decision: NotchDecision = {
         kind: 'confirm',
-        planId: 'plan-000',
+        planId: 'delete-plan-1',
+        target: 'C:\\Users\\faiz\\notes.txt',
+        busy: false
+      }
+      const resolved = resolveNotchCards(
+        notchState({ decision, message: 'Delete "notes.txt"? Approval needed.' })
+      )
+
+      expect(resolved.source).toBe('decision')
+      expect(resolved.decision).toEqual(decision)
+      expect(resolved.text).toBe('')
+      expect(resolved.showsCard).toBe(true)
+      expect(resolved.hasPreviewModel).toBe(false)
+    })
+
+    it('keeps a decision visible but inert while its answer is in flight', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          decision: { ...slackDecision, busy: true },
+          message: slackSentence
+        })
+      )
+
+      expect(resolved.source).toBe('decision')
+      expect(resolved.decision?.busy).toBe(true)
+    })
+
+    it('never resurrects an answered plan id on a later render', () => {
+      const first = resolveNotchCards(
+        notchState({
+          decision: slackDecision,
+          answeredPlanIds: [slackDecision.planId]
+        })
+      )
+      const again = resolveNotchCards(
+        notchState({
+          decision: slackDecision,
+          answeredPlanIds: [slackDecision.planId],
+          message: slackSentence
+        })
+      )
+
+      expect(first.decision).toBeNull()
+      expect(again.decision).toBeNull()
+      expect(cardCount(again)).toBe(0)
+    })
+
+    it('answers a different plan id that arrives after the first was answered', () => {
+      const next: NotchDecision = {
+        kind: 'confirm',
+        planId: 'delete-plan-2',
         target: 'notes.txt',
         busy: false
       }
+      const resolved = resolveNotchCards(
+        notchState({
+          decision: next,
+          answeredPlanIds: [slackDecision.planId]
+        })
+      )
 
-      const card = deriveCalendarCard({
-        message,
-        decision,
-        transcript: 'delete notes.txt'
-      })
-
-      expect(card).toBeNull()
+      expect(resolved.source).toBe('decision')
+      expect(resolved.decision).toEqual(next)
     })
   })
 
-  describe('deriveEmailComposeCard', () => {
-    it('derives email compose card from send email approval message', () => {
-      const message = 'Send "Meeting Notes" to sarah@example.com? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-email-1',
-        target: 'sarah@example.com',
-        busy: false
-      }
+  describe('lifecycle', () => {
+    it('keeps a pending card through a normal completion', () => {
+      const resolved = resolveNotchCards(
+        notchState({ card: slackCard, decision: slackDecision, phase: 'result' })
+      )
 
-      const card = deriveEmailComposeCard({
-        message,
-        decision,
-        transcript: 'send an email to sarah with meeting notes'
-      })
-
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('email_compose')
-      expect(card?.subject).toBe('Meeting Notes')
-      expect(card?.to).toEqual(['sarah@example.com'])
+      expect(resolved.source).toBe('payload')
+      expect(resolved.slackCard).toEqual(slackCard)
     })
 
-    it('derives draft card from save draft message', () => {
-      const message = 'Save a draft to bob@example.com with subject "Project Pitch"? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-email-2',
-        target: 'bob@example.com',
-        busy: false
-      }
+    it('clears the card and the decision on error', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: slackCard,
+          decision: slackDecision,
+          message: "That didn't work: timed out",
+          phase: 'error'
+        })
+      )
 
-      const card = deriveEmailComposeCard({
-        message,
-        decision,
-        transcript: 'draft an email to bob about project pitch'
-      })
-
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('email_compose')
-      expect(card?.subject).toBe('Project Pitch')
-      expect(card?.to).toEqual(['bob@example.com'])
-    })
-
-    it('returns null when message is not email related', () => {
-      const message = 'Schedule "Meeting" for tomorrow at 2:00 PM? Approval needed.'
-      const card = deriveEmailComposeCard({
-        message,
-        decision: null,
-        transcript: 'schedule a meeting'
-      })
-      expect(card).toBeNull()
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.decision).toBeNull()
+      expect(resolved.source).toBe('text')
+      expect(resolved.text).toBe("That didn't work: timed out")
     })
   })
 
-  describe('deriveDriveCard', () => {
-    it('derives document card for Google Docs request', () => {
-      const message = 'Create "Project Roadmap" in Google Drive?'
-      const card = deriveDriveCard({
-        message,
-        transcript: 'create a google doc named Project Roadmap in Google Drive'
-      })
+  describe('display-only payload cards', () => {
+    it('keeps the weather card and counts it as no approval surface', () => {
+      const resolved = resolveNotchCards(
+        notchState({ card: weatherCard, message: 'Weather for Frisco: 72°, Sunny.' })
+      )
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('drive_file')
-      expect(card?.mode).toBe('create')
-      expect(card?.format).toBe('document')
-      expect(card?.name).toBe('Project Roadmap')
-      expect(card?.folder).toBeNull()
+      expect(resolved.source).toBe('payload')
+      expect(resolved.weather).toEqual(weatherCard)
+      expect(resolved.hasPreviewModel).toBe(false)
+      expect(resolved.decision).toBeNull()
+      expect(resolved.text).toBe('')
     })
 
-    it('derives spreadsheet card for Google Sheets request with folder', () => {
-      const message = 'Create "Budget 2026" in Google Drive inside "Finance"?'
-      const card = deriveDriveCard({
-        message,
-        transcript: 'create a spreadsheet called Budget 2026 in Finance'
-      })
+    it('keeps the email list and counts it as no approval surface', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: { kind: 'email_list', title: 'Latest inbox emails', rows: [] },
+          message: 'Here are your 0 latest emails.'
+        })
+      )
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('drive_file')
-      expect(card?.mode).toBe('create')
-      expect(card?.format).toBe('spreadsheet')
-      expect(card?.name).toBe('Budget 2026')
-      expect(card?.folder).toBe('Finance')
+      expect(resolved.source).toBe('payload')
+      expect(resolved.emailList?.title).toBe('Latest inbox emails')
+      expect(resolved.hasPreviewModel).toBe(false)
+      expect(resolved.text).toBe('')
     })
 
-    it('derives text card for .txt file or text request', () => {
-      const message = 'Create "notes.txt" in Google Drive?'
-      const card = deriveDriveCard({
-        message,
-        transcript: 'create notes.txt in google drive'
-      })
+    it('does not let a stale decision light the generic card behind a display card', () => {
+      const resolved = resolveNotchCards(
+        notchState({ card: weatherCard, decision: slackDecision })
+      )
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('drive_file')
-      expect(card?.mode).toBe('create')
-      expect(card?.format).toBe('text')
-      expect(card?.name).toBe('notes.txt')
+      expect(resolved.decision).toBeNull()
+      expect(resolved.source).toBe('payload')
     })
 
-    it('derives markdown card for .md file or markdown request', () => {
-      const message = 'Create "README.md" in Google Drive?'
-      const card = deriveDriveCard({
-        message,
-        transcript: 'create a markdown file named README.md'
-      })
+    it('draws a reply card as a preview that owns the body', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: {
+            kind: 'email_reply',
+            title: 'Reply drafted',
+            body: 'Thanks for the update.',
+            threadCount: 1
+          }
+        })
+      )
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('drive_file')
-      expect(card?.mode).toBe('create')
-      expect(card?.format).toBe('markdown')
-      expect(card?.name).toBe('README.md')
-    })
-
-    it('returns null when message does not describe Google Drive file', () => {
-      const message = 'Schedule "Meeting" for tomorrow at 2:00 PM? Approval needed.'
-      const card = deriveDriveCard({
-        message,
-        transcript: 'schedule a meeting'
-      })
-      expect(card).toBeNull()
+      expect(resolved.emailReply?.title).toBe('Reply drafted')
+      expect(resolved.hasPreviewModel).toBe(true)
+      expect(resolved.text).toBe('')
     })
   })
 
-  describe('deriveNotionCard', () => {
-    it('derives notion card with isDatabase true when parent is a database', () => {
-      const message = 'Create "Hello World" in Notion under "Database"? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'notion-1',
-        target: 'Hello World under Database',
-        busy: false
-      }
+  describe('payload card precedence', () => {
+    it('keeps the payload card authoritative over a text-shaped decision', () => {
+      const resolved = resolveNotchCards(
+        notchState({
+          card: gmailCard,
+          decision: slackDecision,
+          message: slackSentence
+        })
+      )
 
-      const card = deriveNotionCard({
-        message,
-        decision,
-        transcript: 'create a new entry in my database called Hello World'
-      })
-
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('notion_page')
-      expect(card?.mode).toBe('create')
-      expect(card?.title).toBe('Hello World')
-      expect(card?.parentName).toBe('Database')
-      expect(card?.isDatabase).toBe(true)
+      expect(resolved.emailCompose).toEqual(gmailCard)
+      expect(resolved.slackCard).toBeNull()
+      expect(resolved.source).toBe('payload')
     })
 
-    it('derives notion card with isDatabase false when parent is a page', () => {
-      const message = 'Create "Launch Plan" in Notion under "Projects"?'
-      const card = deriveNotionCard({
-        message,
-        transcript: 'create Launch Plan in notion under Projects'
-      })
+    it('ignores a payload card kind it cannot draw', () => {
+      const resolved = resolveNotchCards(
+        notchState({ card: { kind: 'something_new' }, message: 'Done.' })
+      )
 
-      expect(card).not.toBeNull()
-      expect(card?.kind).toBe('notion_page')
-      expect(card?.mode).toBe('create')
-      expect(card?.title).toBe('Launch Plan')
-      expect(card?.parentName).toBe('Projects')
-      expect(card?.isDatabase).toBe(false)
-    })
-
-    it('returns null when message does not describe Notion page', () => {
-      const message = 'Create "README.md" in Google Drive?'
-      const card = deriveNotionCard({
-        message,
-        transcript: 'create README.md in google drive'
-      })
-      expect(card).toBeNull()
+      expect(resolved.source).toBe('text')
+      expect(cardCount(resolved)).toBe(0)
     })
   })
 
-  describe('deriveCardFromDecisionOrMessage', () => {
-    it('returns derived notion card when Notion creation detected', () => {
-      const result = deriveCardFromDecisionOrMessage({
-        message: 'Create "Hello World" in Notion under "Database"?',
-        decision: { kind: 'confirm', planId: 'notion-1', target: 'Hello World under Database', busy: false },
-        transcript: 'create Hello World in notion'
-      })
+  describe('text and card are mutually exclusive', () => {
+    it('always empties the text while a card owns the body', () => {
+      const states: NotchCardState[] = [
+        notchState({ card: weatherCard, message: 'Lots of text.' }),
+        notchState({ card: gmailCard, message: 'Lots of text.' }),
+        notchState({ card: slackCard, decision: slackDecision, message: 'Lots of text.' }),
+        notchState({ decision: slackDecision, message: 'Lots of text.' })
+      ]
 
-      expect(result.notionCard).not.toBeNull()
-      expect(result.notionCard?.kind).toBe('notion_page')
-      expect(result.notionCard?.title).toBe('Hello World')
-      expect(result.notionCard?.parentName).toBe('Database')
-      expect(result.calendarCard).toBeNull()
-      expect(result.emailComposeCard).toBeNull()
-      expect(result.driveCard).toBeNull()
-    })
-    it('returns derived calendar card when calendar event detected', () => {
-      const result = deriveCardFromDecisionOrMessage({
-        message: 'Schedule "Sync" for tomorrow at 3:00 PM? Approval needed.',
-        decision: { kind: 'confirm', planId: '1', target: 'Sync', busy: false },
-        transcript: 'schedule sync tomorrow at 3pm'
-      })
-
-      expect(result.calendarCard).not.toBeNull()
-      expect(result.calendarCard?.title).toBe('Sync')
-      expect(result.emailComposeCard).toBeNull()
-      expect(result.driveCard).toBeNull()
-      expect(result.notionCard).toBeNull()
-    })
-
-    it('returns derived drive card when Google Drive file creation detected', () => {
-      const result = deriveCardFromDecisionOrMessage({
-        message: 'Create "Research.docx" in Google Drive?',
-        decision: { kind: 'confirm', planId: 'drive-1', target: 'Research.docx', busy: false },
-        transcript: 'create Research.docx in google drive'
-      })
-
-      expect(result.driveCard).not.toBeNull()
-      expect(result.driveCard?.kind).toBe('drive_file')
-      expect(result.driveCard?.format).toBe('document')
-      expect(result.driveCard?.name).toBe('Research.docx')
-      expect(result.calendarCard).toBeNull()
-      expect(result.emailComposeCard).toBeNull()
-      expect(result.notionCard).toBeNull()
-    })
-
-    it('returns all nulls for unrelated message', () => {
-      const message = 'Delete "notes.txt"? Approval needed.'
-      const decision: NotchDecision = {
-        kind: 'confirm',
-        planId: 'plan-000',
-        target: 'notes.txt',
-        busy: false
+      for (const state of states) {
+        const resolved = resolveNotchCards(state)
+        expect(resolved.showsCard).toBe(true)
+        expect(resolved.text).toBe('')
       }
-
-      const cards = deriveCardFromDecisionOrMessage({
-        message,
-        decision,
-        transcript: 'delete notes.txt'
-      })
-
-      expect(cards.calendarCard).toBeNull()
-      expect(cards.emailComposeCard).toBeNull()
-      expect(cards.driveCard).toBeNull()
-      expect(cards.notionCard).toBeNull()
     })
+
+    it('never shows a card when it shows text', () => {
+      const resolved = resolveNotchCards(notchState({ message: slackSentence }))
+
+      expect(resolved.showsCard).toBe(false)
+      expect(cardCount(resolved)).toBe(0)
+      expect(resolved.text).toBe(slackSentence)
+    })
+  })
+
+  it('recognises only the payload kinds it can draw', () => {
+    expect(isKnownPayloadCard(slackCard)).toBe(true)
+    expect(isKnownPayloadCard(weatherCard)).toBe(true)
+    expect(isKnownPayloadCard({ kind: 'something_new' })).toBe(false)
+    expect(isKnownPayloadCard(null)).toBe(false)
+  })
+})
+
+describe('rememberAnsweredPlanId', () => {
+  it('records an id once', () => {
+    expect(rememberAnsweredPlanId([], 'a')).toEqual(['a'])
+    expect(rememberAnsweredPlanId(['a'], 'a')).toEqual(['a'])
+  })
+
+  it('keeps the set small, dropping the oldest ids first', () => {
+    const ids = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+    const kept = ids.reduce<readonly string[]>(
+      (current, id) => rememberAnsweredPlanId(current, id),
+      []
+    )
+
+    expect(kept).toEqual(['2', '3', '4', '5', '6', '7', '8', '9'])
+  })
+})
+
+describe('retainConfirmation', () => {
+  it('records the card behind a pending decision', () => {
+    const retained = retainConfirmation(null, {
+      card: slackCard,
+      decision: slackDecision,
+      phase: 'result'
+    })
+
+    expect(retained).toEqual({ planId: slackDecision.planId, card: slackCard })
+  })
+
+  it('keeps the card when the busy emit drops it for the same plan', () => {
+    const current = { planId: slackDecision.planId, card: slackCard }
+    const retained = retainConfirmation(current, {
+      card: null,
+      decision: { ...slackDecision, busy: true },
+      phase: 'result'
+    })
+
+    expect(retained).toBe(current)
+  })
+
+  it('clears on error', () => {
+    const current = { planId: slackDecision.planId, card: slackCard }
+    expect(
+      retainConfirmation(current, {
+        card: null,
+        decision: slackDecision,
+        phase: 'error'
+      })
+    ).toBeNull()
+  })
+
+  it('clears once the decision is gone', () => {
+    const current = { planId: slackDecision.planId, card: slackCard }
+    expect(
+      retainConfirmation(current, { card: null, decision: null, phase: 'result' })
+    ).toBeNull()
+  })
+
+  it('drops a stale card when a different plan arrives without one', () => {
+    const current = { planId: slackDecision.planId, card: slackCard }
+    const retained = retainConfirmation(current, {
+      card: null,
+      decision: { kind: 'confirm', planId: 'other-plan', target: 'x', busy: true },
+      phase: 'result'
+    })
+
+    expect(retained).toBeNull()
+  })
+
+  it('replaces the card for a new plan', () => {
+    const current = { planId: slackDecision.planId, card: slackCard }
+    const retained = retainConfirmation(current, {
+      card: gmailCard,
+      decision: { kind: 'confirm', planId: 'mail-plan', target: 'team@company.com', busy: false },
+      phase: 'result'
+    })
+
+    expect(retained).toEqual({ planId: 'mail-plan', card: gmailCard })
+  })
+
+  it('does not retain a display card', () => {
+    expect(
+      retainConfirmation(null, {
+        card: weatherCard,
+        decision: slackDecision,
+        phase: 'result'
+      })
+    ).toBeNull()
   })
 })

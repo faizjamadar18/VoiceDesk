@@ -215,6 +215,10 @@ export class GroqClient implements LlmClient {
             'use `notion_search`. ' +
             'When the user asks to create a page, use `notion_create_page`. ' +
             'Never invent Notion IDs or ask the user which app to use when a Notion tool fits. ' +
+            'When the user asks to send, schedule, or read Slack messages, open ' +
+            'a direct message, or set a Slack reminder, call the matching Slack ' +
+            'tool, passing a channel or person name as-is and letting the tool ' +
+            'resolve it. ' +
             `Current date and time: ${formatLocalTimestamp(this.clock())} ` +
             `(${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` +
             'Whenever the user mentions a relative time (today, tomorrow, next Tuesday, ' +

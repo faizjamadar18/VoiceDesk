@@ -14,15 +14,8 @@ import {
   type NotchDecision,
   type NotchDecisionAction,
   type NotchDecisionEdits,
-  type NotchEmailComposeCard,
-  type NotchEmailReplyCard,
-  type NotchEmailListCard,
-  type NotchCalendarCard,
-  type NotchDriveCard,
-  type NotchNotionCard,
   type NotchFileResult,
   type NotchPhase,
-  type NotchWeatherCard,
   type SpeechChunkPayload,
   type SpeechStreamDonePayload,
   type SpeechStreamErrorPayload
@@ -34,7 +27,13 @@ import { EmailReplyCard } from './components/EmailReplyCard'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GoogleDriveCard } from './components/GoogleDriveCard'
 import { NotionConfirmationCard } from './components/NotionConfirmationCard'
-import { deriveCardFromDecisionOrMessage } from './card-derivation'
+import { SlackConfirmationCard } from './components/SlackConfirmationCard'
+import {
+  rememberAnsweredPlanId,
+  resolveNotchCards,
+  retainConfirmation,
+  type RetainedConfirmation
+} from './card-derivation'
 import { AgcNormalizer } from './dictation-pill/audio-waveform'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import {
@@ -713,54 +712,6 @@ export function deriveShowBottomHint(params: {
   )
 }
 
-export interface NotchResolvedCards {
-  emailCompose: NotchEmailComposeCard | null
-  emailReply: NotchEmailReplyCard | null
-  calendarEvent: NotchCalendarCard | null
-  driveCard: NotchDriveCard | null
-  notionCard: NotchNotionCard | null
-  hasPreviewModel: boolean
-}
-
-export function deriveNotchCards(
-  card: NotchCard | null,
-  derivedCards: ReturnType<typeof deriveCardFromDecisionOrMessage>
-): NotchResolvedCards {
-  const emailCompose =
-    card?.kind === 'email_compose'
-      ? (card as NotchEmailComposeCard)
-      : derivedCards.emailComposeCard
-  const emailReply =
-    card?.kind === 'email_reply' ? (card as NotchEmailReplyCard) : null
-  const calendarEvent =
-    card?.kind === 'calendar_event'
-      ? (card as NotchCalendarCard)
-      : derivedCards.calendarCard
-  const driveCard =
-    card?.kind === 'drive_file'
-      ? (card as NotchDriveCard)
-      : derivedCards.driveCard
-  const notionCard =
-    card?.kind === 'notion_page'
-      ? (card as NotchNotionCard)
-      : (derivedCards.notionCard ?? null)
-  const hasPreviewModel =
-    emailCompose !== null ||
-    emailReply !== null ||
-    calendarEvent !== null ||
-    driveCard !== null ||
-    notionCard !== null
-
-  return {
-    emailCompose,
-    emailReply,
-    calendarEvent,
-    driveCard,
-    notionCard,
-    hasPreviewModel
-  }
-}
-
 export default function Notch(): JSX.Element {
   const [phase, setPhase] = useState<NotchPhase>('listening')
   const [transcript, setTranscript] = useState('')
@@ -769,6 +720,24 @@ export default function Notch(): JSX.Element {
   const [results, setResults] = useState<NotchFileResult[] | null>(null)
   const [resultsLabel, setResultsLabel] = useState<string | null>(null)
   const [decision, setDecision] = useState<NotchDecision | null>(null)
+  /**
+   * Plan ids the user already answered this turn. An answered decision can
+   * never become a card again, even if a late or duplicate state repeats it.
+   */
+  const [answeredPlanIds, setAnsweredPlanIds] = useState<readonly string[]>([])
+  /**
+   * The structured card behind a pending decision. The backend drops the card
+   * when it marks the decision busy, so the renderer keeps it to keep the card
+   * the user clicked on screen while the answer is in flight.
+   */
+  const [confirmationCard, setConfirmationCard] =
+    useState<RetainedConfirmation | null>(null)
+  /**
+   * The plan the user already clicked on. VoiceOS guards each card with a
+   * `respondedRef`; the same ref keeps a second click in the same frame from
+   * sending a second RPC before React has re-rendered the card as busy.
+   */
+  const respondedPlanIdRef = useRef<string | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<number | null>(null)
   const [sessionKey, setSessionKey] = useState(0)
@@ -909,6 +878,9 @@ export default function Notch(): JSX.Element {
       setRowError(null)
       setOpeningId(null)
       setIsSynthesizing(false)
+      setAnsweredPlanIds([])
+      setConfirmationCard(null)
+      respondedPlanIdRef.current = null
     }
 
     const stopCaptureResources = (): void => {
@@ -1102,6 +1074,13 @@ export default function Notch(): JSX.Element {
       setMessage(state.message)
       setDecision(state.decision ?? null)
       if (state.card !== undefined) setCard(state.card ?? null)
+      setConfirmationCard((current) =>
+        retainConfirmation(current, {
+          card: state.card ?? null,
+          decision: state.decision ?? null,
+          phase: state.phase
+        })
+      )
       if (state.results !== undefined) {
         setResults(state.results ?? null)
         setResultsLabel(state.resultsLabel ?? null)
@@ -1150,6 +1129,9 @@ export default function Notch(): JSX.Element {
       setDecision(null)
       setRowError(null)
       setOpeningId(null)
+      setAnsweredPlanIds([])
+      setConfirmationCard(null)
+      respondedPlanIdRef.current = null
     })
 
     const offDismiss = api.onNotchDismiss(() => {
@@ -1177,6 +1159,9 @@ export default function Notch(): JSX.Element {
       setCard(restored.card)
       setRowError(restored.rowError)
       setOpeningId(restored.openingId)
+      setAnsweredPlanIds([])
+      setConfirmationCard(null)
+      respondedPlanIdRef.current = null
 
       setTranscript(restored.transcript)
       setMessage(restored.message)
@@ -1239,7 +1224,14 @@ export default function Notch(): JSX.Element {
   }
 
   const decide = (action: NotchDecisionAction, edits?: NotchDecisionEdits): void => {
-    if (decision?.busy) return
+    if (decision === null || decision.busy) return
+    if (respondedPlanIdRef.current === decision.planId) return
+    respondedPlanIdRef.current = decision.planId
+    // Answer optimistically. The id is recorded before the RPC leaves, so a
+    // late or duplicate render can never bring this card back, and the card is
+    // inert from this frame on. The backend's busy state then confirms it.
+    setAnsweredPlanIds((ids) => rememberAnsweredPlanId(ids, decision.planId))
+    setDecision({ ...decision, busy: true })
     window.kestrel?.decideNotch(action, edits)
   }
 
@@ -1291,6 +1283,9 @@ export default function Notch(): JSX.Element {
     setResults(null)
     setResultsLabel(null)
     setDecision(null)
+    setAnsweredPlanIds([])
+    setConfirmationCard(null)
+    respondedPlanIdRef.current = null
     window.kestrel?.submitNotchText(newText)
   }
 
@@ -1305,38 +1300,48 @@ export default function Notch(): JSX.Element {
 
   cancelEditRef.current = handleCancelEdit
 
-  const answer = message?.trim() ?? ''
-  const hasWeatherCard = card?.kind === 'weather'
-  const weather = hasWeatherCard ? (card as NotchWeatherCard) : null
-  const emailList = card?.kind === 'email_list' ? (card as NotchEmailListCard) : null
+  // The card behind an answered decision survives the busy emit. It is only
+  // used for the plan it belongs to, so a later confirmation never inherits it.
+  const retainedCard =
+    confirmationCard !== null &&
+    decision !== null &&
+    decision.busy &&
+    decision.planId === confirmationCard.planId
+      ? confirmationCard.card
+      : null
 
-  const derivedCards = deriveCardFromDecisionOrMessage({
-    message,
-    decision,
-    transcript
-  })
   const {
+    source,
+    weather,
+    emailList,
     emailCompose,
     emailReply,
     calendarEvent,
     driveCard,
     notionCard,
-    hasPreviewModel
-  } = deriveNotchCards(card, derivedCards)
+    slackCard,
+    decision: pendingDecision,
+    text,
+    hasPreviewModel,
+    showsCard
+  } = resolveNotchCards({
+    card: card ?? retainedCard,
+    decision,
+    answeredPlanIds,
+    message,
+    phase
+  })
 
   const showCards = !isSynthesizing && (phase === 'result' || phase === 'error')
-  const showAnswer = showCards && answer.length > 0 && !hasPreviewModel
+  // `text` is empty whenever a card owns the body, so the answer bubble and a
+  // card can never light together.
+  const showAnswer = showCards && source === 'text'
   const hasTranscript = transcript.trim().length > 0
   const hasExpandedContent =
     isEditingText ||
     hasTranscript ||
     showAnswer ||
-    (showCards &&
-      (results !== null ||
-        decision !== null ||
-        weather !== null ||
-        emailList !== null ||
-        hasPreviewModel))
+    (showCards && (results !== null || showsCard))
   const showBottomHint = deriveShowBottomHint({
     isEditingText,
     phase,
@@ -1381,7 +1386,7 @@ export default function Notch(): JSX.Element {
 
       {showAnswer && (
         <VoiceOsAnswer
-          text={answer}
+          text={text}
           maxHeight={NOTCH_ANSWER_MAX_HEIGHT_PX}
           isError={phase === 'error'}
         />
@@ -1440,7 +1445,7 @@ export default function Notch(): JSX.Element {
       {showCards && emailCompose && (
         <GmailComposeCard
           card={emailCompose}
-          busy={decision?.busy}
+          busy={pendingDecision?.busy}
           onSend={(updated) =>
             decide('confirm', updated as unknown as Record<string, unknown>)
           }
@@ -1452,7 +1457,7 @@ export default function Notch(): JSX.Element {
       {showCards && calendarEvent && (
         <GoogleCalendarCard
           card={calendarEvent}
-          busy={decision?.busy}
+          busy={pendingDecision?.busy}
           onConfirm={(updated) =>
             decide('confirm', updated as unknown as Record<string, unknown>)
           }
@@ -1463,7 +1468,7 @@ export default function Notch(): JSX.Element {
       {showCards && driveCard && (
         <GoogleDriveCard
           card={driveCard}
-          busy={decision?.busy}
+          busy={pendingDecision?.busy}
           onConfirm={(data) => decide('confirm', data)}
           onDiscard={() => decide('cancel')}
         />
@@ -1472,7 +1477,16 @@ export default function Notch(): JSX.Element {
       {showCards && notionCard && (
         <NotionConfirmationCard
           card={notionCard}
-          busy={decision?.busy}
+          busy={pendingDecision?.busy}
+          onConfirm={(data) => decide('confirm', data)}
+          onDiscard={() => decide('cancel')}
+        />
+      )}
+
+      {showCards && slackCard && (
+        <SlackConfirmationCard
+          card={slackCard}
+          busy={pendingDecision?.busy}
           onConfirm={(data) => decide('confirm', data)}
           onDiscard={() => decide('cancel')}
         />
@@ -1508,24 +1522,26 @@ export default function Notch(): JSX.Element {
         </div>
       )}
 
-      {showCards && decision !== null && !hasPreviewModel && (
+      {showCards && source === 'decision' && pendingDecision !== null && (
         <div className="kestrel-decision">
           <p className="kestrel-decision-target">
-            {decision.target || 'Action requires approval'}
+            {pendingDecision.target || 'Action requires approval'}
           </p>
           <div className="kestrel-decision-actions">
             <button
               type="button"
               className="kestrel-decision-btn is-confirm"
-              disabled={decision.busy}
-              onClick={() => decide(decision.kind === 'confirm' ? 'confirm' : 'undo')}
+              disabled={pendingDecision.busy}
+              onClick={() =>
+                decide(pendingDecision.kind === 'confirm' ? 'confirm' : 'undo')
+              }
             >
-              {decision.kind === 'confirm' ? 'Confirm' : 'Undo'}
+              {pendingDecision.kind === 'confirm' ? 'Confirm' : 'Undo'}
             </button>
             <button
               type="button"
               className="kestrel-decision-btn is-cancel"
-              disabled={decision.busy}
+              disabled={pendingDecision.busy}
               onClick={() => decide('cancel')}
             >
               Cancel

@@ -7,7 +7,12 @@
  * rest of the app, so tests can use these types without a network or Electron.
  */
 
-export type ComposioProviderId = 'googlecalendar' | 'gmail' | 'googlesuper' | 'notion'
+export type ComposioProviderId =
+  | 'googlecalendar'
+  | 'gmail'
+  | 'googlesuper'
+  | 'notion'
+  | 'slack'
 
 /** One provider Kestrel can drive through Composio. */
 export interface ComposioProviderSpec {

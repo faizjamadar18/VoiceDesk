@@ -28,6 +28,7 @@ import type { ComposioKeyStore } from './key'
 import { keyProblem } from './key'
 import { createNotionTools } from './notion'
 import { COMPOSIO_PROVIDERS } from './providers'
+import { createSlackTools } from './slack'
 import type {
   ComposioProviderId,
   ComposioProviderSpec,
@@ -87,7 +88,8 @@ const TOOL_FACTORIES: Partial<Record<ComposioProviderId, ToolFactory>> = {
   googlecalendar: createCalendarTools,
   gmail: createGmailTools,
   googlesuper: createDriveTools,
-  notion: createNotionTools
+  notion: createNotionTools,
+  slack: createSlackTools
 }
 
 const UNSUPPORTED_MESSAGE = 'That app is not supported yet.'

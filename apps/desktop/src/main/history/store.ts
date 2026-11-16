@@ -26,7 +26,10 @@ export class HistoryStore {
       createdAt: now.toISOString(),
       prompt: entry.prompt,
       reply: entry.reply,
-      tool: entry.tool ?? null
+      tool: entry.tool ?? null,
+      mode: entry.mode ?? 'agent',
+      appName: entry.appName ?? null,
+      appIcon: entry.appIcon ?? null
     }
 
     const next = [saved, ...this.read()].slice(0, MAX_HISTORY_RECORDS)
@@ -69,7 +72,13 @@ export class HistoryStore {
 
       return parsed
         .filter(isHistoryRecord)
-        .map((record) => ({ ...record, tool: typeof record.tool === 'string' ? record.tool : null }))
+        .map((record) => ({
+          ...record,
+          tool: typeof record.tool === 'string' ? record.tool : null,
+          mode: record.mode === 'dictate' ? ('dictate' as const) : ('agent' as const),
+          appName: typeof record.appName === 'string' ? record.appName : null,
+          appIcon: typeof record.appIcon === 'string' ? record.appIcon : null
+        }))
         .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
     } catch (error) {
       console.warn(`[history] could not read ${this.filePath}:`, error)
