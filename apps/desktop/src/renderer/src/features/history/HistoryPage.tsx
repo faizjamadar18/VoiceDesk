@@ -309,16 +309,11 @@ export function HistoryPage({
             }}
             aria-haspopup="listbox"
             aria-expanded={isAppDropdownOpen}
-            className={`px-4 py-2 rounded-xl flex items-center gap-2.5 text-sm font-semibold transition-all duration-200 focus:outline-none ${
+            className={`history-filter-button ${
               isDarkMode
-                ? 'text-gray-200 border border-white/5 bg-clip-padding bg-gradient-to-b from-white/10 to-transparent hover:text-white hover:border-white/10'
-                : 'text-gray-700 border border-black/5 bg-clip-padding bg-gradient-to-b from-white to-black/5 hover:text-gray-900 hover:border-black/10'
-            }`}
-            style={{
-              boxShadow: isDarkMode
-                ? '0 1px 4px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--dark-surface-highlight)'
-                : '0 1px 2px rgba(0, 0, 0, 0.05)'
-            }}
+                ? 'history-filter-button--dark'
+                : 'history-filter-button--light'
+            }${isAppDropdownOpen ? ' is-open' : ''}`}
           >
             <span className="truncate max-w-40">{selectedApp || 'All Apps'}</span>
             <ChevronsUpDownIcon
@@ -402,16 +397,11 @@ export function HistoryPage({
             }}
             aria-haspopup="listbox"
             aria-expanded={isModeDropdownOpen}
-            className={`px-4 py-2 rounded-xl flex items-center gap-2.5 text-sm font-semibold transition-all duration-200 focus:outline-none ${
+            className={`history-filter-button ${
               isDarkMode
-                ? 'text-gray-200 border border-white/5 bg-clip-padding bg-gradient-to-b from-white/10 to-transparent hover:text-white hover:border-white/10'
-                : 'text-gray-700 border border-black/5 bg-clip-padding bg-gradient-to-b from-white to-black/5 hover:text-gray-900 hover:border-black/10'
-            }`}
-            style={{
-              boxShadow: isDarkMode
-                ? '0 1px 4px rgba(0, 0, 0, 0.18), inset 0 1px 0 var(--dark-surface-highlight)'
-                : '0 1px 2px rgba(0, 0, 0, 0.05)'
-            }}
+                ? 'history-filter-button--dark'
+                : 'history-filter-button--light'
+            }${isModeDropdownOpen ? ' is-open' : ''}`}
           >
             <span className="truncate">{getModeLabel(selectedMode)}</span>
             <ChevronsUpDownIcon
