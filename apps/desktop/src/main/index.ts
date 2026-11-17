@@ -277,10 +277,10 @@ function updateTray(): void {
 
 function createMainWindow(): void {
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 620,
+    width: 1080,
+    height: 710,
+    minWidth: 520,
+    minHeight: 400,
     show: false,
     title: 'Kestrel',
     frame: false,

@@ -211,6 +211,7 @@ kbd {
   height: 56px;
   z-index: 1;
   -webkit-app-region: drag;
+  transition: left 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* Window chrome */
@@ -254,14 +255,13 @@ kbd {
 
 .sidebar {
   position: relative;
-  z-index: 2;
+  z-index: 60;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 220px;
   height: 100%;
-  overflow: hidden;
   background: #17181c;
+  transition: width 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .sidebar-logo {
@@ -384,17 +384,20 @@ kbd {
 }
 
 .sidebar-account {
-  width: calc(100% - 24px);
+  width: 100%;
   display: flex;
   align-items: center;
   height: 40px;
-  margin: 0 12px 12px;
+  margin: 0;
   padding: 0 10px;
   gap: 10px;
   border-radius: 10px;
   background-color: transparent;
   color: rgba(255, 255, 255, 0.7);
-  transition: background-color 150ms ease, color 150ms ease;
+  transition:
+    padding 300ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color 150ms ease,
+    color 150ms ease;
   cursor: pointer;
   border: none;
 }
@@ -747,6 +750,7 @@ kbd {
   z-index: 70;
   -webkit-app-region: drag;
   pointer-events: none;
+  transition: left 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .dashboard-bottom-fade {
@@ -762,6 +766,7 @@ kbd {
   mask-image: linear-gradient(to top, black 0%, black 20%, transparent 100%);
   border-bottom-left-radius: 13px;
   border-bottom-right-radius: 13px;
+  transition: left 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .dashboard-content-centering {
@@ -770,6 +775,19 @@ kbd {
   align-items: center;
   min-width: 0;
   padding: 18px 48px 48px 48px;
+  transition: padding 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@media (max-width: 768px) {
+  .dashboard-content-centering {
+    padding: 18px 24px 24px 24px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dashboard-content-centering {
+    padding: 18px 16px 16px 16px;
+  }
 }
 
 .dashboard-home-view {
@@ -4049,14 +4067,14 @@ html:not(.dark) .agent-md-strong,
 /* Profile Drawer / Popover Menu */
 .sidebar-account-container {
   position: relative;
-  width: 100%;
+  transition: margin 300ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .profile-drawer-menu {
   position: absolute;
   bottom: calc(100% + 4px);
-  left: 12px;
-  width: calc(100% - 24px);
+  left: 0;
+  width: 100%;
   min-width: 200px;
   background: #1e1f23;
   border: 1px solid rgba(255, 255, 255, 0.08);

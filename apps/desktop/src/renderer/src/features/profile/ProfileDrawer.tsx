@@ -10,6 +10,7 @@ export interface ProfileDrawerProps {
   onOpenSettings: () => void
   onOpenHelpCenter: () => void
   userName?: string
+  isCollapsed?: boolean
 }
 
 export function ProfileDrawer({
@@ -17,7 +18,8 @@ export function ProfileDrawer({
   onClose,
   onOpenSettings,
   onOpenHelpCenter,
-  userName = 'Faiz'
+  userName = 'Faiz',
+  isCollapsed = false
 }: ProfileDrawerProps): JSX.Element | null {
   const popoverRef = useRef<HTMLDivElement>(null)
   const { theme: systemTheme } = useSystemTheme()
@@ -56,6 +58,7 @@ export function ProfileDrawer({
       role="menu"
       aria-label="Account options"
       style={{
+        minWidth: isCollapsed ? '192px' : undefined,
         background: isDarkMode
           ? 'var(--dark-dashboard-card-background, #1e1f23)'
           : 'linear-gradient(165deg, rgb(252, 252, 252), rgb(248, 248, 248))',
