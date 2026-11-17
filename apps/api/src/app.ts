@@ -1,6 +1,6 @@
 import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
-import { pool } from './db'
+import { deleteUser, pool } from './db'
 
 export function createApp(): Express {
   const app = express()
@@ -49,6 +49,29 @@ export function createApp(): Express {
       res.status(500).json({
         error: error instanceof Error ? error.message : 'Database sync error'
       })
+    }
+  })
+
+  app.delete('/api/users/:id', async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id
+
+    if (typeof id !== 'string' || !id.trim() || /[\u0000-\u001F\u007F]/.test(id)) {
+      res.status(400).json({ error: 'Invalid user id' })
+      return
+    }
+
+    try {
+      const deleted = await deleteUser(id)
+
+      if (!deleted) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+
+      res.status(204).end()
+    } catch (error) {
+      console.error('Failed to delete user:', error)
+      res.status(500).json({ error: 'Failed to delete user' })
     }
   })
 

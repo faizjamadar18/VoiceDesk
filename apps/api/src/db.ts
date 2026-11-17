@@ -8,6 +8,11 @@ export const pool = new Pool({
     process.env.DATABASE_URL || 'postgresql://postgres:7866@localhost:5432/voicedesk'
 })
 
+export async function deleteUser(id: string): Promise<boolean> {
+  const result = await pool.query('DELETE FROM users WHERE id = $1', [id])
+  return (result.rowCount ?? 0) > 0
+}
+
 export async function initDb(): Promise<void> {
   const query = `
     CREATE TABLE IF NOT EXISTS users (

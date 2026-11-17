@@ -87,6 +87,8 @@ export const IPC = {
   historyList: 'kestrel:history-list',
   historyDelete: 'kestrel:history-delete',
   historyChanged: 'kestrel:history-changed',
+  insightsGet: 'kestrel:insights-get',
+  accountDelete: 'kestrel:account-delete',
   sidebarRestoreHistory: 'kestrel:sidebar-restore-history',
   sidebarSetInteractive: 'kestrel:sidebar-set-interactive',
   sidebarTogglePin: 'kestrel:sidebar-toggle-pin',
@@ -557,6 +559,9 @@ export interface HistoryRecord {
   mode?: 'dictate' | 'agent'
   appName?: string | null
   appIcon?: string | null
+  /** How long the user spoke, when the caller knows it. Used for time-saved maths. */
+  durationSeconds?: number | null
+  language?: string | null
 }
 
 /** The fields a caller supplies; the store adds `id` and `createdAt`. */
@@ -567,6 +572,8 @@ export interface NewHistoryRecord {
   mode?: 'dictate' | 'agent'
   appName?: string | null
   appIcon?: string | null
+  durationSeconds?: number | null
+  language?: string | null
 }
 
 export interface HistoryRestorePayload {
@@ -608,6 +615,12 @@ export interface SpeechStreamDonePayload {
 export interface SpeechStreamErrorPayload {
   requestId: string
   message: string
+}
+
+export interface DeleteAccountResult {
+  ok: boolean
+  /** Present when `ok` is false so the UI can explain what failed. */
+  error?: string
 }
 
 export interface KestrelApi {
@@ -659,6 +672,8 @@ export interface KestrelApi {
   listHistory: () => Promise<HistoryRecord[]>
   deleteHistory: (id: string) => Promise<HistoryRecord[]>
   onHistoryChanged: (callback: () => void) => () => void
+  getInsights: () => Promise<InsightsPayload>
+  deleteAccount: () => Promise<DeleteAccountResult>
   restoreHistoryInNotch: (payload: HistoryRestorePayload) => void
   sidebarRestoreHistory: (prompt: string, reply: string) => void
   onNotchRestoreHistory: (callback: (payload: HistoryRestorePayload) => void) => () => void
@@ -677,4 +692,43 @@ export interface KestrelApi {
   onPillState?: (callback: (state: PillStatePayload) => void) => () => void
   onPillAudioWave?: (callback: (level: number) => void) => () => void
   notifyPillReady?: () => void
+}
+
+/** One app's usage in the Insights top-apps list. */
+export interface InsightsAppUsage {
+  appName: string
+  sessions: number
+  words: number
+  /** Sessions relative to the most-used app, 0..1. */
+  relative: number
+  /** Sessions relative to all sessions, 0..1. */
+  share: number
+}
+
+/** Aggregated numbers for the Insights tab. Crosses IPC, so no Map. */
+export interface InsightsPayload {
+  totalSessions: number
+  totalWords: number
+  timeSavedSeconds: number
+  weekSessions: number
+  weekWords: number
+  weekTimeSavedSeconds: number
+  avgWPM: number | null
+  typingMultiple: number | null
+  dayMap: Record<string, { sessions: number; words: number }>
+  hourCounts: number[]
+  topApps: InsightsAppUsage[]
+  appsUsed: number
+  agent: {
+    prompts: number
+    sessions: number
+    timeSavedSeconds: number
+    weekTimeSavedSeconds: number
+    conversations: number
+  }
+  streak: {
+    current: number
+    longest: number
+    activeToday: boolean
+  }
 }

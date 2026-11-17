@@ -1,8 +1,9 @@
 import type { JSX } from 'react'
 import { motion } from 'framer-motion'
 import { Card } from '../../features/profile/Card'
-import { LADDER } from './mockData'
+import { LADDER } from './insightsData'
 import type { InsightsData } from './types'
+import { dailyAverageSessions, UNRANKED_VOICE_TYPE, voiceTypeBand } from './voiceType'
 
 export interface VoiceTypeCardProps {
   data: InsightsData
@@ -13,10 +14,9 @@ export function VoiceTypeCard({ data, isDarkMode = true }: VoiceTypeCardProps): 
   const accent = isDarkMode ? '#0A84FF' : '#007AFF'
   const neutral = isDarkMode ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.1)'
 
-  // top 25% corresponds to index 3 in LADDER [50, 40, 30, 25, 20, 15, 10, 7, 5, 3, 2, 1]
-  const litThrough = 3
-  const nextBand = LADDER[litThrough + 1] // top 20%
-  const toNextSessions = nextBand ? Math.max(1, nextBand.minSessions - data.totalSessions) : null
+  // Band the user has reached on the ladder; index -1 means outside the top 50%.
+  const { band, index: litThrough, nextBand, toNextSessions } = voiceTypeBand(data)
+  const dailyAverage = dailyAverageSessions(data)
 
   return (
     <Card isDarkMode={isDarkMode} className="flex min-h-[225px] flex-col p-5">
@@ -25,27 +25,27 @@ export function VoiceTypeCard({ data, isDarkMode = true }: VoiceTypeCardProps): 
           className={`text-[32px] font-semibold leading-none ${isDarkMode ? 'text-gray-50' : 'text-gray-900'}`}
           style={{ letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}
         >
-          Top 25%
+          {band ? `Top ${band.topPercent}%` : UNRANKED_VOICE_TYPE}
         </p>
         <div className="mt-1.5">
           <p
             className={`text-[10px] font-semibold uppercase ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}
             style={{ letterSpacing: '0.07em' }}
           >
-            OF VOICEOS USERS
+            {band ? 'OF VOICEOS USERS' : `NEED ${LADDER[0].minSessions}+ SESSIONS`}
           </p>
         </div>
 
         {/* Percentile Ladder */}
         <div className="mt-3">
           <div className="flex items-center gap-[3px]">
-            {LADDER.map((band, index) => {
+            {LADDER.map((ladderBand, index) => {
               const isLit = index <= litThrough
               const isNext = index === litThrough + 1
               const visible = isLit || isNext ? 1 : 0
 
               return (
-                <div key={band.topPercent} className="flex-1">
+                <div key={ladderBand.topPercent} className="flex-1">
                   <div
                     className="rounded-full"
                     style={{ height: 10, backgroundColor: neutral }}
@@ -93,7 +93,7 @@ export function VoiceTypeCard({ data, isDarkMode = true }: VoiceTypeCardProps): 
             Daily average
           </span>
           <span className={`flex-shrink-0 whitespace-nowrap text-[12px] font-semibold tabular-nums ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
-            31 sessions
+            {dailyAverage} sessions
           </span>
         </div>
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { Card } from '../../features/profile/Card'
-import { toDayKey } from './mockData'
+import { toDayKey } from './insightsData'
 import type { InsightsData } from './types'
 import { ChartTooltip, type TooltipData } from './ChartTooltip'
 

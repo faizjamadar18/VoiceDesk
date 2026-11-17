@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
+import type { DeleteAccountResult } from '../../../../shared/types'
 import { Card } from './Card'
 import {
   ExternalLinkIcon,
@@ -16,6 +17,37 @@ export interface AccountSettingsTabProps {
   userEmail?: string
   userName?: string
   onSignOut?: () => void
+}
+
+export interface AccountDeletionHandlers {
+  deleteAccount: () => Promise<DeleteAccountResult>
+  setBusy: (busy: boolean) => void
+  onError: (message: string) => void
+  onDeleted: () => void
+}
+
+/**
+ * Runs the real account deletion and reports back through the caller's state
+ * setters. Kept outside the component so the flow can be tested without a DOM.
+ */
+export async function performAccountDeletion(handlers: AccountDeletionHandlers): Promise<void> {
+  handlers.setBusy(true)
+
+  let result: DeleteAccountResult
+  try {
+    result = await handlers.deleteAccount()
+  } catch {
+    result = { ok: false, error: 'Could not delete your account. Please try again.' }
+  }
+
+  handlers.setBusy(false)
+
+  if (!result.ok) {
+    handlers.onError(result.error ?? 'Could not delete your account. Please try again.')
+    return
+  }
+
+  handlers.onDeleted()
 }
 
 export function AccountSettingsTab({
@@ -37,6 +69,7 @@ export function AccountSettingsTab({
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const handleStartEdit = () => {
     setEditFirstName(firstName)
@@ -65,15 +98,19 @@ export function AccountSettingsTab({
     }, 1200)
   }
 
-  const handleDeleteAccount = () => {
+  const handleDeleteAccount = (): void => {
     if (deleteConfirmation.trim().toLowerCase() !== 'delete account') return
-    setIsDeleting(true)
-    setTimeout(() => {
-      setIsDeleting(false)
-      setShowDeleteModal(false)
-      setDeleteConfirmation('')
-      onClose?.()
-    }, 800)
+    setDeleteError(null)
+    void performAccountDeletion({
+      deleteAccount: () => window.kestrel.deleteAccount(),
+      setBusy: setIsDeleting,
+      onError: setDeleteError,
+      onDeleted: () => {
+        setShowDeleteModal(false)
+        setDeleteConfirmation('')
+        onClose?.()
+      }
+    })
   }
 
   const displayName = `${firstName} ${lastName}`.trim() || 'Faiz .'
@@ -211,7 +248,10 @@ export function AccountSettingsTab({
         <div className="voiceos-account-footer">
           <button
             type="button"
-            onClick={() => setShowDeleteModal(true)}
+            onClick={() => {
+              setDeleteError(null)
+              setShowDeleteModal(true)
+            }}
             className="voiceos-account-delete-btn"
           >
             <TrashIcon size={14} />
@@ -261,12 +301,22 @@ export function AccountSettingsTab({
               className="voiceos-delete-dialog-input"
               autoFocus
             />
+            {deleteError && (
+              <p
+                className="voiceos-delete-dialog-warning"
+                style={{ color: '#f87171' }}
+                role="alert"
+              >
+                {deleteError}
+              </p>
+            )}
             <div className="voiceos-delete-dialog-actions">
               <button
                 type="button"
                 onClick={() => {
                   setShowDeleteModal(false)
                   setDeleteConfirmation('')
+                  setDeleteError(null)
                 }}
                 disabled={isDeleting}
                 className="voiceos-account-btn"

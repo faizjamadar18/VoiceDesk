@@ -8,7 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryRecord, NewHistoryRecord } from '../../shared/types'
-import type { HistoryStore } from '../history/store'
+import type { SqliteHistoryStore } from '../history/sqlite-store'
 import type { ComposioIntegration } from './composio/integration'
 import type { ComposioStatus } from './composio/types'
 import { ToolRegistry } from './registry'
@@ -454,7 +454,7 @@ describe('AssistantService history', () => {
     return new AssistantService({
       registry: new ToolRegistry(),
       planner,
-      history: history as unknown as HistoryStore,
+      history: history as unknown as SqliteHistoryStore,
       onHistoryRecorded
     })
   }
@@ -502,7 +502,7 @@ describe('AssistantService history', () => {
     const service = new AssistantService({
       registry,
       planner: plannerFor('current_time'),
-      history: history as unknown as HistoryStore
+      history: history as unknown as SqliteHistoryStore
     })
 
     await service.act('what time is it')
@@ -518,7 +518,7 @@ describe('AssistantService history', () => {
     const history = new FakeHistory()
     const service = new AssistantService({
       registry: new ToolRegistry(),
-      history: history as unknown as HistoryStore,
+      history: history as unknown as SqliteHistoryStore,
       visionClient: new FakeVision()
     })
 
@@ -567,7 +567,7 @@ describe('AssistantService history', () => {
     const history = new FakeHistory()
     const service = new AssistantService({
       registry: new ToolRegistry(),
-      history: history as unknown as HistoryStore,
+      history: history as unknown as SqliteHistoryStore,
       visionClient: {
         answer: async () => {
           throw new Error('vision exploded')

@@ -25,7 +25,7 @@ import type {
   ScreenAskInput
 } from '../../shared/types'
 import { buildRecentContext } from '../history/context'
-import type { HistoryStore } from '../history/store'
+import type { SqliteHistoryStore } from '../history/sqlite-store'
 import { WindowsActionExecutor } from './actions'
 import type { ComposioIntegration } from './composio/integration'
 import { DirectFileSearch, FileOps } from './files'
@@ -133,7 +133,7 @@ export interface AssistantServiceOptions {
   /** Path to `mcp_servers.json`, used only when MCP is enabled. */
   mcpConfigPath?: string
   /** Local history of finished turns, replayed to the model and appended to. */
-  history?: HistoryStore
+  history?: SqliteHistoryStore
   /** Called with each saved turn, so a host can mirror it. */
   onHistoryRecorded?: (record: HistoryRecord) => void
   /** Optional resolver for the currently active window's app name and icon. */
@@ -276,7 +276,7 @@ export class AssistantService {
   private readonly weather: { fetch(location: string): Promise<WeatherResult> }
   private readonly pending: PendingStore
   private readonly executor: ActionExecutor
-  private readonly history: HistoryStore | null
+  private readonly history: SqliteHistoryStore | null
   private readonly planner: Planner
   private readonly client: LlmClient | null
   readonly plannerProvider: string

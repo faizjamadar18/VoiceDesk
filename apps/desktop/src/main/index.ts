@@ -21,6 +21,7 @@ import {
   type AuthState,
   type AuthTokens,
   type AuthUser,
+  type DeleteAccountResult,
   type IntegrationConnectResult,
   type IntegrationDisconnectResult,
   type KestrelRuntimeState,
@@ -31,6 +32,7 @@ import {
   type SaveSettingsResult
 } from '../shared/types'
 import { normalizeDictationSettings } from '../shared/dictation'
+import { deleteAccount } from './account/delete-account'
 import { HttpActionClient } from './action-client'
 import { loadOrCreateUserId } from './assistant/composio/identity'
 import {
@@ -43,8 +45,11 @@ import { AssistantServer, parseApiAddress } from './assistant/server'
 import { AssistantService, emptyIntegrationsStatus } from './assistant/service'
 import { AuthService, syncUserToBackend } from './auth/auth-service'
 import { FileAuthStore } from './auth/file-store'
-import { HistoryStore } from './history/store'
+import { closeDatabase, getDatabase, initializeDatabase } from './db'
+import { importLegacyHistory } from './history/legacy-import'
+import { SqliteHistoryStore } from './history/sqlite-store'
 import { formatHotkey, hotkeyLabel, isElectronAccelerator, parseHotkey } from './hotkey'
+import { getInsightsForUser } from './insights/service'
 import { normalizeInteractiveRegion } from './interactive-region'
 import { startKeyHook, type KeyHookHandle } from './key-hook'
 import {
@@ -120,7 +125,7 @@ let nemoServer: NemoServer | null = null
 let transcriber: LiveTranscriber | null = null
 let authService: AuthService | null = null
 let assistantService: AssistantService | null = null
-let historyStore: HistoryStore | null = null
+let historyStore: SqliteHistoryStore | null = null
 let composioIntegration: ComposioIntegration | null = null
 let assistantServer: AssistantServer | null = null
 let speechSynthesizer: SpeechSynthesizer | null = null
@@ -222,6 +227,12 @@ function broadcastState(): void {
 
 function broadcastSettings(): void {
   sendToMain(IPC.settingsChanged, settings)
+}
+
+/** The signed-in user's id, or null when nobody is signed in. */
+function currentUserId(): string | null {
+  const state = authService?.getState()
+  return state && state.status === 'authenticated' ? state.user.id : null
 }
 
 function effectiveAsrMode(): AsrMode {
@@ -682,6 +693,11 @@ function registerIpc(): void {
   })
   ipcMain.handle(IPC.authSetSession, async (_event, tokens: AuthTokens, user: AuthUser) => {
     await authService?.setSession(tokens, user)
+    const claimed = historyStore?.adoptOrphanSessions(user.id) ?? 0
+    if (claimed > 0) {
+      sendToMain(IPC.historyChanged)
+      sidebarWindow?.send(IPC.historyChanged)
+    }
   })
   ipcMain.handle(IPC.integrationsGetStatus, () =>
     assistantService?.integrationsStatus() ?? emptyIntegrationsStatus()
@@ -719,6 +735,21 @@ function registerIpc(): void {
       (await assistantService?.disconnectIntegration(id)) ??
       ({ ok: false, message: 'Integrations are not available.' } satisfies IntegrationDisconnectResult)
     )
+  })
+  ipcMain.handle(IPC.insightsGet, () => getInsightsForUser(currentUserId()))
+  ipcMain.handle(IPC.accountDelete, async (): Promise<DeleteAccountResult> => {
+    const userId = currentUserId()
+    if (userId === null || authService === null) {
+      return { ok: false, error: 'You are not signed in.' }
+    }
+    const auth = authService
+    const result = await deleteAccount({ userId, auth })
+    if (result.ok) {
+      sendToMain(IPC.authStateChanged, auth.getState())
+      sendToMain(IPC.historyChanged)
+      sidebarWindow?.send(IPC.historyChanged)
+    }
+    return result
   })
   ipcMain.handle(IPC.historyList, () => historyStore?.list() ?? [])
   ipcMain.handle(IPC.historyDelete, (_event, id: unknown) => {
@@ -946,6 +977,10 @@ async function initialize(): Promise<void> {
     join(app.getAppPath(), '.env')
   ])
 
+  initializeDatabase({
+    filePath: process.env.KESTREL_DB_PATH ?? join(app.getPath('userData'), 'kestrel.db')
+  })
+
   // The assistant runs in-process, but the Supabase OAuth redirect and the
   // notch both need a real localhost URL, so host the same HTTP surface the
   // Python backend provided.
@@ -962,10 +997,10 @@ async function initialize(): Promise<void> {
     onStatus: (status) => sendToMain(IPC.integrationsChanged, status)
   })
 
-  const historyPath =
+  const legacyHistoryPath =
     process.env.KESTREL_HISTORY_PATH?.trim() ||
     join(app.getPath('userData'), 'kestrel-history.json')
-  historyStore = new HistoryStore(historyPath)
+  historyStore = new SqliteHistoryStore(getDatabase(), currentUserId)
 
   assistantService = new AssistantService({
     mcpConfigPath: join(app.getAppPath(), 'mcp_servers.json'),
@@ -1017,6 +1052,13 @@ async function initialize(): Promise<void> {
   })
 
   registerProtocolClient()
+
+  try {
+    const { imported } = importLegacyHistory(getDatabase(), legacyHistoryPath, currentUserId())
+    if (imported > 0) console.log(`[history] imported ${imported} legacy records into SQLite`)
+  } catch (error) {
+    console.error('[history] legacy import failed', error)
+  }
 
   speechEngine = new WorkerSpeechEngine({ fallback: new KokoroSynthesizerEngine() })
   speechSynthesizer = new SpeechSynthesizer({ engine: speechEngine })
@@ -1142,6 +1184,7 @@ if (!app.requestSingleInstanceLock()) {
     void speechEngine?.terminate()
     speechEngine = null
     speechSynthesizer = null
+    closeDatabase()
     tray?.destroy()
     tray = null
   })

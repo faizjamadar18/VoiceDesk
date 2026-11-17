@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX, MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -7,11 +7,13 @@ import {
   SHARE_CARD_HEIGHT,
   SHARE_CARD_WIDTH
 } from './canvasUtils'
-import { MOCK_VOICE_TYPE_MODEL } from './mockData'
+import type { InsightsData } from './types'
+import { buildVoiceTypeModel } from './voiceType'
 
 export interface VoiceTypeModalProps {
   isOpen: boolean
   onClose: () => void
+  data: InsightsData
   isDarkMode?: boolean
 }
 
@@ -194,12 +196,13 @@ export function PostButton({
   )
 }
 
-export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceTypeModalProps): JSX.Element | null {
+export function VoiceTypeModal({ isOpen, onClose, data, isDarkMode = true }: VoiceTypeModalProps): JSX.Element | null {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const revealRef = useRef<HTMLDivElement | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [texture, setTexture] = useState<string | null>(null)
   const [confirmedAction, setConfirmedAction] = useState<string | null>(null)
+  const model = useMemo(() => buildVoiceTypeModel(data), [data])
 
   useEffect(() => {
     if (!isOpen) return
@@ -218,10 +221,10 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
     if (!isOpen) return
     const canvas = canvasRef.current
     if (!canvas) return
-    paintShareCard(canvas, MOCK_VOICE_TYPE_MODEL, { pixelRatio: 2 })
+    paintShareCard(canvas, model, { pixelRatio: 2 })
     const frame = requestAnimationFrame(() => setTexture(renderMarkTexture(1)))
     return () => cancelAnimationFrame(frame)
-  }, [isOpen])
+  }, [isOpen, model])
 
   const handleMouseMove = useCallback((event: ReactMouseEvent<HTMLDivElement>): void => {
     const node = revealRef.current
@@ -283,7 +286,7 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
   }
 
   const handlePostToTwitter = (): void => {
-    const text = `I'm ${MOCK_VOICE_TYPE_MODEL.typeName}, says @VoiceOSApp. What's your Voice Type?\n\n(Paste image below ⬇️)`
+    const text = `I'm ${model.typeName}, says @VoiceOSApp. What's your Voice Type?\n\n(Paste image below ⬇️)`
     const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
     triggerConfirmation('twitter')
@@ -350,8 +353,8 @@ export function VoiceTypeModal({ isOpen, onClose, isDarkMode = true }: VoiceType
             }}
           >
             <div className="sr-only">
-              <p>{MOCK_VOICE_TYPE_MODEL.typeName}</p>
-              {MOCK_VOICE_TYPE_MODEL.stats.map((stat) => (
+              <p>{model.typeName}</p>
+              {model.stats.map((stat) => (
                 <p key={stat.label}>
                   {stat.value} {stat.label}
                 </p>

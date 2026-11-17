@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 import { motion } from 'framer-motion'
 import { useSystemTheme } from '../../context/ThemeContext'
 import { DashboardButton } from '../ui/DashboardButton'
 import { AgentPromptsCard } from './AgentPromptsCard'
 import { AppUsageCard } from './AppUsageCard'
-import { MOCK_INSIGHTS_DATA } from './mockData'
+import { EMPTY_INSIGHTS_DATA, toInsightsData } from './insightsData'
 import { PeakHoursCard } from './PeakHoursCard'
 import { StreakCard } from './StreakCard'
+import type { InsightsData } from './types'
 import { VoiceTypeCard } from './VoiceTypeCard'
 import { VoiceTypeModal } from './VoiceTypeModal'
 import { WordsDictatedCard } from './WordsDictatedCard'
@@ -38,7 +39,34 @@ function ShareIcon({ className }: { className?: string }): JSX.Element {
 export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
   const { isDarkMode } = useSystemTheme()
   const [isVoiceTypeModalOpen, setIsVoiceTypeModalOpen] = useState(false)
-  const data = MOCK_INSIGHTS_DATA
+  const [data, setData] = useState<InsightsData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const payload = await window.kestrel.getInsights()
+        if (!cancelled) setData(toInsightsData(payload))
+      } catch (error) {
+        console.error('Failed to load insights:', error)
+        if (!cancelled) setData(EMPTY_INSIGHTS_DATA)
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const displayedData = data ?? EMPTY_INSIGHTS_DATA
+
+  const neutralTextClass = `text-[13px] leading-relaxed transition-colors duration-200 ${
+    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+  }`
 
   const sectionAnimation = (index: number) => ({
     initial: { opacity: 0, y: 14 },
@@ -79,31 +107,44 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
         </DashboardButton>
       </div>
 
-      {/* Bento Grid */}
-      <div className="space-y-4">
-        {/* Row 1: Top 3 Hero Cards */}
-        <motion.div {...sectionAnimation(0)} className="grid gap-4 lg:grid-cols-3">
-          <VoiceTypeCard data={data} isDarkMode={isDarkMode} />
-          <WordsDictatedCard data={data} isDarkMode={isDarkMode} />
-          <AgentPromptsCard data={data} isDarkMode={isDarkMode} />
-        </motion.div>
+      {isLoading ? (
+        <div className="space-y-4">
+          <p className={neutralTextClass}>Loading insights…</p>
+        </div>
+      ) : displayedData.totalSessions === 0 ? (
+        <div className="space-y-4">
+          <p className={neutralTextClass}>
+            Nothing yet. Your insights will appear here once you start dictating.
+          </p>
+        </div>
+      ) : (
+        /* Bento Grid */
+        <div className="space-y-4">
+          {/* Row 1: Top 3 Hero Cards */}
+          <motion.div {...sectionAnimation(0)} className="grid gap-4 lg:grid-cols-3">
+            <VoiceTypeCard data={displayedData} isDarkMode={isDarkMode} />
+            <WordsDictatedCard data={displayedData} isDarkMode={isDarkMode} />
+            <AgentPromptsCard data={displayedData} isDarkMode={isDarkMode} />
+          </motion.div>
 
-        {/* Row 2: Middle 2 Cards (App Usage & Streak) */}
-        <motion.div {...sectionAnimation(1)} className="grid gap-4 lg:grid-cols-2 items-stretch">
-          <AppUsageCard data={data} isDarkMode={isDarkMode} />
-          <StreakCard data={data} isDarkMode={isDarkMode} />
-        </motion.div>
+          {/* Row 2: Middle 2 Cards (App Usage & Streak) */}
+          <motion.div {...sectionAnimation(1)} className="grid gap-4 lg:grid-cols-2 items-stretch">
+            <AppUsageCard data={displayedData} isDarkMode={isDarkMode} />
+            <StreakCard data={displayedData} isDarkMode={isDarkMode} />
+          </motion.div>
 
-        {/* Row 3: Bottom Full-Width Card (Peak Hours) */}
-        <motion.div {...sectionAnimation(2)}>
-          <PeakHoursCard data={data} isDarkMode={isDarkMode} />
-        </motion.div>
-      </div>
+          {/* Row 3: Bottom Full-Width Card (Peak Hours) */}
+          <motion.div {...sectionAnimation(2)}>
+            <PeakHoursCard data={displayedData} isDarkMode={isDarkMode} />
+          </motion.div>
+        </div>
+      )}
 
       {/* Voice Type Share Modal */}
       <VoiceTypeModal
         isOpen={isVoiceTypeModalOpen}
         onClose={() => setIsVoiceTypeModalOpen(false)}
+        data={displayedData}
         isDarkMode={isDarkMode}
       />
     </div>
