@@ -1,8 +1,8 @@
-# VoiceOS
+# VoiceDesk
 
 A Windows voice agent. Hold **Ctrl+Space**, speak, release. A notch drops from the top of the screen, transcribes you locally, runs the command, shows the answer, and speaks it back without stealing focus from the app you are using.
 
-`Kestrel` is the internal codename. It appears in `KESTREL_*` env vars, `com.kestrel.desktop`, and `kestrel-*.json` files. The product is VoiceOS.
+The product is VoiceDesk. Some legacy identifiers keep the old names on purpose: the `KESTREL_*` env vars, `com.kestrel.desktop`, `kestrel-*.json` files, and the `%LOCALAPPDATA%\Kestrel` model path.
 
 ## What it does
 
