@@ -240,6 +240,7 @@ export interface NotchSlackTargetItem {
   type: 'channel' | 'dm'
   isPrivate?: boolean
   avatar?: string
+  email?: string
 }
 
 /** A Slack message or reminder waiting on the user's approval. */

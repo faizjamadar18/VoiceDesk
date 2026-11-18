@@ -48,6 +48,7 @@ export interface SlackUser {
   /** Slack handle, when the payload carries one. */
   readonly handle: string | null
   readonly email: string | null
+  readonly avatar: string | null
 }
 
 export interface SlackMessage {
@@ -55,6 +56,8 @@ export interface SlackMessage {
   readonly text: string
   readonly ts: string
   readonly threadTs: string | null
+  readonly avatar?: string | null
+  readonly username?: string | null
 }
 
 export interface SlackToolOptions {
@@ -74,11 +77,13 @@ const SLUG = {
   thread: 'SLACK_FETCH_MESSAGE_THREAD_FROM_A_CONVERSATION',
   findChannels: 'SLACK_FIND_CHANNELS',
   listChannels: 'SLACK_LIST_ALL_CHANNELS',
+  listUsers: 'SLACK_LIST_ALL_USERS',
   findUsers: 'SLACK_FIND_USERS',
   findUserByEmail: 'SLACK_FIND_USER_BY_EMAIL_ADDRESS',
   openDm: 'SLACK_OPEN_DM',
   reminder: 'SLACK_CREATE_A_REMINDER',
-  userInfo: 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION'
+  userInfo: 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION',
+  testAuth: 'SLACK_TEST_AUTH'
 } as const
 
 /** A Slack conversation id: channel, DM, or group. */
@@ -93,6 +98,11 @@ const MAX_READ_LIMIT = 100
 const SPOKEN_MESSAGE_LIMIT = 3
 const SPOKEN_LINE_LIMIT = 120
 const CONFIRM_LIMIT = 160
+
+/** Slack's users.list is cheap per page; a few pages cover a normal workspace. */
+const USER_PAGE_LIMIT = 200
+const MAX_USER_PAGES = 5
+const CHANNEL_PAGE_LIMIT = 200
 
 const NEED_EXACT_TIME = 'I need an exact date and time for that.'
 const NEED_MESSAGE = 'I need the message text.'
@@ -209,6 +219,124 @@ function channelFrom(record: Record<string, unknown>): SlackChannel | null {
   return { id, name: name.replace(/^#/, '') }
 }
 
+const AVATAR_IMAGE_KEYS: readonly string[] = [
+  'image_192',
+  'image_512',
+  'image_72',
+  'image_48',
+  'image_original',
+  'image_64',
+  'image_32',
+  'image_24',
+  'avatar_url',
+  'avatar',
+  'picture'
+]
+
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  return trimmed.startsWith('https://') || trimmed.startsWith('http://')
+}
+
+export function extractAvatarUrl(record: unknown): string | undefined {
+  if (!record || typeof record !== 'object') return undefined
+  const pending: unknown[] = [record]
+  const seen = new Set<unknown>()
+
+  while (pending.length > 0) {
+    const current = pending.shift()
+    if (!current || typeof current !== 'object' || seen.has(current)) continue
+    seen.add(current)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (item && typeof item === 'object' && !seen.has(item)) {
+          pending.push(item)
+        }
+      }
+      continue
+    }
+
+    const rec = current as Record<string, unknown>
+
+    for (const key of AVATAR_IMAGE_KEYS) {
+      const val = rec[key]
+      if (isHttpUrl(val)) {
+        return val.trim()
+      }
+    }
+
+    const prioritySubtrees = ['user_profile', 'profile', 'icons', 'user', 'member']
+    for (const sub of prioritySubtrees) {
+      const child = rec[sub]
+      if (child && typeof child === 'object' && !seen.has(child)) {
+        pending.push(child)
+      }
+    }
+    for (const [k, v] of Object.entries(rec)) {
+      if (!prioritySubtrees.includes(k) && v && typeof v === 'object' && !seen.has(v)) {
+        pending.push(v)
+      }
+    }
+  }
+
+  return undefined
+}
+
+export function extractEmail(record: unknown): string | undefined {
+  if (!record || typeof record !== 'object') return undefined
+  const pending: unknown[] = [record]
+  const seen = new Set<unknown>()
+
+  while (pending.length > 0) {
+    const current = pending.shift()
+    if (!current || typeof current !== 'object' || seen.has(current)) continue
+    seen.add(current)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (item && typeof item === 'object' && !seen.has(item)) {
+          pending.push(item)
+        }
+      }
+      continue
+    }
+
+    const rec = current as Record<string, unknown>
+    const profile = isRecord(rec['profile'])
+      ? rec['profile']
+      : isRecord(rec['user_profile'])
+        ? rec['user_profile']
+        : null
+
+    const candidate =
+      (profile !== null ? stringOf(profile['email']) : null) ??
+      stringOf(rec['email'])
+    if (candidate) {
+      const trimmed = candidate.trim()
+      if (EMAIL.test(trimmed)) {
+        return trimmed
+      }
+    }
+
+    const prioritySubtrees = ['profile', 'user_profile', 'user', 'member']
+    for (const sub of prioritySubtrees) {
+      const child = rec[sub]
+      if (child && typeof child === 'object' && !seen.has(child)) {
+        pending.push(child)
+      }
+    }
+    for (const [k, v] of Object.entries(rec)) {
+      if (!prioritySubtrees.includes(k) && v && typeof v === 'object' && !seen.has(v)) {
+        pending.push(v)
+      }
+    }
+  }
+
+  return undefined
+}
+
 function userFrom(record: Record<string, unknown>): SlackUser | null {
   const id =
     stringOf(record['id']) ??
@@ -229,7 +357,8 @@ function userFrom(record: Record<string, unknown>): SlackUser | null {
     handle: stringOf(record['name']) ?? stringOf(record['username']),
     email:
       (profile === null ? null : stringOf(profile['email'])) ??
-      stringOf(record['email'])
+      stringOf(record['email']),
+    avatar: extractAvatarUrl(record) ?? null
   }
 }
 
@@ -283,6 +412,21 @@ function singleUser(data: unknown): SlackUser | null {
   return null
 }
 
+function extractMessageUsername(record: Record<string, unknown>): string | null {
+  const userProfile = isRecord(record['user_profile'])
+    ? record['user_profile']
+    : isRecord(record['profile'])
+      ? record['profile']
+      : null
+  return (
+    (userProfile !== null ? stringOf(userProfile['display_name']) : null) ||
+    (userProfile !== null ? stringOf(userProfile['real_name']) : null) ||
+    stringOf(record['user_name']) ||
+    stringOf(record['username']) ||
+    null
+  )
+}
+
 export function extractMessages(data: unknown): SlackMessage[] {
   const found = recordArray(unwrap(data), ['messages', 'items', 'results']) ?? []
   const messages: SlackMessage[] = []
@@ -296,7 +440,9 @@ export function extractMessages(data: unknown): SlackMessage[] {
         null,
       text,
       ts: stringOf(record['ts']) ?? stringOf(record['timestamp']) ?? '',
-      threadTs: stringOf(record['thread_ts'])
+      threadTs: stringOf(record['thread_ts']),
+      avatar: extractAvatarUrl(record) ?? null,
+      username: extractMessageUsername(record)
     })
   }
   return messages
@@ -433,6 +579,7 @@ interface SlackTarget {
   readonly id: string
   /** What the user hears: `#design` or `Sarah Lee`. */
   readonly label: string
+  readonly avatar?: string | null
 }
 
 type TargetResult =
@@ -642,7 +789,7 @@ export function createSlackTools(options: SlackToolOptions): Tool[] {
         outcome: { status: 'error', action, message, spokenResponse: message }
       }
     }
-    return { ok: true, target: { id, label: chosen.name } }
+    return { ok: true, target: { id, label: chosen.name, avatar: chosen.avatar } }
   }
 
   async function resolveTarget(
@@ -824,7 +971,8 @@ export function createSlackTools(options: SlackToolOptions): Tool[] {
         when: null,
         channelId: resolved.target.id,
         isDm: resolved.target.id.startsWith('D'),
-        threadTs: optionalString(args, 'thread_ts')
+        threadTs: optionalString(args, 'thread_ts'),
+        avatar: resolved.target.avatar ?? undefined
       }
       const short = truncate(message, CONFIRM_LIMIT)
       return {
@@ -966,7 +1114,8 @@ export function createSlackTools(options: SlackToolOptions): Tool[] {
         when,
         channelId: resolved.target.id,
         isDm: resolved.target.id.startsWith('D'),
-        threadTs: optionalString(args, 'thread_ts')
+        threadTs: optionalString(args, 'thread_ts'),
+        avatar: resolved.target.avatar ?? undefined
       }
       const short = truncate(message, CONFIRM_LIMIT)
       return {
@@ -1355,46 +1504,239 @@ function applySlackEdits(
   return next
 }
 
-function extractAvatar(record: Record<string, unknown>): string | undefined {
-  const profile = isRecord(record['profile']) ? record['profile'] : null
-  if (profile) {
-    const avatar =
-      stringOf(profile['image_72']) ??
-      stringOf(profile['image_48']) ??
-      stringOf(profile['image_192']) ??
-      stringOf(profile['image_512']) ??
-      stringOf(profile['avatar_hash']) ??
-      stringOf(profile['image_original'])
-    if (avatar) return avatar
+function extractUserName(record: unknown, fallbackId: string): string {
+  if (!record || typeof record !== 'object') return fallbackId
+  const pending: unknown[] = [record]
+  const seen = new Set<unknown>()
+  let foundRealName: string | null = null
+  let foundName: string | null = null
+
+  while (pending.length > 0) {
+    const current = pending.shift()
+    if (!current || typeof current !== 'object' || seen.has(current)) continue
+    seen.add(current)
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (item && typeof item === 'object' && !seen.has(item)) {
+          pending.push(item)
+        }
+      }
+      continue
+    }
+
+    const rec = current as Record<string, unknown>
+    const profile = isRecord(rec['profile']) ? rec['profile'] : null
+
+    const displayName =
+      (profile !== null ? stringOf(profile['display_name']) : null) ??
+      stringOf(rec['display_name'])
+    if (displayName) return displayName
+
+    const realName =
+      (profile !== null ? stringOf(profile['real_name']) : null) ??
+      stringOf(rec['real_name'])
+    if (realName && !foundRealName) {
+      foundRealName = realName
+    }
+
+    const name = stringOf(rec['name']) ?? stringOf(rec['username'])
+    if (name && !foundName) {
+      foundName = name
+    }
+
+    const prioritySubtrees = ['user', 'member', 'profile']
+    for (const sub of prioritySubtrees) {
+      const child = rec[sub]
+      if (child && typeof child === 'object' && !seen.has(child)) {
+        pending.push(child)
+      }
+    }
+    for (const [k, v] of Object.entries(rec)) {
+      if (!prioritySubtrees.includes(k) && v && typeof v === 'object' && !seen.has(v)) {
+        pending.push(v)
+      }
+    }
   }
-  const direct =
-    stringOf(record['image_72']) ??
-    stringOf(record['image_48']) ??
-    stringOf(record['avatar'])
-  return direct ?? undefined
+
+  return foundRealName ?? foundName ?? fallbackId
 }
 
-function userNameFromRecord(
-  record: Record<string, unknown>,
-  fallbackId: string
-): string {
-  const profile = isRecord(record['profile']) ? record['profile'] : null
-  return (
-    (profile === null ? null : stringOf(profile['display_name'])) ??
-    stringOf(record['real_name']) ??
-    (profile === null ? null : stringOf(profile['real_name'])) ??
+/** A raw-looking user id used as a name: a prefix and 8+ characters total. */
+const RAW_ID_NAME = /^[UWB][A-Z0-9]{7,}$/
+
+/** The readable local part of an email, when it is a plausible display name. */
+function emailDisplayName(record: unknown): string | null {
+  const email = extractEmail(record)
+  if (email === undefined) return null
+  const local = email.split('@')[0]?.trim()
+  return local !== undefined && local.length > 0 && !RAW_ID_NAME.test(local)
+    ? local
+    : null
+}
+
+/**
+ * A person's name, never their raw Slack id. Falls back through the profile
+ * display name, real name, handle, and finally the email local part.
+ */
+function realUserName(record: unknown, id: string): string | null {
+  const found = extractUserName(record, '')
+  if (found !== '' && found !== id && !RAW_ID_NAME.test(found)) return found
+  return emailDisplayName(record)
+}
+
+function isIgnoredMember(record: Record<string, unknown>): boolean {
+  if (record['deleted'] === true) return true
+  if (record['is_bot'] === true || record['is_app_user'] === true) return true
+  if (record['is_workflow_bot'] === true) return true
+  const id =
+    stringOf(record['id']) ??
+    stringOf(record['user_id']) ??
+    ''
+  if (id.toUpperCase().startsWith('USLACK')) return true
+  const handle = (
     stringOf(record['name']) ??
     stringOf(record['username']) ??
-    fallbackId
-  )
+    ''
+  ).toLowerCase()
+  return handle === 'slackbot'
 }
 
-function userRecordFromData(data: unknown): Record<string, unknown> | null {
-  const value = unwrap(data)
+/** One usable workspace member from a users.list record, or `null`. */
+function directoryUserFrom(record: Record<string, unknown>): SlackUser | null {
+  if (isIgnoredMember(record)) return null
+  const id =
+    stringOf(record['id']) ??
+    stringOf(record['user_id']) ??
+    stringOf(record['user'])
+  if (id === null || !USER_ID.test(id)) return null
+  const name = realUserName(record, id)
+  if (name === null) return null
+  return {
+    id,
+    name,
+    handle: stringOf(record['name']) ?? stringOf(record['username']),
+    email: extractEmail(record) ?? null,
+    avatar: extractAvatarUrl(record) ?? null
+  }
+}
+
+/** The next cursor in a paginated Slack payload, or `null` at the end. */
+function nextCursorOf(data: unknown): string | null {
+  let value = unwrap(data)
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!isRecord(value)) return null
+    const meta = value['response_metadata']
+    if (isRecord(meta)) return stringOf(meta['next_cursor'])
+    const next = value['data'] ?? value['response']
+    if (next === undefined || typeof next === 'string') return null
+    value = next
+  }
+  return null
+}
+
+interface SlackUserDirectory {
+  readonly users: Map<string, SlackUser>
+  readonly ok: boolean
+}
+
+/**
+ * The workspace directory. users.list is the only Slack tool that can list
+ * people without a query, so it is the authoritative source of names,
+ * avatars, and real (non-bot) members.
+ */
+async function loadSlackUserDirectory(
+  callTool: CallTool
+): Promise<SlackUserDirectory> {
+  const users = new Map<string, SlackUser>()
+  let ok = false
+  let cursor: string | null = null
+
+  for (let page = 0; page < MAX_USER_PAGES; page += 1) {
+    const args: Record<string, unknown> = { limit: USER_PAGE_LIMIT }
+    if (cursor !== null) args['cursor'] = cursor
+    const response = await callTool(SLUG.listUsers, args).catch(() => ({
+      text: '',
+      isError: true
+    }))
+    if (response.isError) break
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(response.text)
+    } catch {
+      break
+    }
+    ok = true
+
+    const found =
+      recordArray(unwrap(parsed), ['members', 'users', 'items', 'results']) ?? []
+    for (const record of found) {
+      const user = directoryUserFrom(record)
+      if (user !== null && !users.has(user.id)) users.set(user.id, user)
+    }
+
+    const next = nextCursorOf(parsed)
+    if (next === null || next === cursor) break
+    cursor = next
+  }
+
+  return { users, ok }
+}
+
+/** One user by id, via auth.test or a detailed lookup. */
+async function fetchDetailedSlackUser(
+  callTool: CallTool,
+  id: string,
+  fallbackName?: string
+): Promise<SlackUser | null> {
+  const response = await callTool(SLUG.userInfo, { user: id }).catch(() => ({
+    text: '',
+    isError: true
+  }))
+  if (response.isError) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(response.text)
+  } catch {
+    return null
+  }
+
+  const name = realUserName(parsed, id) ?? fallbackName ?? null
+  if (name === null) return null
+  return {
+    id,
+    name,
+    handle: null,
+    email: extractEmail(parsed) ?? null,
+    avatar: extractAvatarUrl(parsed) ?? null
+  }
+}
+
+/** The user behind the connected Slack token, from auth.test. */
+async function fetchAuthenticatedUserId(
+  callTool: CallTool
+): Promise<string | null> {
+  const response = await callTool(SLUG.testAuth, {}).catch(() => ({
+    text: '',
+    isError: true
+  }))
+  if (response.isError) return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(response.text)
+  } catch {
+    return null
+  }
+  const value = unwrap(parsed)
   if (!isRecord(value)) return null
-  if (isRecord(value['user'])) return value['user'] as Record<string, unknown>
-  if (isRecord(value['member'])) return value['member'] as Record<string, unknown>
-  return value
+  const id =
+    stringOf(value['user_id']) ??
+    stringOf(value['user']) ??
+    stringOf(value['id'])
+  return id !== null && USER_ID.test(id) ? id : null
 }
 
 export async function fetchSlackRecentMessages(
@@ -1436,37 +1778,78 @@ export async function fetchSlackRecentMessages(
     const oldestToNewest = [...pickedNewest].reverse()
 
     const users: Record<string, { name: string; avatar?: string }> = {}
+
+    for (const m of messages) {
+      if (!m.user) continue
+      const existing = users[m.user]
+      const name = m.username ?? existing?.name
+      const avatar = m.avatar ?? existing?.avatar
+      if (name !== undefined) {
+        users[m.user] = {
+          name,
+          ...(avatar ? { avatar } : {})
+        }
+      }
+    }
+
     const userIds = Array.from(
       new Set(oldestToNewest.map((m) => m.user).filter((u): u is string => Boolean(u)))
     )
 
+    // users.list already carries every sender's names and avatars, so only
+    // look a person up individually when their avatar is still missing.
+    const directory = await loadSlackUserDirectory(callTool)
+    for (const uid of userIds) {
+      const known = directory.users.get(uid)
+      if (known === undefined) continue
+      const existing = users[uid]
+      const avatar = known.avatar ?? existing?.avatar
+      users[uid] = {
+        name: existing?.name ?? known.name,
+        ...(avatar ? { avatar } : {})
+      }
+    }
+
+    const selfId = await fetchAuthenticatedUserId(callTool)
+    const selfKnown = selfId === null ? undefined : directory.users.get(selfId)
+    if (selfId !== null && selfKnown !== undefined) {
+      const existing = users[selfId]
+      const avatar = selfKnown.avatar ?? existing?.avatar
+      users[selfId] = {
+        name: existing?.name ?? selfKnown.name,
+        ...(avatar ? { avatar } : {})
+      }
+    }
+
+    const needsDetail = new Set<string>(
+      userIds.filter((uid) => !users[uid]?.avatar)
+    )
+    if (selfId !== null && !users[selfId]?.avatar) needsDetail.add(selfId)
+
     await Promise.all(
-      userIds.map(async (uid) => {
-        try {
-          const userRes = await callTool(SLUG.userInfo, { user: uid })
-          if (!userRes.isError) {
-            const userJson = JSON.parse(userRes.text)
-            const userRecord = userRecordFromData(userJson)
-            if (userRecord) {
-              const name = userNameFromRecord(userRecord, uid)
-              const avatar = extractAvatar(userRecord)
-              users[uid] = { name, avatar }
-            }
-          }
-        } catch {
-          // Gracefully continue
+      Array.from(needsDetail).map(async (uid) => {
+        const known = directory.users.get(uid)
+        const detailed = await fetchDetailedSlackUser(callTool, uid, known?.name)
+        if (detailed === null) return
+        const existing = users[uid]
+        const avatar = detailed.avatar ?? existing?.avatar
+        users[uid] = {
+          name: existing?.name ?? detailed.name,
+          ...(avatar ? { avatar } : {})
         }
       })
     )
 
     const formattedMessages: NotchSlackRecentMessage[] = oldestToNewest.map((m) => {
       const userInfo = m.user ? users[m.user] : undefined
+      const username = userInfo?.name ?? m.username ?? null
+      const avatar = userInfo?.avatar ?? (m.avatar ? m.avatar : undefined)
       return {
         user: m.user,
-        username: userInfo?.name ?? null,
+        username,
         text: m.text,
         ts: m.ts,
-        avatar: userInfo?.avatar
+        avatar
       }
     })
 
@@ -1485,13 +1868,52 @@ export async function fetchSlackTargets(
 ): Promise<{ success: boolean; targets: NotchSlackTargetItem[] }> {
   try {
     const targets: NotchSlackTargetItem[] = []
-    const seen = new Set<string>()
+    const seenTargets = new Set<string>()
+    const seenUsers = new Set<string>()
     let anySuccess = false
 
+    // The workspace directory comes from users.list, which is the only Slack
+    // tool that can list people with no search query.
+    const directory = await loadSlackUserDirectory(callTool).catch(() => ({
+      users: new Map<string, SlackUser>(),
+      ok: false
+    }))
+    if (directory.ok) anySuccess = true
+    const users = new Map(directory.users)
+
+    // Make sure the connected account itself resolves with a name and avatar.
+    const selfId = await fetchAuthenticatedUserId(callTool)
+    if (selfId !== null) {
+      const self = users.get(selfId)
+      if (self === undefined || self.avatar === null) {
+        const detailed = await fetchDetailedSlackUser(callTool, selfId, self?.name)
+        if (detailed !== null) {
+          users.set(selfId, {
+            id: selfId,
+            name: self?.name ?? detailed.name,
+            handle: self?.handle ?? detailed.handle,
+            email: self?.email ?? detailed.email,
+            avatar: detailed.avatar ?? self?.avatar ?? null
+          })
+        }
+      }
+    }
+
+    const imRecords: Array<Record<string, unknown>> = []
+
     try {
-      let chanRes = await callTool(SLUG.listChannels, {})
+      const listChannels = async (args: Record<string, unknown>) =>
+        callTool(SLUG.listChannels, args).catch(() => ({
+          text: '',
+          isError: true
+        }))
+
+      let chanRes = await listChannels({
+        types: 'public_channel,private_channel,im,mpim',
+        limit: CHANNEL_PAGE_LIMIT
+      })
       if (chanRes.isError) {
-        chanRes = await callTool(SLUG.findChannels, { query: '' })
+        chanRes = await listChannels({ limit: CHANNEL_PAGE_LIMIT })
       }
       if (!chanRes.isError) {
         anySuccess = true
@@ -1502,8 +1924,22 @@ export async function fetchSlackTargets(
             stringOf(record['id']) ??
             stringOf(record['channel_id']) ??
             stringOf(record['channelId'])
-          if (id === null || !CHANNEL_ID.test(id) || seen.has(id)) continue
-          seen.add(id)
+          if (id === null || seenTargets.has(id)) continue
+
+          const imUser =
+            stringOf(record['user']) ?? stringOf(record['user_id'])
+          const isIm =
+            record['is_im'] === true ||
+            id.startsWith('D') ||
+            (imUser !== null && !record['name'])
+
+          if (isIm) {
+            if (imUser !== null && USER_ID.test(imUser)) imRecords.push(record)
+            continue
+          }
+
+          if (!CHANNEL_ID.test(id)) continue
+          seenTargets.add(id)
           const name =
             stringOf(record['name']) ??
             stringOf(record['channel_name']) ??
@@ -1522,35 +1958,61 @@ export async function fetchSlackTargets(
         }
       }
     } catch {
-      // Continue to users
+      // Continue to the people directory
     }
 
-    try {
-      const userRes = await callTool(SLUG.findUsers, { query: '' })
-      if (!userRes.isError) {
-        anySuccess = true
-        const parsed = JSON.parse(userRes.text)
-        const found =
-          recordArray(unwrap(parsed), ['members', 'users', 'items', 'results']) ?? []
-        for (const record of found) {
-          const id =
-            stringOf(record['id']) ??
-            stringOf(record['user']) ??
-            stringOf(record['user_id'])
-          if (id === null || !USER_ID.test(id) || seen.has(id)) continue
-          seen.add(id)
-          const name = userNameFromRecord(record, id)
-          const avatar = extractAvatar(record)
-          targets.push({
-            id,
-            name,
-            type: 'dm',
-            avatar
-          })
+    // Each IM record names only a user id. Resolve that person through the
+    // directory and keep the conversation id (`D...`) as the send target.
+    for (const record of imRecords) {
+      const id =
+        stringOf(record['id']) ??
+        stringOf(record['channel_id']) ??
+        stringOf(record['channelId'])
+      if (id === null || seenTargets.has(id)) continue
+
+      const uid = stringOf(record['user']) ?? stringOf(record['user_id'])
+      let user = uid === null ? undefined : users.get(uid)
+      if (uid !== null && (user === undefined || user.avatar === null)) {
+        const detailed = await fetchDetailedSlackUser(callTool, uid, user?.name)
+        if (detailed !== null) {
+          user = {
+            id: uid,
+            name: user?.name ?? detailed.name,
+            handle: user?.handle ?? detailed.handle,
+            email: user?.email ?? detailed.email,
+            avatar: detailed.avatar ?? user?.avatar ?? null
+          }
+          users.set(uid, user)
         }
       }
-    } catch {
-      // Best effort
+
+      const name = user?.name ?? realUserName(record, uid ?? '')
+      if (name === null) continue
+
+      const avatar = user?.avatar ?? extractAvatarUrl(record) ?? null
+      const email = user?.email ?? extractEmail(record) ?? null
+      seenTargets.add(id)
+      if (uid !== null) seenUsers.add(uid)
+      targets.push({
+        id,
+        name,
+        type: 'dm',
+        ...(email !== null ? { email } : {}),
+        ...(avatar !== null ? { avatar } : {})
+      })
+    }
+
+    // Real people with no DM conversation yet can still be chosen.
+    for (const user of users.values()) {
+      if (seenUsers.has(user.id) || seenTargets.has(user.id)) continue
+      seenTargets.add(user.id)
+      targets.push({
+        id: user.id,
+        name: user.name,
+        type: 'dm',
+        ...(user.email !== null ? { email: user.email } : {}),
+        ...(user.avatar !== null ? { avatar: user.avatar } : {})
+      })
     }
 
     return {

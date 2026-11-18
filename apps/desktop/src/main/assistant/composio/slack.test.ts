@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { Tool, ToolContext } from '../types'
 import {
   createSlackTools,
+  extractAvatarUrl,
+  extractEmail,
+  extractMessages,
   fetchSlackRecentMessages,
   fetchSlackTargets
 } from './slack'
@@ -666,11 +669,22 @@ describe('slack prepare card metadata', () => {
     expect(prep.card?.['threadTs']).toBe('1700000000.123')
   })
 
-  it('sets isDm to true when recipient is a DM channel', async () => {
+  it('sets isDm to true and populates avatar when recipient is a DM person', async () => {
     const { tools } = makeTools({
       SLACK_FIND_CHANNELS: () => ({ text: okPayload({ channels: [] }) }),
       SLACK_FIND_USERS: () => ({
-        text: okPayload({ members: [userRecord(USER_ID, 'Sarah', 'sarah')] })
+        text: okPayload({
+          members: [
+            {
+              ...userRecord(USER_ID, 'Sarah', 'sarah'),
+              profile: {
+                display_name: 'Sarah',
+                real_name: 'Sarah',
+                image_192: 'https://avatar/sarah.png'
+              }
+            }
+          ]
+        })
       }),
       SLACK_OPEN_DM: () => ({
         text: okPayload({ channel: { id: DM } })
@@ -684,6 +698,7 @@ describe('slack prepare card metadata', () => {
 
     expect(prep.card?.['channelId']).toBe(DM)
     expect(prep.card?.['isDm']).toBe(true)
+    expect(prep.card?.['avatar']).toBe('https://avatar/sarah.png')
   })
 
   it('populates channelId and isDm on schedule message card', async () => {
@@ -812,6 +827,110 @@ describe('fetchSlackRecentMessages', () => {
   })
 })
 
+describe('fetchSlackRecentMessages directory resolution', () => {
+  it('resolves senders from users.list, asks user info with the user id only, and resolves self', async () => {
+    const calls: RecordedCall[] = []
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      calls.push({ slug, args })
+      if (slug === 'SLACK_FETCH_CONVERSATION_HISTORY') {
+        return {
+          text: okPayload({
+            messages: [
+              { user: 'U0AAAAAAA', text: 'Hi from Alice', ts: '100.0' },
+              { user: 'U0BBBBBBB', text: 'Hi from Bob', ts: '200.0' },
+              { user: 'U0CCCCCCC', text: 'Hi from nobody', ts: '300.0' }
+            ]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_LIST_ALL_USERS') {
+        expect(Number(args['limit'])).toBeGreaterThan(0)
+        return {
+          text: usersPayload([
+            {
+              id: 'U0AAAAAAA',
+              name: 'alice',
+              profile: {
+                display_name: 'Alice',
+                email: 'alice@example.com',
+                image_192: 'https://avatar/alice-192.png'
+              }
+            },
+            {
+              id: 'U0BBBBBBB',
+              name: 'bob',
+              profile: { real_name: 'Bob Jones' }
+            }
+          ]),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_TEST_AUTH') {
+        return { text: okPayload({ user_id: 'U0SELFAAA' }), isError: false }
+      }
+      if (slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION') {
+        expect(Object.keys(args)).toEqual(['user'])
+        if (args['user'] === 'U0BBBBBBB') {
+          return {
+            text: okPayload({
+              user: {
+                id: 'U0BBBBBBB',
+                profile: { real_name: 'Bob Jones', image_72: 'https://avatar/bob-72.png' }
+              }
+            }),
+            isError: false
+          }
+        }
+        if (args['user'] === 'U0SELFAAA') {
+          return {
+            text: okPayload({
+              user: {
+                id: 'U0SELFAAA',
+                real_name: 'Faiz Jamadar',
+                profile: {
+                  display_name: 'Faiz',
+                  image_192: 'https://avatar/self-192.png'
+                }
+              }
+            }),
+            isError: false
+          }
+        }
+        return { text: '{}', isError: true }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackRecentMessages(callTool, CHANNEL)
+    expect(result.success).toBe(true)
+
+    const detailCall = calls.find(
+      (call) =>
+        call.slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION' &&
+        call.args['user'] === 'U0BBBBBBB'
+    )
+    expect(detailCall?.args).toEqual({ user: 'U0BBBBBBB' })
+
+    expect(result.users['U0AAAAAAA']).toEqual({
+      name: 'Alice',
+      avatar: 'https://avatar/alice-192.png'
+    })
+    expect(result.users['U0BBBBBBB']).toEqual({
+      name: 'Bob Jones',
+      avatar: 'https://avatar/bob-72.png'
+    })
+    expect(result.users['U0SELFAAA']).toEqual({
+      name: 'Faiz',
+      avatar: 'https://avatar/self-192.png'
+    })
+
+    const unknown = result.messages.find((m) => m.user === 'U0CCCCCCC')
+    expect(unknown?.username).toBeNull()
+    expect(unknown?.username).not.toBe('U0CCCCCCC')
+  })
+})
+
 describe('fetchSlackTargets', () => {
   it('fetches channels and users and returns target items', async () => {
     const callTool = async (slug: string) => {
@@ -826,7 +945,7 @@ describe('fetchSlackTargets', () => {
           isError: false
         }
       }
-      if (slug === 'SLACK_FIND_USERS') {
+      if (slug === 'SLACK_LIST_ALL_USERS') {
         return {
           text: okPayload({
             members: [
@@ -873,10 +992,481 @@ describe('fetchSlackTargets', () => {
     })
   })
 
+  it('uses users.list as the directory with real names, avatars, and DM ids', async () => {
+    const recordedCalls: Array<{ slug: string; args: Record<string, unknown> }> = []
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      recordedCalls.push({ slug, args })
+      if (slug === 'SLACK_LIST_ALL_CHANNELS') {
+        expect(args['types']).toBe('public_channel,private_channel,im,mpim')
+        return {
+          text: okPayload({
+            channels: [
+              { id: 'C01111111', name: 'general', is_private: false },
+              { id: 'D01111111', is_im: true, user: 'U03333333' },
+              { id: 'D02222222', is_im: true, user: 'U09999999' }
+            ]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_LIST_ALL_USERS') {
+        expect(Number(args['limit'])).toBeGreaterThan(0)
+        if (args['cursor'] === 'page-2') {
+          return {
+            text: okPayload({
+              members: [
+                {
+                  id: 'U07777777',
+                  name: 'carol',
+                  profile: {
+                    real_name: 'Carol Danvers',
+                    image_192: 'https://avatar/carol-192.png'
+                  }
+                }
+              ],
+              response_metadata: { next_cursor: '' }
+            }),
+            isError: false
+          }
+        }
+        return {
+          text: okPayload({
+            members: [
+              {
+                id: 'U03333333',
+                name: 'alice',
+                real_name: 'Alice Smith',
+                profile: {
+                  display_name: 'Alice',
+                  email: 'alice@example.com',
+                  image_192: 'https://avatar/alice-192.png'
+                }
+              },
+              {
+                id: 'U04444444',
+                name: 'bob',
+                profile: {
+                  display_name: '',
+                  real_name: 'Bob Jones',
+                  email: 'bob@example.com',
+                  image_72: 'https://avatar/bob-72.png'
+                }
+              },
+              {
+                id: 'U05555555',
+                name: 'deleted_user',
+                deleted: true,
+                profile: { real_name: 'Deleted', email: 'deleted@example.com' }
+              },
+              {
+                id: 'U06666666',
+                name: 'robot',
+                is_bot: true,
+                profile: { real_name: 'Robot', image_72: 'https://avatar/robot.png' }
+              },
+              {
+                id: 'U08888888',
+                name: 'app_user',
+                is_app_user: true,
+                profile: { real_name: 'App User' }
+              },
+              { id: 'USLACKBOT', name: 'slackbot', profile: { real_name: 'Slackbot' } },
+              { id: 'U0AAAAAAA', profile: {} }
+            ],
+            response_metadata: { next_cursor: 'page-2' }
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_TEST_AUTH') {
+        return { text: okPayload({ user_id: 'U03333333' }), isError: false }
+      }
+      if (slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION') {
+        expect(args).toEqual({ user: 'U09999999' })
+        return {
+          text: okPayload({
+            user: {
+              id: 'U09999999',
+              name: 'zed',
+              profile: {
+                display_name: 'Zed',
+                email: 'zed@example.com',
+                image_512: 'https://avatar/zed-512.png'
+              }
+            }
+          }),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+
+    const slugs = recordedCalls.map((call) => call.slug)
+    expect(slugs).not.toContain('SLACK_FIND_USERS')
+
+    // Two user pages were followed.
+    const userCalls = recordedCalls.filter((call) => call.slug === 'SLACK_LIST_ALL_USERS')
+    expect(userCalls).toHaveLength(2)
+
+    expect(result.targets.find((t) => t.id === 'C01111111')).toEqual({
+      id: 'C01111111',
+      name: 'general',
+      type: 'channel',
+      isPrivate: false
+    })
+
+    // The DM conversation id wins over the user id.
+    expect(result.targets.find((t) => t.id === 'D01111111')).toEqual({
+      id: 'D01111111',
+      name: 'Alice',
+      email: 'alice@example.com',
+      type: 'dm',
+      avatar: 'https://avatar/alice-192.png'
+    })
+    expect(result.targets.some((t) => t.id === 'U03333333')).toBe(false)
+
+    // A user with no DM conversation still appears, under their user id.
+    expect(result.targets.find((t) => t.id === 'U04444444')).toEqual({
+      id: 'U04444444',
+      name: 'Bob Jones',
+      email: 'bob@example.com',
+      type: 'dm',
+      avatar: 'https://avatar/bob-72.png'
+    })
+
+    // A user from the second cursor page.
+    expect(result.targets.find((t) => t.id === 'U07777777')).toEqual({
+      id: 'U07777777',
+      name: 'Carol Danvers',
+      type: 'dm',
+      avatar: 'https://avatar/carol-192.png'
+    })
+
+    // An IM whose user is missing from users.list is looked up by id.
+    expect(result.targets.find((t) => t.id === 'D02222222')).toEqual({
+      id: 'D02222222',
+      name: 'Zed',
+      email: 'zed@example.com',
+      type: 'dm',
+      avatar: 'https://avatar/zed-512.png'
+    })
+
+    for (const skipped of ['U05555555', 'U06666666', 'U08888888', 'USLACKBOT', 'U0AAAAAAA']) {
+      expect(result.targets.some((t) => t.id === skipped)).toBe(false)
+    }
+
+    // No raw Slack user ids leak into display names.
+    for (const target of result.targets) {
+      expect(target.name).not.toMatch(/^[UWB][A-Z0-9]{6,}$/)
+    }
+  })
+
+  it('skips an IM target and a directory row when no real name can be found', async () => {
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      if (slug === 'SLACK_LIST_ALL_CHANNELS') {
+        return {
+          text: okPayload({
+            channels: [{ id: 'D03333333', is_im: true, user: 'U0BBBBBBB' }]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_LIST_ALL_USERS') {
+        expect(args['limit']).toBeGreaterThan(0)
+        return { text: okPayload({ members: [{ id: 'U0CCCCCCC' }] }), isError: false }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+    expect(result.targets).toEqual([])
+  })
+
+  it('drops internal bots, workflow bots, and raw-id display names from the directory', async () => {
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      if (slug === 'SLACK_LIST_ALL_USERS') {
+        expect(args['limit']).toBeGreaterThan(0)
+        return {
+          text: usersPayload([
+            { id: 'USLACK', name: 'slack', profile: { real_name: 'Slack' } },
+            { id: 'USLACKBOT', name: 'slackbot', profile: { real_name: 'Slackbot' } },
+            {
+              id: 'U0BOTBOT1',
+              name: 'robot',
+              is_bot: true,
+              profile: { real_name: 'Robot' }
+            },
+            {
+              id: 'U0WFBOT01',
+              name: 'flow',
+              is_workflow_bot: true,
+              profile: { real_name: 'Workflow' }
+            },
+            {
+              id: 'U0RAWNM01',
+              name: 'raw',
+              profile: {
+                display_name: 'U0CHZ2TK2QJ',
+                real_name: 'U0CHZ2TK2QJ'
+              }
+            },
+            {
+              id: 'U0FAIZ001',
+              name: 'faiz',
+              real_name: 'Faiz Jamadar',
+              profile: {
+                display_name: 'Faiz Jamadar',
+                email: 'faizjamadar18@gmail.com',
+                image_192: 'https://avatars.slack-edge.com/faiz-192.png'
+              }
+            }
+          ]),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+    expect(result.targets).toEqual([
+      {
+        id: 'U0FAIZ001',
+        name: 'Faiz Jamadar',
+        email: 'faizjamadar18@gmail.com',
+        type: 'dm',
+        avatar: 'https://avatars.slack-edge.com/faiz-192.png'
+      }
+    ])
+  })
+
+  it('falls back through channel listing and keeps channels when users.list fails', async () => {
+    const calls: Array<{ slug: string; args: Record<string, unknown> }> = []
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      calls.push({ slug, args })
+      if (slug === 'SLACK_LIST_ALL_CHANNELS') {
+        if (args['types']) {
+          return { text: 'Unknown argument types', isError: true }
+        }
+        return {
+          text: okPayload({
+            channels: [
+              { id: 'C01111111', name: 'general' },
+              { id: 'D04444444', is_im: true, user: 'U0DDDDDDD' }
+            ]
+          }),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+    expect(result.targets).toEqual([
+      {
+        id: 'C01111111',
+        name: 'general',
+        type: 'channel',
+        isPrivate: false
+      }
+    ])
+    expect(calls.filter((c) => c.slug === 'SLACK_LIST_ALL_CHANNELS')).toHaveLength(2)
+    expect(calls.map((c) => c.slug)).not.toContain('SLACK_FIND_USERS')
+  })
+
+  it('reports success when channels fail but the user directory works', async () => {
+    const callTool = async (slug: string) => {
+      if (slug === 'SLACK_LIST_ALL_USERS') {
+        return {
+          text: usersPayload([
+            {
+              id: 'U0EEEEEEE',
+              name: 'dana',
+              profile: { real_name: 'Dana Scully', image_72: 'https://avatar/dana.png' }
+            }
+          ]),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+    expect(result.targets).toEqual([
+      {
+        id: 'U0EEEEEEE',
+        name: 'Dana Scully',
+        type: 'dm',
+        avatar: 'https://avatar/dana.png'
+      }
+    ])
+  })
+
   it('handles error in target fetching gracefully', async () => {
     const callTool = async () => ({ text: 'Error', isError: true })
     const result = await fetchSlackTargets(callTool)
     expect(result.success).toBe(false)
     expect(result.targets).toEqual([])
+  })
+})
+
+describe('extractEmail', () => {
+  it('extracts email from profile or direct record or nested trees', () => {
+    expect(extractEmail({ profile: { email: 'test@example.com' } })).toBe('test@example.com')
+    expect(extractEmail({ user_profile: { email: 'user@domain.org' } })).toBe('user@domain.org')
+    expect(extractEmail({ email: 'root@company.com' })).toBe('root@company.com')
+    expect(extractEmail({ user: { profile: { email: 'nested@sub.co' } } })).toBe('nested@sub.co')
+  })
+
+  it('returns undefined when no email is found or invalid', () => {
+    expect(extractEmail(null)).toBeUndefined()
+    expect(extractEmail(undefined)).toBeUndefined()
+    expect(extractEmail({})).toBeUndefined()
+    expect(extractEmail({ email: '' })).toBeUndefined()
+    expect(extractEmail({ profile: { email: 'notanemail' } })).toBeUndefined()
+  })
+})
+
+describe('extractAvatarUrl', () => {
+  it('ignores avatar_hash and non-URL strings, picking https:// URLs', () => {
+    const recordWithHash = {
+      profile: {
+        avatar_hash: 'ge3b51ca72de',
+        image_72: 'https://secure.gravatar.com/avatar/sample.png'
+      }
+    }
+    expect(extractAvatarUrl(recordWithHash)).toBe(
+      'https://secure.gravatar.com/avatar/sample.png'
+    )
+
+    const nonUrlOnly = {
+      user_profile: {
+        avatar_hash: 'ge3b51ca72de',
+        avatar: 'some_hash_or_string'
+      }
+    }
+    expect(extractAvatarUrl(nonUrlOnly)).toBeUndefined()
+  })
+
+  it('searches nested trees including user_profile, profile, and icons', () => {
+    const nested = {
+      nested: {
+        icons: {
+          image_48: 'https://a.slack-edge.com/icon48.png'
+        }
+      }
+    }
+    expect(extractAvatarUrl(nested)).toBe('https://a.slack-edge.com/icon48.png')
+
+    const deepProfile = {
+      user: {
+        profile: {
+          image_192: 'http://a.slack-edge.com/icon192.png'
+        }
+      }
+    }
+    expect(extractAvatarUrl(deepProfile)).toBe('http://a.slack-edge.com/icon192.png')
+  })
+})
+
+describe('extractMessages avatar and username', () => {
+  it('extracts avatar and username from user_profile', () => {
+    const payload = {
+      messages: [
+        {
+          user: 'U12345',
+          text: 'Hello world',
+          ts: '1700000000.000100',
+          user_profile: {
+            display_name: 'Carol',
+            real_name: 'Carol Danvers',
+            image_72: 'https://avatar/carol72.png'
+          }
+        }
+      ]
+    }
+    const msgs = extractMessages(payload)
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].username).toBe('Carol')
+    expect(msgs[0].avatar).toBe('https://avatar/carol72.png')
+  })
+})
+
+describe('fetchSlackRecentMessages with message user_profile and userInfo', () => {
+  it('pre-populates users from message user_profile and merges userInfo', async () => {
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      if (slug === 'SLACK_FETCH_CONVERSATION_HISTORY') {
+        return {
+          text: okPayload({
+            messages: [
+              {
+                user: 'U_FROM_MSG',
+                text: 'Msg with profile',
+                ts: '100.0',
+                user_profile: {
+                  display_name: 'Inline User',
+                  image_72: 'https://avatar/inline.png'
+                }
+              },
+              {
+                user: 'U_FROM_INFO',
+                text: 'Msg without profile',
+                ts: '200.0'
+              }
+            ]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION') {
+        const uid = args['user'] ?? args['user_id']
+        if (uid === 'U_FROM_MSG') {
+          // Even if userInfo fails for this user, it should keep inline profile
+          return { text: '{}', isError: true }
+        }
+        if (uid === 'U_FROM_INFO') {
+          return {
+            text: okPayload({
+              user: {
+                id: 'U_FROM_INFO',
+                profile: {
+                  display_name: 'Info User',
+                  image_512: 'https://avatar/info512.png'
+                }
+              }
+            }),
+            isError: false
+          }
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const res = await fetchSlackRecentMessages(callTool, CHANNEL)
+    expect(res.success).toBe(true)
+    expect(res.messages).toHaveLength(2)
+
+    const inlineMsg = res.messages.find((m) => m.user === 'U_FROM_MSG')
+    expect(inlineMsg?.username).toBe('Inline User')
+    expect(inlineMsg?.avatar).toBe('https://avatar/inline.png')
+
+    const infoMsg = res.messages.find((m) => m.user === 'U_FROM_INFO')
+    expect(infoMsg?.username).toBe('Info User')
+    expect(infoMsg?.avatar).toBe('https://avatar/info512.png')
+
+    expect(res.users['U_FROM_MSG']).toEqual({
+      name: 'Inline User',
+      avatar: 'https://avatar/inline.png'
+    })
+    expect(res.users['U_FROM_INFO']).toEqual({
+      name: 'Info User',
+      avatar: 'https://avatar/info512.png'
+    })
   })
 })

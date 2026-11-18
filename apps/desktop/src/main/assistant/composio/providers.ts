@@ -74,10 +74,12 @@ export const COMPOSIO_PROVIDERS: readonly ComposioProviderSpec[] = [
       'SLACK_FIND_CHANNELS',
       'SLACK_LIST_ALL_CHANNELS',
       'SLACK_FIND_USERS',
+      'SLACK_LIST_ALL_USERS',
       'SLACK_FIND_USER_BY_EMAIL_ADDRESS',
       'SLACK_OPEN_DM',
       'SLACK_CREATE_A_REMINDER',
-      'SLACK_RETRIEVE_DETAILED_USER_INFORMATION'
+      'SLACK_RETRIEVE_DETAILED_USER_INFORMATION',
+      'SLACK_TEST_AUTH'
     ],
     connectHint:
       'Connect Slack to send, schedule, and read messages by voice.'
