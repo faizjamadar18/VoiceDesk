@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const LETTERS = [
   { char: "v", triangle: true, anchor: true, collapsed: 520, final: 170, appearAt: 0 },
@@ -78,47 +78,6 @@ export default function Footer() {
   return (
     <footer className="w-full bg-white border-t border-neutral-100 py-16">
       <div className="max-w-7xl mx-auto px-6">
-        {/* Navigation columns */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
-          <div className="flex flex-col gap-3">
-            <h3 className="text-lg font-medium text-muted-foreground">Product</h3>
-            <ul className="flex flex-col gap-2 text-sm">
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/demo">Try the demo</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features/agent">Agent Mode</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features/dictation">Dictation Mode</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/pricing">Pricing</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/app-store">App Store</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/blog">Blog</a></li>
-            </ul>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h3 className="text-lg font-medium text-muted-foreground">Company</h3>
-            <ul className="flex flex-col gap-2 text-sm">
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/about">About</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/contact">Contact</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="https://partners.dub.co/voice-os" target="_blank" rel="noopener noreferrer">Affiliates</a></li>
-            </ul>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h3 className="text-lg font-medium text-muted-foreground">Resources</h3>
-            <ul className="flex flex-col gap-2 text-sm">
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features">All features</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/glossary">Voice glossary</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/changelog">Changelog</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="https://docs.voiceos.com/" target="_blank" rel="noopener noreferrer">Documentation</a></li>
-            </ul>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h3 className="text-lg font-medium text-muted-foreground">Legal</h3>
-            <ul className="flex flex-col gap-2 text-sm">
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/terms">Terms of Use</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/privacy">Privacy Policy</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/security">Security</a></li>
-              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/affiliate">Affiliate Policy</a></li>
-            </ul>
-          </div>
-        </div>
-
         {/* Big animated VoiceOS gooey SVG logo */}
         <div ref={containerRef} className="w-full select-none pointer-events-none text-neutral-300 my-8" aria-hidden="true">
           <svg viewBox="90 48 1000 240" fill="none" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", width: "100%", height: "auto", aspectRatio: "1000 / 240" }}>
