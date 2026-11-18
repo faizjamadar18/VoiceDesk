@@ -35,6 +35,49 @@ describe('SettingsStore', () => {
     expect(DEFAULT_SETTINGS.dictationHotkey).toBe('Control+Shift')
   })
 
+  it('defaults the agent hotkey to Control+Alt', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    expect(store.load().hotkey).toBe('Control+Alt')
+    expect(DEFAULT_SETTINGS.hotkey).toBe('Control+Alt')
+  })
+
+  it('migrates a stored Control+Space agent hotkey on load', () => {
+    const { file } = setup()
+    writeFileSync(file, JSON.stringify({ hotkey: 'Control+Space', asrMode: 'fake' }), 'utf8')
+
+    const settings = new SettingsStore(file).load()
+
+    expect(settings.hotkey).toBe('Control+Alt')
+    expect(settings.asrMode).toBe('fake')
+  })
+
+  it('does not migrate other stored agent hotkeys', () => {
+    const { file } = setup()
+    writeFileSync(file, JSON.stringify({ hotkey: 'Alt+F8', asrMode: 'fake' }), 'utf8')
+
+    expect(new SettingsStore(file).load().hotkey).toBe('Alt+F8')
+  })
+
+  it('keeps an explicit non-default agent hotkey across a reload', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    store.save({ hotkey: 'Control+Alt+Space' })
+
+    expect(new SettingsStore(file).load().hotkey).toBe('Control+Alt+Space')
+  })
+
+  it('saves a modifier-only agent hotkey', () => {
+    const { file } = setup()
+    const store = new SettingsStore(file)
+
+    store.save({ hotkey: 'Alt+Shift' })
+
+    expect(store.load().hotkey).toBe('Alt+Shift')
+  })
+
   it('includes the default dictation settings', () => {
     const { file } = setup()
     const store = new SettingsStore(file)
@@ -76,7 +119,7 @@ describe('SettingsStore', () => {
     const { file } = setup()
     const store = new SettingsStore(file)
 
-    expect(() => store.save({ hotkey: 'Space' })).toThrow(/modifier plus a key/i)
+    expect(() => store.save({ hotkey: 'Space' })).toThrow(/key combination/i)
     expect(store.load()).toEqual(DEFAULT_SETTINGS)
   })
 

@@ -12,6 +12,7 @@ import type {
   Directive,
   LlmClient,
   LlmReply,
+  PlanContext,
   Planner,
   Tool,
   ToolCall,
@@ -27,6 +28,7 @@ class FakeLlmClient implements LlmClient {
     transcript: string
     specs: ToolSpec[]
     history: ChatTurn[] | undefined
+    selectedText: string | null | undefined
   } | null = null
 
   constructor(calls: ToolCall[], content: string | null = null) {
@@ -37,9 +39,10 @@ class FakeLlmClient implements LlmClient {
   async choose(
     transcript: string,
     specs: ToolSpec[],
-    history?: ChatTurn[]
+    history?: ChatTurn[],
+    selectedText?: string | null
   ): Promise<LlmReply> {
-    this.seen = { transcript, specs, history }
+    this.seen = { transcript, specs, history, selectedText }
     return { calls: this.calls, content: this.content }
   }
 }
@@ -47,6 +50,21 @@ class FakeLlmClient implements LlmClient {
 class BoomPlanner implements Planner {
   async plan(_transcript: string): Promise<Directive> {
     throw new Error('planner exploded')
+  }
+}
+
+/** Records the plan context it was handed and returns a fixed directive. */
+class SelectionPlanner implements Planner {
+  readonly contexts: Array<PlanContext | undefined> = []
+
+  constructor(private readonly directive: Directive) {}
+
+  async plan(
+    _transcript: string,
+    context?: PlanContext
+  ): Promise<Directive> {
+    this.contexts.push(context)
+    return this.directive
   }
 }
 
@@ -294,6 +312,40 @@ describe('RulePlanner', () => {
       call: { name: 'create_folder', arguments: { name: 'Invoices' } }
     })
   })
+
+  it('behaves the same when handed an empty context', async () => {
+    const planner = new RulePlanner(() => FIXED_NOW)
+
+    const directive = await planner.plan('open notepad', {})
+
+    expect(directive).toEqual({
+      kind: 'tool',
+      call: { name: 'open_app', arguments: { app: 'notepad' } }
+    })
+  })
+
+  it('asks for the AI model when asked to rewrite a selection', async () => {
+    const planner = new RulePlanner(() => FIXED_NOW)
+
+    const directive = await planner.plan('make this sound more formal', {
+      selectedText: 'hey, can u send me the thing'
+    })
+
+    expect(directive).toEqual({
+      kind: 'none',
+      message: 'I need the AI model configured to rewrite your selection.'
+    })
+  })
+
+  it('still answers a plain question while a selection is captured', async () => {
+    const planner = new RulePlanner(() => FIXED_NOW)
+
+    const directive = await planner.plan('what time is it', {
+      selectedText: 'some selected text'
+    })
+
+    expect(directive).toEqual({ kind: 'answer', message: "It's 09:41." })
+  })
 })
 
 describe('GroqPlanner', () => {
@@ -346,6 +398,32 @@ describe('GroqPlanner', () => {
     await planWith(new GroqPlanner(registry, client), 'open calc')
 
     expect(client.seen?.history).toEqual([])
+  })
+
+  it('forwards the captured selection to the model', async () => {
+    const registry = buildRegistry()
+    const client = new FakeLlmClient([
+      { name: 'open_app', arguments: { app: 'calculator' } }
+    ])
+
+    const directive = await new GroqPlanner(registry, client).plan('open calc', {
+      selectedText: 'the captured body'
+    })
+
+    expect(client.seen?.selectedText).toBe('the captured body')
+    expect(directive).toEqual({
+      kind: 'tool',
+      call: { name: 'open_app', arguments: { app: 'calculator' } }
+    })
+  })
+
+  it('sends no selection when the context has none', async () => {
+    const registry = buildRegistry()
+    const client = new FakeLlmClient([])
+
+    await new GroqPlanner(registry, client).plan('open calc', {})
+
+    expect(client.seen?.selectedText).toBeUndefined()
   })
 
   it('offers a planner-only screen tool description', async () => {
@@ -508,5 +586,25 @@ describe('FallbackPlanner', () => {
       kind: 'tool',
       call: { name: 'open_app', arguments: { app: 'notepad' } }
     })
+  })
+
+  it('hands the plan context to the primary', async () => {
+    const primary = new SelectionPlanner({ kind: 'answer', message: 'done' })
+    const planner = new FallbackPlanner(primary, new RulePlanner())
+
+    await planner.plan('rewrite this', { selectedText: 'old text' })
+
+    expect(primary.contexts).toEqual([{ selectedText: 'old text' }])
+  })
+
+  it('hands the plan context to the fallback', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const fallback = new SelectionPlanner({ kind: 'none', message: 'no' })
+    const planner = new FallbackPlanner(new BoomPlanner(), fallback)
+
+    await planner.plan('rewrite this', { selectedText: 'old text' })
+
+    expect(fallback.contexts).toEqual([{ selectedText: 'old text' }])
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })

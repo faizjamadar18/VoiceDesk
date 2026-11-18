@@ -79,7 +79,7 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
   })
 
   return (
-    <div className={`w-full transition-colors duration-200 ${className}`}>
+    <div className={`insights-page @container w-full min-w-0 transition-colors duration-200 ${className}`}>
       {/* Header */}
       <div className="relative z-[80] mb-6 flex items-center justify-between gap-4">
         <h1
@@ -121,14 +121,14 @@ export function InsightsTab({ className = '' }: InsightsTabProps): JSX.Element {
         /* Bento Grid */
         <div className="space-y-4">
           {/* Row 1: Top 3 Hero Cards */}
-          <motion.div {...sectionAnimation(0)} className="grid gap-4 lg:grid-cols-3">
+          <motion.div {...sectionAnimation(0)} className="grid gap-4 grid-cols-1 @[700px]:grid-cols-3 lg:grid-cols-3">
             <VoiceTypeCard data={displayedData} isDarkMode={isDarkMode} />
             <WordsDictatedCard data={displayedData} isDarkMode={isDarkMode} />
             <AgentPromptsCard data={displayedData} isDarkMode={isDarkMode} />
           </motion.div>
 
           {/* Row 2: Middle 2 Cards (App Usage & Streak) */}
-          <motion.div {...sectionAnimation(1)} className="grid gap-4 lg:grid-cols-2 items-stretch">
+          <motion.div {...sectionAnimation(1)} className="grid gap-4 grid-cols-1 @[600px]:grid-cols-2 lg:grid-cols-2 items-stretch">
             <AppUsageCard data={displayedData} isDarkMode={isDarkMode} />
             <StreakCard data={displayedData} isDarkMode={isDarkMode} />
           </motion.div>

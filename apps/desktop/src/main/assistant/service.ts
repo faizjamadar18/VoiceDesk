@@ -358,8 +358,11 @@ export class AssistantService {
 
   // -- ActionClient surface ---------------------------------------------
 
-  async act(transcript: string): Promise<ActionResponse> {
-    const response = await this.runAct(transcript)
+  async act(
+    transcript: string,
+    selectedText?: string | null
+  ): Promise<ActionResponse> {
+    const response = await this.runAct(transcript, selectedText)
     this.recordTurn(transcript, response)
     return response
   }
@@ -393,9 +396,14 @@ export class AssistantService {
     }
   }
 
-  private async runAct(transcript: string): Promise<ActionResponse> {
+  private async runAct(
+    transcript: string,
+    selectedText?: string | null
+  ): Promise<ActionResponse> {
     const dryRun = actionDryRun()
-    const directive: Directive = await this.planner.plan(transcript)
+    const directive: Directive = await this.planner.plan(transcript, {
+      selectedText: selectedText ?? null
+    })
 
     if (directive.kind === 'none') {
       return actionResponse({
@@ -452,7 +460,7 @@ export class AssistantService {
       })
     }
 
-    const context = this.toolContext(dryRun, transcript)
+    const context = this.toolContext(dryRun, transcript, selectedText)
     const prepared = await prepareTool(tool, call.arguments, context)
     if (prepared.outcome !== null && prepared.outcome !== undefined) {
       return outcomeResponse(prepared.outcome, dryRun)
@@ -822,7 +830,11 @@ export class AssistantService {
     return { text, provider, latencyMs }
   }
 
-  private toolContext(dryRun: boolean, transcript?: string): ToolContext {
+  private toolContext(
+    dryRun: boolean,
+    transcript?: string,
+    selectedText?: string | null
+  ): ToolContext {
     return {
       executor: this.executor,
       clock: this.clock,
@@ -832,6 +844,7 @@ export class AssistantService {
       fileSearch: this.fileSearch,
       weather: this.weather,
       transcript,
+      selectedText: selectedText ?? null,
       composeEmailReply: (input) => this.composeEmailReply(input)
     }
   }
@@ -841,6 +854,9 @@ export class AssistantService {
     transcript: string,
     outcome: ToolOutcome
   ): boolean {
+    // The edit_text result is already the final answer: the text to paste.
+    if (toolName === 'edit_text') return false
+
     const output = (outcome.text || outcome.message || '').trim()
     if (!output) return false
 

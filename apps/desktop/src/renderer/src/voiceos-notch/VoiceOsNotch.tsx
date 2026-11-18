@@ -99,6 +99,12 @@ export interface VoiceOsNotchProps {
   onToggleVoice?: () => void;
   /** Recording countdown seconds (20-minute cap). Null hides the warning. */
   remainingSeconds?: number | null;
+  /**
+   * Chrome pinned to the top band's right-hand slot while the surface is
+   * collapsed (e.g. the held-hotkey selection indicator). Not rendered once
+   * the surface is expanded.
+   */
+  bandAccessory?: ReactNode;
   /** Reports the rendered surface size so the host can set its hit region. */
   onGeometryChange?: (geometry: { width: number; height: number }) => void;
   /** The expanded body: any Kestrel content. */
@@ -213,6 +219,7 @@ export function VoiceOsNotch({
   onActivate,
   onToggleVoice,
   remainingSeconds = null,
+  bandAccessory,
   onGeometryChange,
   children
 }: VoiceOsNotchProps): ReactNode {
@@ -526,6 +533,21 @@ export function VoiceOsNotch({
                     esc
                   </span>
                 </button>
+              )}
+              {!isExpanded && bandAccessory && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    display: "flex",
+                    alignItems: "center",
+                    pointerEvents: "none"
+                  }}
+                >
+                  {bandAccessory}
+                </div>
               )}
             </div>
 

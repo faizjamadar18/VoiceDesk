@@ -78,6 +78,7 @@ import { SidebarWindow, createSidebarWindow } from './sidebar-window'
 import { PushToTalk } from './push-to-talk'
 import { captureDisplay, cursorScreenPoint, displayUnderCursor } from './screen-capture'
 import { OverlayScreenService } from './screen-service'
+import { createNativeSelectionCapture } from './selection-capture'
 import { DEFAULT_SETTINGS, SettingsStore, type AsrMode } from './settings-store'
 import { NemoServer, resolveNemoPaths } from './nemo-server'
 import {
@@ -109,6 +110,7 @@ let dictationKeyHook: KeyHookHandle | null = null
 let pillPresenter: ElectronPillWindowPresenter | null = null
 let pillController: PillWindowController | null = null
 let settingsStore: SettingsStore | null = null
+const selectionCapture = createNativeSelectionCapture()
 
 let settings: KestrelSettings = { ...DEFAULT_SETTINGS }
 let isQuitting = false
@@ -398,6 +400,22 @@ async function ensureDictationKeyHook(): Promise<boolean> {
 }
 
 
+/**
+ * Runs on the hotkey press so the capture resolves while the 300ms hold is
+ * still arming. Our own windows are skipped: text in our UI is not a selection.
+ */
+async function captureHighlightedText(): Promise<void> {
+  if (!notchController) return
+  if (BrowserWindow.getFocusedWindow() !== null) return
+
+  try {
+    const text = await selectionCapture.read()
+    if (text) notchController.attachSelectedText(text)
+  } catch {
+    // Best effort: a failed read must never break push-to-talk.
+  }
+}
+
 async function ensureKeyHook(): Promise<boolean> {
   stopKeyHook()
   hookError = null
@@ -410,25 +428,32 @@ async function ensureKeyHook(): Promise<boolean> {
   }
 
   try {
-    keyHook = await startKeyHook(chord, {
-      onPress: () => pushToTalk?.press(),
-      onRelease: () => pushToTalk?.release(),
-      onCancel: () => pushToTalk?.cancel(),
-      onEscape: () => notchController?.requestEscapeDismiss(),
-      onMouseDown: () => {
-        const cursor = screen.getCursorScreenPoint()
-        const insideNotch = notchPresenter?.isPointInside(cursor.x, cursor.y) ?? false
-        const insideSidebar = sidebarWindow?.isPointInside(cursor.x, cursor.y) ?? false
-        if (!insideNotch && !insideSidebar) {
-          if (!notchController?.hasActiveWork() && !notchController?.isBusy()) {
-            notchController?.dismissResults()
-          }
-          if (sidebarWindow?.isExpanded()) {
-            sidebarWindow.send(IPC.sidebarCollapse)
+    keyHook = await startKeyHook(
+      chord,
+      {
+        onPress: () => {
+          pushToTalk?.press()
+          void captureHighlightedText()
+        },
+        onRelease: () => pushToTalk?.release(),
+        onCancel: () => pushToTalk?.cancel(),
+        onEscape: () => notchController?.requestEscapeDismiss(),
+        onMouseDown: () => {
+          const cursor = screen.getCursorScreenPoint()
+          const insideNotch = notchPresenter?.isPointInside(cursor.x, cursor.y) ?? false
+          const insideSidebar = sidebarWindow?.isPointInside(cursor.x, cursor.y) ?? false
+          if (!insideNotch && !insideSidebar) {
+            if (!notchController?.hasActiveWork() && !notchController?.isBusy()) {
+              notchController?.dismissResults()
+            }
+            if (sidebarWindow?.isExpanded()) {
+              sidebarWindow.send(IPC.sidebarCollapse)
+            }
           }
         }
-      }
-    })
+      },
+      { isEventSuppressed: () => selectionCapture.isInjecting() }
+    )
     hookError = null
     console.log(`[hotkey] hook started for ${formatHotkey(chord)}`)
   } catch (error) {
@@ -453,17 +478,18 @@ async function applyHotkey(nextHotkey: string): Promise<{ ok: boolean; error: st
   if (!chord) {
     return {
       ok: false,
-      error: 'Use a modifier plus a key, for example Control+Space or Alt+F8.'
+      error: 'Use a key combination, for example Control+Alt or Alt+F8.'
     }
   }
 
   const canonical = formatHotkey(chord)
+  const accelerator = isElectronAccelerator(canonical)
   const previous = settings.hotkey
   const changing = canonical !== previous
   hotkeyChanging = true
 
   try {
-    if (changing || !globalShortcut.isRegistered(canonical)) {
+    if (accelerator && (changing || !globalShortcut.isRegistered(canonical))) {
       if (!registerChord(canonical)) {
         hotkeyRegistered = false
         hotkeyError = `Windows would not reserve ${hotkeyLabel(canonical).join('+')}. Another app may be using it. Choose a different shortcut.`
@@ -474,7 +500,7 @@ async function applyHotkey(nextHotkey: string): Promise<{ ok: boolean; error: st
 
     if (changing) safeUnregisterChord(previous)
     settings = { ...settings, hotkey: canonical }
-    hotkeyRegistered = isElectronAccelerator(canonical) ? globalShortcut.isRegistered(canonical) : true
+    hotkeyRegistered = accelerator ? globalShortcut.isRegistered(canonical) : true
     hotkeyError = null
 
     const hookOk = await ensureKeyHook()
@@ -667,6 +693,10 @@ function registerIpc(): void {
   ipcMain.on(IPC.notchSubmitText, (_event, text: unknown) => {
     if (typeof text !== 'string') return
     void notchController?.submitText(text)
+  })
+  ipcMain.on(IPC.notchRemoveSelectedText, (_event, index: unknown) => {
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) return
+    notchController?.removeSelectedText(index)
   })
   ipcMain.on(IPC.notchStartTyping, () => {
     notchController?.startTyping()
@@ -1086,16 +1116,17 @@ async function initialize(): Promise<void> {
     handleDeepLink(initialDeepLink)
   }
 
-  const registered = registerChord(settings.hotkey)
-  hotkeyRegistered = registered
-  hotkeyError = registered
+  const needsRegistration = isElectronAccelerator(settings.hotkey)
+  const registered = needsRegistration ? registerChord(settings.hotkey) : false
+  hotkeyRegistered = needsRegistration ? registered : true
+  hotkeyError = hotkeyRegistered
     ? null
     : `Windows would not reserve ${hotkeyLabel(settings.hotkey).join('+')}. Another app may be using it. Choose a different shortcut in settings.`
 
   console.log(
-    `[hotkey] ${settings.hotkey} registered=${registered}${registered ? '' : ` (${hotkeyError ?? 'unknown error'})`}`
+    `[hotkey] ${settings.hotkey} registered=${hotkeyRegistered}${hotkeyRegistered ? '' : ` (${hotkeyError ?? 'unknown error'})`}`
   )
-  if (!registered) {
+  if (needsRegistration && !registered) {
     safeUnregisterChord(settings.hotkey)
   }
 

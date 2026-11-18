@@ -21,6 +21,7 @@ import type {
   ActionExecutor,
   Directive,
   FileSearch,
+  PlanContext,
   Planner
 } from './types'
 import type { Transcriber } from './transcribers'
@@ -497,6 +498,50 @@ describe('act planning responses', () => {
     expect(body.action).toBe('look_at_screen')
     expect(body.message).toBe('')
     expect(body.spokenResponse).toBeNull()
+  })
+
+  it('forwards the trimmed selection to the planner', async () => {
+    const contexts: Array<PlanContext | undefined> = []
+    const baseUrl = await startServer({
+      planner: {
+        plan: async (_transcript, context) => {
+          contexts.push(context)
+          return {
+            kind: 'tool',
+            call: { name: 'edit_text', arguments: { new_text: 'Rewritten.' } }
+          }
+        }
+      }
+    })
+
+    const { status, body } = await postJson(baseUrl, '/act', {
+      transcript: 'rewrite this',
+      selectedText: '  The original text.  '
+    })
+
+    expect(status).toBe(200)
+    expect(contexts).toEqual([{ selectedText: 'The original text.' }])
+    expect(body.status).toBe('ok')
+    expect(body.action).toBe('edit_text')
+    expect(body.text).toBe('Rewritten.')
+  })
+
+  it('still runs a turn when no selection is sent', async () => {
+    const baseUrl = await startServer({
+      planner: staticPlanner({
+        kind: 'tool',
+        call: { name: 'type_text', arguments: { text: 'hello' } }
+      })
+    })
+
+    const { status, body } = await postJson(baseUrl, '/act', {
+      transcript: 'type hello'
+    })
+
+    expect(status).toBe(200)
+    expect(body.status).toBe('ok')
+    expect(body.action).toBe('type')
+    expect(body.text).toBe('hello')
   })
 })
 
@@ -1168,6 +1213,44 @@ describe('request validation', () => {
     const { status } = await postJson(baseUrl, '/act', {})
 
     expect(status).toBe(422)
+  })
+
+  it('rejects a non-string selection with 422', async () => {
+    const baseUrl = await startServer()
+    const { status, body } = await postJson(baseUrl, '/act', {
+      transcript: 'rewrite this',
+      selectedText: 42
+    })
+
+    expect(status).toBe(422)
+    expect(body.detail).toEqual([
+      {
+        type: 'string_type',
+        loc: ['body', 'selectedText'],
+        msg: 'Input should be a valid string',
+        input: 42
+      }
+    ])
+  })
+
+  it('rejects a selection past 100,000 characters with 422', async () => {
+    const baseUrl = await startServer()
+    const selectedText = 'a'.repeat(100_001)
+    const { status, body } = await postJson(baseUrl, '/act', {
+      transcript: 'rewrite this',
+      selectedText
+    })
+
+    expect(status).toBe(422)
+    expect(body.detail).toEqual([
+      {
+        type: 'string_too_long',
+        loc: ['body', 'selectedText'],
+        msg: 'String should have at most 100000 characters',
+        input: selectedText,
+        ctx: { max_length: 100_000 }
+      }
+    ])
   })
 
   it('rejects a missing plan id with 422', async () => {

@@ -14,9 +14,14 @@ import type {
   ChatTurn,
   Directive,
   LlmClient,
+  PlanContext,
   Planner,
   ToolSpec
 } from './types'
+
+/** The rule planner cannot rewrite, so it asks for the model to be configured. */
+const MODEL_NEEDED_FOR_REWRITE =
+  'I need the AI model configured to rewrite your selection.'
 
 export class RulePlanner implements Planner {
   private readonly clock: () => Date
@@ -25,7 +30,10 @@ export class RulePlanner implements Planner {
     this.clock = clock ?? (() => new Date())
   }
 
-  async plan(transcript: string): Promise<Directive> {
+  async plan(
+    transcript: string,
+    context?: PlanContext
+  ): Promise<Directive> {
     const create = matchCreate(transcript)
     if (create !== null) {
       return create
@@ -53,6 +61,16 @@ export class RulePlanner implements Planner {
     }
 
     const plan = planAction(transcript, this.clock())
+
+    // Rules cannot rewrite text. With a selection captured, a plain "type ..."
+    // or an unrecognized instruction is about that selection, so ask for the
+    // model instead of typing the wrong thing over it.
+    if (
+      (context?.selectedText ?? '').trim() !== '' &&
+      (plan.action === 'type' || plan.action === 'none')
+    ) {
+      return { kind: 'none', message: MODEL_NEEDED_FOR_REWRITE }
+    }
 
     if (plan.action === 'open_app' && plan.target != null) {
       return {
@@ -111,10 +129,18 @@ export class GroqPlanner implements Planner {
     this.recentContext = recentContext
   }
 
-  async plan(transcript: string): Promise<Directive> {
+  async plan(
+    transcript: string,
+    context?: PlanContext
+  ): Promise<Directive> {
     const specs = [...this.registry.specs(), LOOK_AT_SCREEN_SPEC]
     const history = this.recentContext?.() ?? []
-    const reply = await this.client.choose(transcript, specs, history)
+    const reply = await this.client.choose(
+      transcript,
+      specs,
+      history,
+      context?.selectedText
+    )
     for (const call of reply.calls) {
       if (call.name === LOOK_AT_SCREEN_SPEC.name) {
         return { kind: 'screen', question: transcript }
@@ -140,14 +166,17 @@ export class FallbackPlanner implements Planner {
     this.fallback = fallback
   }
 
-  async plan(transcript: string): Promise<Directive> {
+  async plan(
+    transcript: string,
+    context?: PlanContext
+  ): Promise<Directive> {
     try {
-      return await this.primary.plan(transcript)
+      return await this.primary.plan(transcript, context)
     } catch (error) {
       console.warn(
         `Primary planner failed (${errorName(error)}: ${errorMessage(error)}); falling back to rules.`
       )
-      return await this.fallback.plan(transcript)
+      return await this.fallback.plan(transcript, context)
     }
   }
 }

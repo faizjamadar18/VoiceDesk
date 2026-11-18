@@ -552,6 +552,77 @@ export class GetWeatherTool implements Tool {
   }
 }
 
+/** Longest rewritten selection the desktop will paste back. */
+export const MAX_EDIT_TEXT_CHARS = 50_000
+
+/**
+ * Paste a rewritten version of the user's selection in place of the selection.
+ *
+ * The desktop owns the paste; this tool only produces the final text. It runs
+ * only when the turn carried a captured selection, so a model that calls it
+ * while the user asked a plain question gets an honest answer instead.
+ */
+export class EditTextTool implements Tool {
+  readonly spec: ToolSpec = {
+    name: 'edit_text',
+    description:
+      'Rewrite the selected text when the user asks to change it (rewrite, ' +
+      'edit, rephrase, translate, shorten, fix, polish). Return the full ' +
+      'new text, never a diff. Not for questions about it.',
+    parameters: objectSchema(
+      {
+        new_text: {
+          type: 'string',
+          description:
+            "The complete rewritten text to paste in place of the user's " +
+            'selection. Include the full final text, not just changes.'
+        }
+      },
+      ['new_text']
+    ),
+    risk: 'write',
+    requiresConfirmation: false,
+    actionLabel: 'edit_text'
+  }
+
+  run(arguments_: Record<string, unknown>, ctx: ToolContext): ToolOutcome {
+    const selection = (ctx.selectedText ?? '').trim()
+    if (!selection) {
+      return {
+        status: 'unhandled',
+        action: 'edit_text',
+        message:
+          'There is no selected text to rewrite. Answer the user normally instead.'
+      }
+    }
+
+    const raw = arguments_['new_text']
+    const newText = (raw === undefined ? '' : String(raw)).trim()
+    if (!newText) {
+      return {
+        status: 'error',
+        action: 'edit_text',
+        message: 'Replacement text was empty.'
+      }
+    }
+    if (newText.length > MAX_EDIT_TEXT_CHARS) {
+      return {
+        status: 'error',
+        action: 'edit_text',
+        message: `Replacement text is too long (${newText.length} characters).`
+      }
+    }
+
+    return {
+      status: 'ok',
+      action: 'edit_text',
+      message: 'Updated your selection.',
+      text: newText,
+      spokenResponse: 'Updated your selection.'
+    }
+  }
+}
+
 function isFileWriteError(error: unknown): boolean {
   return (
     error instanceof UnsafeLocation ||
@@ -580,7 +651,8 @@ export function builtinTools(): Tool[] {
     new CreateFolderTool(),
     new CreateFileTool(),
     new DeleteFileTool(),
-    new GetWeatherTool()
+    new GetWeatherTool(),
+    new EditTextTool()
   ]
 }
 

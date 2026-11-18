@@ -37,6 +37,32 @@ describe('HttpActionClient', () => {
     expect(result.message).toBe('Opening Notepad.')
   })
 
+  it('sends the pinned selection only when it has text', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const client = new HttpActionClient({
+      baseUrl: 'http://127.0.0.1:8765',
+      fetch: async (_url, init) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+        return new Response(
+          JSON.stringify({ status: 'ok', action: 'none', message: 'Done.', dryRun: true }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+    })
+
+    await client.act('rewrite this', { selectedText: 'picked text' })
+    await client.act('rewrite this', { selectedText: null })
+    await client.act('rewrite this', { selectedText: '' })
+    await client.act('rewrite this')
+
+    expect(bodies).toEqual([
+      { transcript: 'rewrite this', selectedText: 'picked text' },
+      { transcript: 'rewrite this' },
+      { transcript: 'rewrite this' },
+      { transcript: 'rewrite this' }
+    ])
+  })
+
   it('includes the backend detail when the request fails', async () => {
     const client = new HttpActionClient({
       baseUrl: 'http://127.0.0.1:8765',

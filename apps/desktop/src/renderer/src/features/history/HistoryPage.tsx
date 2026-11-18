@@ -247,7 +247,7 @@ export function HistoryPage({
   }
 
   return (
-    <div className="history-page">
+    <div className="history-page @container w-full min-w-0">
       <h1
         className="history-title"
         style={{
@@ -258,9 +258,9 @@ export function HistoryPage({
         History
       </h1>
 
-      <div className="history-toolbar">
+      <div className="history-toolbar mb-6 flex gap-3 flex-wrap @[560px]:flex-nowrap">
         {/* Search input */}
-        <div className="history-search">
+        <div className="history-search flex-1 relative min-w-0">
           <SearchIcon
             className="history-search-icon"
             style={{

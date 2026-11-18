@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ToolRegistry } from './registry'
+import { buildDefaultRegistry } from './tools'
 import type { Tool } from './types'
 
 function makeTool(name: string): Tool {
@@ -73,5 +74,16 @@ describe('ToolRegistry.delete', () => {
 
     expect(toolNames(registry).filter((name) => name === 'open_app')).toHaveLength(1)
     expect(registry.get('open_app')).toBe(replacement)
+  })
+})
+
+describe('default registry', () => {
+  it('serves the edit_text tool', () => {
+    const registry = buildDefaultRegistry()
+    const tool = registry.get('edit_text')
+
+    expect(tool).toBeDefined()
+    expect(tool?.spec.name).toBe('edit_text')
+    expect(toolNames(registry)).toContain('edit_text')
   })
 })

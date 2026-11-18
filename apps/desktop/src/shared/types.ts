@@ -2,7 +2,7 @@ import type { DictationSettings } from './dictation'
 
 export type { DictationSettings } from './dictation'
 
-export const DEFAULT_HOTKEY = 'Control+Space'
+export const DEFAULT_HOTKEY = 'Control+Alt'
 export const HOTKEY = DEFAULT_HOTKEY
 export const DEFAULT_DICTATION_HOTKEY = 'Control+Shift'
 export const TAP_THRESHOLD_MS = 300
@@ -69,6 +69,7 @@ export const IPC = {
   notchRegion: 'kestrel:notch-region',
   notchDecide: 'kestrel:notch-decide',
   notchSubmitText: 'kestrel:notch-submit-text',
+  notchRemoveSelectedText: 'kestrel:notch-remove-selected-text',
   notchSetFocusable: 'kestrel:notch-set-focusable',
   notchStartTyping: 'kestrel:notch-start-typing',
   copyToClipboard: 'kestrel:copy-to-clipboard',
@@ -396,6 +397,11 @@ export interface NotchStatePayload {
   resultsLabel?: string | null
   /** Present only when a write is waiting on the user's choice. */
   decision?: NotchDecision | null
+  /**
+   * Text the user had highlighted in another app when the turn started. The
+   * notch pins it as a chip; the agent receives it as edit context.
+   */
+  selectedText?: string[] | null
   at: number
 }
 
@@ -410,6 +416,7 @@ export interface NotchActivity {
   results?: NotchFileResult[] | null
   resultsLabel?: string | null
   decision?: NotchDecision | null
+  selectedText?: string[] | null
 }
 
 export interface NotchStartPayload {
@@ -653,6 +660,7 @@ export interface KestrelApi {
   cancelNotchActive: () => void
   decideNotch: (action: NotchDecisionAction, edits?: NotchDecisionEdits) => void
   submitNotchText: (text: string) => void
+  removeNotchSelectedText: (index: number) => void
   setNotchFocusable: (focusable: boolean) => void
   startNotchTyping: () => void
   copyToClipboard: (text: string) => void

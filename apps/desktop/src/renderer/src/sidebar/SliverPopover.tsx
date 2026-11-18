@@ -10,7 +10,7 @@ export interface SliverPopoverProps {
  * and drag-to-move reposition affordance.
  */
 export function SliverPopover({
-  shortcutLabel = 'Ctrl+Space',
+  shortcutLabel = 'Ctrl+Alt',
   style
 }: SliverPopoverProps): JSX.Element {
   return (

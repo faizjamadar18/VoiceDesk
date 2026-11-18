@@ -110,6 +110,9 @@ const UNSUPPORTED_CONTENT_TYPE =
   'Unsupported Content-Type. Send raw audio with an audio/* or ' +
   'application/octet-stream Content-Type.'
 
+/** Longest selection the `/act` route accepts from the desktop. */
+const MAX_SELECTED_TEXT_CHARS = 100_000
+
 export interface BindAddress {
   host: string
   port: number
@@ -457,7 +460,8 @@ export class AssistantServer {
       return
     }
     if (method === 'POST' && path === '/act') {
-      jsonResponse(res, 200, await this.service.act(await this.readAct(req)))
+      const { transcript, selectedText } = await this.readAct(req)
+      jsonResponse(res, 200, await this.service.act(transcript, selectedText))
       return
     }
     if (method === 'POST' && path === '/act/confirm') {
@@ -481,7 +485,10 @@ export class AssistantServer {
     jsonResponse(res, 404, { detail: 'Not Found' })
   }
 
-  private async readAct(req: IncomingMessage): Promise<string> {
+  private async readAct(req: IncomingMessage): Promise<{
+    transcript: string
+    selectedText: string | null
+  }> {
     const body = await this.readJson(req)
     const issues: ValidationIssue[] = []
     const transcript = checkString(
@@ -490,8 +497,18 @@ export class AssistantServer {
       { required: true, minLength: 1, maxLength: 4000, nonBlank: true },
       issues
     )
+    const selection = checkString(
+      body,
+      'selectedText',
+      { required: false, maxLength: MAX_SELECTED_TEXT_CHARS },
+      issues
+    )
     if (issues.length > 0) throw invalid(issues)
-    return transcript as string
+    const selectedText = (selection ?? '').trim()
+    return {
+      transcript: transcript as string,
+      selectedText: selectedText === '' ? null : selectedText
+    }
   }
 
   private async readConfirm(

@@ -8,6 +8,7 @@
  */
 
 export interface HotkeyChord {
+  /** The non-modifier key, or an empty string for a modifier-only chord. */
   key: string
   ctrl: boolean
   alt: boolean
@@ -45,7 +46,11 @@ function normalizeMainKey(value: string): string | null {
 }
 
 
-/** Parse an Electron-style accelerator such as `Control+Space`. */
+/**
+ * Parse an Electron-style accelerator such as `Control+Space`, or a
+ * modifier-only chord such as `Control+Alt`. A modifier-only chord has no main
+ * key and needs at least two distinct modifiers.
+ */
 export function parseHotkey(value: string): HotkeyChord | null {
   const parts = value
     .split('+')
@@ -54,10 +59,27 @@ export function parseHotkey(value: string): HotkeyChord | null {
 
   if (parts.length < 1) return null
 
+  const chord: HotkeyChord = { key: '', ctrl: false, alt: false, shift: false, meta: false }
+  const modifiers: (keyof Pick<HotkeyChord, 'ctrl' | 'alt' | 'shift' | 'meta'>)[] = []
+  for (const part of parts) {
+    const modifier = MODIFIER_ALIASES[part.toLowerCase()]
+    if (modifier) modifiers.push(modifier)
+  }
+
+  // Every part is a modifier: this is a hook-only chord with no main key.
+  if (modifiers.length === parts.length) {
+    if (parts.length < 2) return null
+    for (const modifier of modifiers) {
+      if (chord[modifier]) return null
+      chord[modifier] = true
+    }
+    return chord
+  }
+
   const main = normalizeMainKey(parts[parts.length - 1])
   if (main === null) return null
 
-  const chord: HotkeyChord = { key: main, ctrl: false, alt: false, shift: false, meta: false }
+  chord.key = main
   for (const part of parts.slice(0, -1)) {
     const modifier = MODIFIER_ALIASES[part.toLowerCase()]
     if (!modifier || chord[modifier]) return null
@@ -77,19 +99,19 @@ export function formatHotkey(chord: HotkeyChord): string {
   if (chord.alt) parts.push('Alt')
   if (chord.shift) parts.push('Shift')
   if (chord.meta) parts.push('Meta')
-  parts.push(chord.key)
+  if (chord.key) parts.push(chord.key)
   return parts.join('+')
 }
 
 /**
  * Electron's globalShortcut only supports accelerators that have at least one
- * non-modifier key (e.g. `Control+Space` or `Alt+F8`). Chords whose main key
- * is itself a modifier (like `Alt+Shift` or `Control+Shift`) cannot be registered
- * with `globalShortcut` and are handled solely by the low-level keyboard hook.
+ * non-modifier key (e.g. `Control+Space` or `Alt+F8`). Modifier-only chords
+ * (like `Control+Alt` or `Control+Shift`) have no main key, cannot be registered
+ * with `globalShortcut`, and are handled solely by the low-level keyboard hook.
  */
 export function isElectronAccelerator(hotkey: string): boolean {
   const chord = parseHotkey(hotkey)
-  if (!chord) return false
+  if (!chord || !chord.key) return false
   const upper = chord.key.toUpperCase()
   return upper !== 'SHIFT' && upper !== 'CONTROL' && upper !== 'ALT' && upper !== 'META'
 }
@@ -101,7 +123,8 @@ export function hotkeyLabel(hotkey: string): string[] {
 export interface HotkeyBinding {
   /** Each group is one logical modifier; any code in the group satisfies it. */
   modifierGroups: readonly (readonly number[])[]
-  mainCode: number
+  /** The non-modifier key, or null for a modifier-only chord. */
+  mainCode: number | null
   escapeCode: number
 }
 
@@ -151,7 +174,7 @@ export class HotkeyChordTracker {
     if (this.isModifier(keycode)) {
       if (this.held.has(keycode)) return
       this.held.add(keycode)
-      if (this.mainDown && !this.active && !this.cancelledUntilRelease && this.hasRequiredModifiers()) {
+      if (this.canStartHold()) {
         this.active = true
         this.callbacks.onPress()
       }
@@ -162,7 +185,7 @@ export class HotkeyChordTracker {
       // Auto-repeat must never restart a hold.
       if (this.mainDown) return
       this.mainDown = true
-      if (!this.active && !this.cancelledUntilRelease && this.hasRequiredModifiers()) {
+      if (this.canStartHold()) {
         this.active = true
         this.callbacks.onPress()
       }
@@ -207,5 +230,15 @@ export class HotkeyChordTracker {
     return this.binding.modifierGroups.every((group) =>
       group.some((keycode) => this.held.has(keycode))
     )
+  }
+
+  /**
+   * A modifier-only chord has no main key, so every required modifier being
+   * held is the whole chord. Otherwise the main key must be down too.
+   */
+  private canStartHold(): boolean {
+    if (this.active || this.cancelledUntilRelease) return false
+    if (!this.hasRequiredModifiers()) return false
+    return this.binding.mainCode === null || this.mainDown
   }
 }

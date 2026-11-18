@@ -16,6 +16,7 @@ import {
   toolCallsFromResponse
 } from './groq'
 import type { FetchLike } from './groq'
+import { EditTextTool } from './tools'
 import type { ToolSpec } from './types'
 
 interface FetchCall {
@@ -306,6 +307,95 @@ describe('GroqClient', () => {
     expect(messages[0].role).toBe('system')
     expect(messages[0].content).toContain('You are Kestrel')
     expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
+  })
+
+  it('adds the selection as a second system message', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('shorten this', [], [], '  A much longer sentence.  ')
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages).toHaveLength(3)
+    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[1].role).toBe('system')
+    expect(messages[1].content).toContain(
+      'The user has selected the following text in another application.'
+    )
+    expect(messages[1].content).toContain('call `edit_text`')
+    expect(messages[1].content).toContain(
+      'Read the selection as context; never answer about text that is not present.'
+    )
+    expect(messages[1].content).toContain('---\nA much longer sentence.\n---')
+    expect(messages[2]).toEqual({ role: 'user', content: 'shorten this' })
+  })
+
+  it('omits the selection block when the selection is blank', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('open notepad', [])
+    await client.choose('open notepad', [], [], '   \n\t ')
+    await client.choose('open notepad', [], [], null)
+
+    for (const call of calls) {
+      const messages = bodyOf(call).messages as Array<{
+        role: string
+        content: string
+      }>
+      expect(messages).toHaveLength(2)
+      expect(
+        messages.some((message) =>
+          message.content.includes('The user has selected the following text')
+        )
+      ).toBe(false)
+    }
+  })
+
+  it('caps an oversized selection at 100,000 characters', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose('shorten this', [], [], 'a'.repeat(120_000))
+
+    const messages = bodyOf(calls[0]).messages as Array<{
+      role: string
+      content: string
+    }>
+    expect(messages[1].content).toContain('a'.repeat(100_000))
+    expect(messages[1].content).not.toContain('a'.repeat(100_001))
+  })
+
+  it('offers the edit_text tool with its selection semantics', async () => {
+    const { fetch, calls } = recordingFetch(() =>
+      jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    )
+    const client = new GroqClient('gsk_test', { fetch })
+
+    await client.choose(
+      'rewrite this',
+      [new EditTextTool().spec],
+      [],
+      'the old text'
+    )
+
+    expect(toolNames(calls[0])).toEqual(['edit_text'])
+    const tools = bodyOf(calls[0]).tools as Array<{
+      function: { description: string }
+    }>
+    const description = tools[0].function.description.toLowerCase()
+    expect(description).toContain('selected text')
+    expect(description).toContain('rewrite')
+    expect(description).toContain('questions')
   })
 
   it('replays the same history on the schema retry', async () => {

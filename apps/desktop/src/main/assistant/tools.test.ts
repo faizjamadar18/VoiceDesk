@@ -12,7 +12,9 @@ import {
   CurrentDateTool,
   CurrentTimeTool,
   DeleteFileTool,
+  EditTextTool,
   GetWeatherTool,
+  MAX_EDIT_TEXT_CHARS,
   OpenAppTool,
   SearchFilesTool,
   TypeTextTool,
@@ -42,7 +44,8 @@ const TOOL_NAMES = new Set([
   'create_folder',
   'create_file',
   'delete_file',
-  'get_weather'
+  'get_weather',
+  'edit_text'
 ])
 
 interface Recorder {
@@ -147,7 +150,8 @@ describe('built-in tool registry', () => {
       'create_folder',
       'create_file',
       'delete_file',
-      'get_weather'
+      'get_weather',
+      'edit_text'
     ])
   })
 
@@ -640,5 +644,81 @@ describe('GetWeatherTool', () => {
     const preparation = new GetWeatherTool().prepare({ location: 'Paris' })
 
     expect(preparation).toEqual({ arguments: { location: 'Paris' } })
+  })
+})
+
+describe('EditTextTool', () => {
+  it('returns the rewritten text as an unconfirmed write', () => {
+    const spec = specOf('edit_text')
+
+    expect(spec.risk).toBe('write')
+    expect(spec.requiresConfirmation).toBe(false)
+    expect(spec.parameters).toEqual({
+      type: 'object',
+      properties: {
+        new_text: {
+          type: 'string',
+          description:
+            "The complete rewritten text to paste in place of the user's " +
+            'selection. Include the full final text, not just changes.'
+        }
+      },
+      required: ['new_text']
+    })
+  })
+
+  it('returns the trimmed replacement with a spoken confirmation', async () => {
+    const { ctx } = makeContext({ selectedText: 'the original sentence' })
+
+    const outcome = await new EditTextTool().run(
+      { new_text: '  A cleaner sentence.  ' },
+      ctx
+    )
+
+    expect(outcome).toEqual({
+      status: 'ok',
+      action: 'edit_text',
+      message: 'Updated your selection.',
+      text: 'A cleaner sentence.',
+      spokenResponse: 'Updated your selection.'
+    })
+  })
+
+  it('answers normally when there is no selection to rewrite', async () => {
+    const { ctx } = makeContext()
+
+    const outcome = await new EditTextTool().run({ new_text: 'Anything.' }, ctx)
+
+    expect(outcome).toEqual({
+      status: 'unhandled',
+      action: 'edit_text',
+      message:
+        'There is no selected text to rewrite. Answer the user normally instead.'
+    })
+    expect(outcome.text).toBeUndefined()
+  })
+
+  it('rejects a blank replacement', async () => {
+    const { ctx } = makeContext({ selectedText: 'the original sentence' })
+
+    const outcome = await new EditTextTool().run({ new_text: '   \n ' }, ctx)
+
+    expect(outcome.status).toBe('error')
+    expect(outcome.action).toBe('edit_text')
+    expect(outcome.message).toBe('Replacement text was empty.')
+    expect(outcome.text).toBeUndefined()
+  })
+
+  it('rejects a replacement past the length cap', async () => {
+    const { ctx } = makeContext({ selectedText: 'the original sentence' })
+    const tooLong = 'a'.repeat(MAX_EDIT_TEXT_CHARS + 1)
+
+    const outcome = await new EditTextTool().run({ new_text: tooLong }, ctx)
+
+    expect(outcome.status).toBe('error')
+    expect(outcome.message).toBe(
+      `Replacement text is too long (${MAX_EDIT_TEXT_CHARS + 1} characters).`
+    )
+    expect(outcome.text).toBeUndefined()
   })
 })

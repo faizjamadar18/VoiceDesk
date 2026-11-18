@@ -17,7 +17,7 @@ export function InsightsPage({ data = DUMMY_INSIGHTS_DATA }: InsightsPageProps):
   const [isVoiceTypeModalOpen, setIsVoiceTypeModalOpen] = useState(false)
 
   return (
-    <div className="w-full pb-8">
+    <div className="insights-page @container w-full min-w-0 pb-8">
       {/* Top Header */}
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold tracking-[-0.02em] text-white/95">
@@ -51,14 +51,14 @@ export function InsightsPage({ data = DUMMY_INSIGHTS_DATA }: InsightsPageProps):
       {/* Bento Grid Layout */}
       <div className="space-y-4">
         {/* Row 1: 3 Hero cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 @[700px]:grid-cols-3 md:grid-cols-3 gap-4">
           <VoiceTypeCard data={data.percentile} />
           <WordsDictatedCard data={data.words} />
           <AgentPromptsCard data={data.agent} />
         </div>
 
         {/* Row 2: 2 Middle cards (App usage & Streak) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <div className="grid grid-cols-1 @[600px]:grid-cols-2 lg:grid-cols-2 gap-4 items-stretch">
           <AppUsageCard apps={data.apps} />
           <StreakCard data={data.streak} />
         </div>

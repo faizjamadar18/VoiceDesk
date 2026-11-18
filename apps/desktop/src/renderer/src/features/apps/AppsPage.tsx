@@ -163,7 +163,7 @@ export function AppsPage({
   const availableApps = apps.filter((app) => !app.connected)
 
   return (
-    <div className="apps-page">
+    <div className="apps-page @container w-full min-w-0">
       <h1 className="apps-title">Apps</h1>
 
       <div className="apps-card">
@@ -242,7 +242,7 @@ export function AppsPage({
                 <h3 id="connected-heading" className="apps-section-title">
                   Connected
                 </h3>
-                <div className="apps-grid">
+                <div className="apps-grid md:grid md:grid-cols-2 md:gap-x-12 @[600px]:grid-cols-2 @[600px]:gap-x-12">
                   {connectedApps.map((app) => (
                     <AppRow
                       key={app.id}
@@ -260,7 +260,7 @@ export function AppsPage({
                 <h3 id="available-heading" className="apps-section-title">
                   Available
                 </h3>
-                <div className="apps-grid">
+                <div className="apps-grid md:grid md:grid-cols-2 md:gap-x-12 @[600px]:grid-cols-2 @[600px]:gap-x-12">
                   {availableApps.map((app, index) => (
                     <AppRow
                       key={app.id}

@@ -6,7 +6,7 @@ import type {
   NotchStatePayload,
   ScreenAskInput
 } from '../shared/types'
-import type { ActionClient } from './action-client'
+import type { ActionClient, ActOptions } from './action-client'
 import type { PasteService } from './dictation/paste'
 import type { LiveTranscriber, LiveTurn, LiveTurnHandlers } from './live-asr'
 import type { PolishRequest, TranscriptPolisher } from './dictation/llm-polish'
@@ -94,6 +94,7 @@ class FakeTranscriber implements LiveTranscriber {
 
 class FakeActionClient implements ActionClient {
   readonly transcripts: string[] = []
+  readonly actOptions: (ActOptions | undefined)[] = []
   readonly confirmations: { planId: string; approved: boolean }[] = []
   readonly undos: string[] = []
   readonly screenInputs: ScreenAskInput[] = []
@@ -122,8 +123,9 @@ class FakeActionClient implements ActionClient {
   onAct?: () => void
   private heldConfirm: ((response: ActionResponse) => void) | null = null
 
-  async act(transcript: string): Promise<ActionResponse> {
+  async act(transcript: string, options?: ActOptions): Promise<ActionResponse> {
     this.transcripts.push(transcript)
+    this.actOptions.push(options)
     this.onAct?.()
     return this.response
   }
@@ -159,8 +161,10 @@ class FakeActionClient implements ActionClient {
 
 class FakePaste implements PasteService {
   readonly pasted: string[] = []
+  error: Error | null = null
 
   async paste(text: string): Promise<void> {
+    if (this.error) throw this.error
     this.pasted.push(text)
   }
 }
@@ -1815,6 +1819,25 @@ describe('NotchController escape & cancel', () => {
       expect(lastPayload?.message).toBe('Typing text.')
     })
 
+    it('submitText speaks an edit_text result without printing it', async () => {
+      const context = setup()
+      context.actionClient.response = {
+        status: 'ok',
+        action: 'edit_text',
+        text: 'A clearer sentence.',
+        message: 'Updated your selection.',
+        dryRun: false
+      }
+
+      await context.controller.submitText('make it clearer')
+
+      expect(context.paste.pasted).toEqual(['A clearer sentence.'])
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('result')
+      expect(lastPayload?.message).toBeNull()
+      expect(lastPayload?.spoken).toBe('Updated your selection.')
+    })
+
     it('restores history item: clears active turn, shows presenter, sets transcript, emits result phase with prompt and reply', () => {
       const context = setup()
       context.controller.start()
@@ -1828,6 +1851,22 @@ describe('NotchController escape & cancel', () => {
       expect(lastPayload?.transcript).toBe('What is 2+2?')
       expect(lastPayload?.message).toBe('4')
       expect(lastPayload?.spoken).toBeNull()
+    })
+
+    it('restores history item without a stale pinned chip', () => {
+      const context = setup()
+      context.controller.start()
+      context.controller.attachSelectedText('stale chip')
+      expect(context.presenter.payloads.at(-1)?.selectedText).toEqual(['stale chip'])
+
+      context.controller.restoreHistory('What is 2+2?', '4')
+
+      const lastPayload = context.presenter.payloads.at(-1)
+      expect(lastPayload?.phase).toBe('result')
+      expect(lastPayload?.selectedText).toBeNull()
+      expect(lastPayload?.transcript).toBe('What is 2+2?')
+      expect(lastPayload?.message).toBe('4')
+      expect(context.controller.selectedTextSnapshot).toEqual([])
     })
 
     it('sets isActing, hasActiveWork, and isBusy while submitText is in flight', async () => {
@@ -1859,6 +1898,202 @@ describe('NotchController escape & cancel', () => {
       await submissionPromise
 
       expect(context.controller.isActing()).toBe(false)
+    })
+  })
+
+  describe('pinned selection', () => {
+    it('starts a fresh turn with no pinned selection', () => {
+      const { presenter, controller } = setup()
+
+      controller.start()
+
+      expect(presenter.payloads.at(-1)?.selectedText).toBeNull()
+      expect(controller.selectedTextSnapshot).toEqual([])
+
+      controller.dispose()
+    })
+
+    it('pins a highlighted selection mid-turn without touching the phase', () => {
+      const { presenter, controller } = setup()
+      controller.start()
+
+      controller.attachSelectedText('  hello  world ')
+
+      const payload = presenter.payloads.at(-1)
+      expect(payload?.selectedText).toEqual(['hello  world'])
+      expect(payload?.phase).toBe('listening')
+      expect(payload?.transcript).toBeNull()
+      expect(payload?.message).toBeNull()
+
+      controller.dispose()
+    })
+
+    it('ignores blank and duplicate selections', () => {
+      const { presenter, controller } = setup()
+      controller.start()
+      controller.attachSelectedText('hello')
+      const published = presenter.payloads.length
+
+      controller.attachSelectedText('hello')
+      controller.attachSelectedText('   ')
+
+      expect(presenter.payloads).toHaveLength(published)
+      expect(controller.selectedTextSnapshot).toEqual(['hello'])
+
+      controller.dispose()
+    })
+
+    it('republishes the state without a selection when the chip is removed', () => {
+      const { presenter, controller } = setup()
+      controller.start()
+      controller.attachSelectedText('hello')
+
+      controller.removeSelectedText(0)
+
+      expect(presenter.payloads.at(-1)?.selectedText).toBeNull()
+      expect(controller.selectedTextSnapshot).toEqual([])
+
+      controller.dispose()
+    })
+
+    it('keeps a selection captured while the hold was still arming', () => {
+      const { presenter, controller } = setup()
+
+      controller.attachSelectedText('picked early')
+      controller.start()
+
+      const payload = presenter.payloads.at(-1)
+      expect(payload?.phase).toBe('listening')
+      expect(payload?.selectedText).toEqual(['picked early'])
+
+      controller.dispose()
+    })
+
+    it('drops the previous chip when the next press captured nothing', async () => {
+      const context = setup()
+      context.controller.start()
+      context.controller.attachSelectedText('old chip')
+      context.controller.pushAudio(speech(1), 16_000)
+      context.controller.stop()
+      context.controller.audioEnded()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(context.presenter.payloads.at(-1)?.selectedText).toEqual(['old chip'])
+
+      context.controller.start()
+
+      expect(context.presenter.payloads.at(-1)?.selectedText).toBeNull()
+      expect(context.controller.selectedTextSnapshot).toEqual([])
+
+      context.controller.dispose()
+    })
+
+    it('sends the pinned selection with the action', async () => {
+      const context = setup()
+      context.controller.start()
+      context.controller.attachSelectedText('hello world')
+      context.controller.pushAudio(speech(1), 16_000)
+      context.controller.stop()
+      context.controller.audioEnded()
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(context.actionClient.transcripts).toEqual(['open notepad'])
+      expect(context.actionClient.actOptions).toEqual([{ selectedText: 'hello world' }])
+    })
+
+    it('sends null when nothing was pinned', async () => {
+      const context = setup()
+      await runTurn(context, {
+        status: 'ok',
+        action: 'open_app',
+        message: 'Opening Notepad.',
+        dryRun: true
+      })
+
+      expect(context.actionClient.actOptions).toEqual([{ selectedText: null }])
+    })
+
+    it('pastes an edit_text response over the selection and only speaks the result', async () => {
+      const context = setup()
+      await runTurn(context, {
+        status: 'ok',
+        action: 'edit_text',
+        message: 'Updated your selection.',
+        text: 'A clearer sentence.',
+        dryRun: false
+      })
+
+      expect(context.paste.pasted).toEqual(['A clearer sentence.'])
+      const payload = context.presenter.payloads.at(-1)
+      expect(payload?.phase).toBe('result')
+      expect(payload?.message).toBeNull()
+      expect(payload?.spoken).toBe('Updated your selection.')
+    })
+
+    it('keeps the message when an edit_text response has nothing to paste', async () => {
+      const context = setup()
+      await runTurn(context, {
+        status: 'ok',
+        action: 'edit_text',
+        message: 'Nothing to replace.',
+        dryRun: false
+      })
+
+      expect(context.paste.pasted).toEqual([])
+      const payload = context.presenter.payloads.at(-1)
+      expect(payload?.phase).toBe('result')
+      expect(payload?.message).toBe('Nothing to replace.')
+    })
+
+    it('shows a plain error when the replacement cannot be pasted', async () => {
+      const context = setup()
+      context.paste.error = new Error('paste failed')
+
+      await runTurn(context, {
+        status: 'ok',
+        action: 'edit_text',
+        message: 'Replaced your selection.',
+        text: 'A clearer sentence.',
+        dryRun: false
+      })
+
+      const payload = context.presenter.payloads.at(-1)
+      expect(payload?.phase).toBe('error')
+      expect(payload?.message).toBe("Couldn't replace your selection.")
+      expect(payload?.spoken).toBe("Couldn't replace your selection.")
+      expect(context.controller.isActing()).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(3_500)
+      expect(context.presenter.hidden).toBe(1)
+    })
+
+    it('never pastes for a non-edit_text response', async () => {
+      const context = setup()
+      await runTurn(context, {
+        status: 'ok',
+        action: 'open_app',
+        message: 'Opening Notepad.',
+        text: 'ignored',
+        dryRun: true
+      })
+
+      expect(context.paste.pasted).toEqual([])
+      const payload = context.presenter.payloads.at(-1)
+      expect(payload?.phase).toBe('result')
+      expect(payload?.message).toBe('Opening Notepad.')
+    })
+
+    it('clears the pinned selection when a turn is replaced or cancelled', () => {
+      const context = setup()
+      context.controller.start()
+      context.controller.attachSelectedText('hello')
+
+      context.controller.startTyping()
+      expect(context.controller.selectedTextSnapshot).toEqual([])
+
+      context.controller.attachSelectedText('again')
+      context.controller.cancel()
+      expect(context.controller.selectedTextSnapshot).toEqual([])
     })
   })
 })

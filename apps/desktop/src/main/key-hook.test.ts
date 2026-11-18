@@ -63,8 +63,8 @@ describe('buildKeyBinding', () => {
     const binding = buildKeyBinding(parseHotkey('Alt+Shift')!, keys)
 
     expect(binding).toEqual({
-      modifierGroups: [[56, 3640]],
-      mainCode: 42,
+      modifierGroups: [[56, 3640], [42, 54]],
+      mainCode: null,
       escapeCode: 1
     })
   })
@@ -73,8 +73,18 @@ describe('buildKeyBinding', () => {
     const binding = buildKeyBinding(parseHotkey('Control+Shift')!, keys)
 
     expect(binding).toEqual({
-      modifierGroups: [[29, 3613]],
-      mainCode: 42,
+      modifierGroups: [[29, 3613], [42, 54]],
+      mainCode: null,
+      escapeCode: 1
+    })
+  })
+
+  it('maps the default Control+Alt agent chord without a main key', () => {
+    const binding = buildKeyBinding(parseHotkey('Control+Alt')!, keys)
+
+    expect(binding).toEqual({
+      modifierGroups: [[29, 3613], [56, 3640]],
+      mainCode: null,
       escapeCode: 1
     })
   })
@@ -122,5 +132,37 @@ describe('startKeyHook mousedown forwarding', () => {
 
     handle.stop()
     expect(uiohookListeners['mousedown'] ?? []).toHaveLength(0)
+  })
+})
+
+describe('startKeyHook event suppression', () => {
+  it('ignores a suppressed keyup so the hold is not released', async () => {
+    let suppressed = false
+    const onPress = vi.fn()
+    const onRelease = vi.fn()
+    const handle = await startKeyHook(
+      parseHotkey('Control+Space')!,
+      { onPress, onRelease, onCancel: () => {} },
+      { isEventSuppressed: () => suppressed }
+    )
+
+    const keyDown = uiohookListeners['keydown']?.at(-1)
+    const keyUp = uiohookListeners['keyup']?.at(-1)
+    expect(keyDown).toBeDefined()
+    expect(keyUp).toBeDefined()
+
+    keyDown?.({ keycode: 29 })
+    keyDown?.({ keycode: 57 })
+    expect(onPress).toHaveBeenCalledTimes(1)
+
+    suppressed = true
+    keyUp?.({ keycode: 57 })
+    expect(onRelease).not.toHaveBeenCalled()
+
+    suppressed = false
+    keyUp?.({ keycode: 57 })
+    expect(onRelease).toHaveBeenCalledTimes(1)
+
+    handle.stop()
   })
 })

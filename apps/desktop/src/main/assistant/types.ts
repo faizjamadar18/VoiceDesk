@@ -111,6 +111,8 @@ export interface ToolContext {
   fileSearch: FileSearch
   weather: WeatherClientLike
   transcript?: string
+  /** Text the user highlighted in another app when the turn started. */
+  selectedText?: string | null
   /** Writes an email reply body, or null when the model is unavailable. */
   composeEmailReply?: (input: EmailReplyRequest) => Promise<string | null>
 }
@@ -162,8 +164,14 @@ export type Directive =
   | NoDirective
   | ScreenDirective
 
+/** What the planner knows beyond the spoken transcript itself. */
+export interface PlanContext {
+  /** Text the user highlighted in another app when the turn started. */
+  selectedText?: string | null
+}
+
 export interface Planner {
-  plan(transcript: string): Promise<Directive>
+  plan(transcript: string, context?: PlanContext): Promise<Directive>
 }
 
 /** One prior conversation turn replayed to the model. */
@@ -176,7 +184,8 @@ export interface LlmClient {
   choose(
     transcript: string,
     specs: ToolSpec[],
-    history?: ChatTurn[]
+    history?: ChatTurn[],
+    selectedText?: string | null
   ): Promise<LlmReply>
 }
 

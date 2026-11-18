@@ -11,9 +11,18 @@ import type { HistoryRecord, NewHistoryRecord } from '../../shared/types'
 import type { SqliteHistoryStore } from '../history/sqlite-store'
 import type { ComposioIntegration } from './composio/integration'
 import type { ComposioStatus } from './composio/types'
+import { GroqPlanner, RulePlanner } from './planner'
 import { ToolRegistry } from './registry'
 import { AssistantService, emptyIntegrationsStatus } from './service'
-import type { LlmClient, LlmReply, Planner, Tool, ToolSpec } from './types'
+import { EditTextTool } from './tools'
+import type {
+  ChatTurn,
+  LlmClient,
+  LlmReply,
+  Planner,
+  Tool,
+  ToolSpec
+} from './types'
 import type { VisionClient } from './vision'
 
 function makeTool(name: string): Tool {
@@ -111,6 +120,25 @@ class RecordingLlmClient implements LlmClient {
   async choose(_transcript: string, specs: ToolSpec[]): Promise<LlmReply> {
     this.seen = specs
     return { calls: [], content: null }
+  }
+}
+
+/** Returns a fixed reply while recording the selection and how often it ran. */
+class ScriptedLlmClient implements LlmClient {
+  calls = 0
+  selectedText: string | null | undefined = undefined
+
+  constructor(private readonly reply: LlmReply) {}
+
+  async choose(
+    _transcript: string,
+    _specs: ToolSpec[],
+    _history?: ChatTurn[],
+    selectedText?: string | null
+  ): Promise<LlmReply> {
+    this.calls += 1
+    this.selectedText = selectedText
+    return this.reply
   }
 }
 
@@ -725,5 +753,98 @@ describe('AssistantService email reply composition', () => {
       title: 'Reply drafted',
       body: 'Yes, I will be there.'
     })
+  })
+})
+
+describe('AssistantService selected-text rewriting', () => {
+  function editService(reply: LlmReply): {
+    service: AssistantService
+    client: ScriptedLlmClient
+  } {
+    const registry = new ToolRegistry()
+    registry.register(new EditTextTool())
+    const client = new ScriptedLlmClient(reply)
+    return {
+      service: new AssistantService({
+        registry,
+        planner: new GroqPlanner(registry, client)
+      }),
+      client
+    }
+  }
+
+  it('returns the rewritten selection as text the desktop can paste', async () => {
+    const { service, client } = editService({
+      calls: [
+        { name: 'edit_text', arguments: { new_text: '  Hi Sam, quick note.  ' } }
+      ],
+      content: null
+    })
+
+    const response = await service.act(
+      'rewrite this to sound more formal',
+      'hey sam, quick note'
+    )
+
+    expect(client.selectedText).toBe('hey sam, quick note')
+    expect(response.status).toBe('ok')
+    expect(response.action).toBe('edit_text')
+    expect(response.text).toBe('Hi Sam, quick note.')
+    expect(response.message).toBe('Updated your selection.')
+    expect(response.spokenResponse).toBe('Updated your selection.')
+    expect(response.card).toBeNull()
+    expect(response.results).toBeNull()
+  })
+
+  it('refuses edit_text when no selection was captured', async () => {
+    const { service, client } = editService({
+      calls: [{ name: 'edit_text', arguments: { new_text: 'Rewritten.' } }],
+      content: null
+    })
+
+    const response = await service.act('rewrite this')
+
+    expect(client.selectedText).toBeNull()
+    expect(response.status).not.toBe('ok')
+    expect(response.action).toBe('edit_text')
+    expect(response.text).toBeNull()
+    expect(response.message).toBe(
+      'There is no selected text to rewrite. Answer the user normally instead.'
+    )
+    expect(response.spokenResponse).toBe(response.message)
+  })
+
+  it('keeps the rewritten text instead of re-synthesizing it', async () => {
+    const { service, client } = editService({
+      calls: [{ name: 'edit_text', arguments: { new_text: 'Short.' } }],
+      content: null
+    })
+
+    const response = await service.act(
+      'what does this say? rewrite it shorter',
+      'A long passage of text.'
+    )
+
+    expect(client.calls).toBe(1)
+    expect(response.status).toBe('ok')
+    expect(response.text).toBe('Short.')
+    expect(response.message).toBe('Updated your selection.')
+  })
+
+  it('asks for the AI model when only the rule planner is configured', async () => {
+    const service = new AssistantService({
+      registry: new ToolRegistry(),
+      planner: new RulePlanner()
+    })
+
+    const response = await service.act('make this more formal', 'hey sam')
+
+    expect(response.status).toBe('unhandled')
+    expect(response.action).toBe('none')
+    expect(response.text).toBeNull()
+    expect(response.message).toBe(
+      'I need the AI model configured to rewrite your selection.'
+    )
+    expect(response.spokenResponse).toBe(response.message)
   })
 })

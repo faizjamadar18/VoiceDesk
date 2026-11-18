@@ -120,7 +120,7 @@ export function VoiceOsSidebar(): JSX.Element {
   const [isDragging, setIsDragging] = useState(false)
   const [collapseSettled, setCollapseSettled] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
-  const [shortcutLabel, setShortcutLabel] = useState('Ctrl+Space')
+  const [shortcutLabel, setShortcutLabel] = useState('Ctrl+Alt')
 
   const popoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

@@ -55,7 +55,7 @@ export function ActionsSection({
         </div>
       </div>
 
-      <div className="agent-actions-grid">
+      <div className="agent-actions-grid md:grid md:grid-cols-2 md:gap-x-12 @[600px]:grid-cols-2 @[600px]:gap-x-12">
         {actions.map((action) => (
           <div
             key={action.id}

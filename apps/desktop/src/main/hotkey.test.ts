@@ -48,20 +48,31 @@ describe('parseHotkey', () => {
     expect(parseHotkey('CommandOrControl+Space')?.ctrl).toBe(true)
     expect(parseHotkey('Win+Space')?.meta).toBe(true)
     expect(parseHotkey('Control+Shift')).toEqual({
-      key: 'Shift',
+      key: '',
       ctrl: true,
       alt: false,
-      shift: false,
+      shift: true,
       meta: false
     })
     expect(parseHotkey('Alt+Shift')).toEqual({
-      key: 'Shift',
+      key: '',
       ctrl: false,
+      alt: true,
+      shift: true,
+      meta: false
+    })
+    expect(formatHotkey(parseHotkey('Alt+Shift')!)).toBe('Alt+Shift')
+  })
+
+  it('parses modifier-only chords with no main key', () => {
+    expect(parseHotkey('Control+Alt')).toEqual({
+      key: '',
+      ctrl: true,
       alt: true,
       shift: false,
       meta: false
     })
-    expect(formatHotkey(parseHotkey('Alt+Shift')!)).toBe('Alt+Shift')
+    expect(formatHotkey(parseHotkey('Control+Alt')!)).toBe('Control+Alt')
   })
 
   it('identifies Electron accelerators vs hook-only chords', () => {
@@ -70,6 +81,7 @@ describe('parseHotkey', () => {
     expect(isElectronAccelerator('Control+Alt+A')).toBe(true)
     expect(isElectronAccelerator('Alt+Shift')).toBe(false)
     expect(isElectronAccelerator('Control+Shift')).toBe(false)
+    expect(isElectronAccelerator('Control+Alt')).toBe(false)
     expect(isElectronAccelerator('InvalidHotkey')).toBe(false)
   })
 
@@ -82,6 +94,7 @@ describe('parseHotkey', () => {
     expect(parseHotkey('Space')).toBeNull()
     expect(parseHotkey('A')).toBeNull()
     expect(parseHotkey('Control')).toBeNull()
+    expect(parseHotkey('Control+Control')).toBeNull()
     expect(parseHotkey('Control+Control+Space')).toBeNull()
     expect(parseHotkey('Control+NotAKey')).toBeNull()
     expect(parseHotkey('')).toBeNull()
@@ -232,5 +245,54 @@ describe('HotkeyChordTracker', () => {
     instance.keyDown(SPACE)
 
     expect(calls).toEqual(['press'])
+  })
+})
+
+describe('HotkeyChordTracker with a modifier-only chord', () => {
+  function modifierTracker() {
+    return tracker({
+      modifierGroups: [[CTRL, CTRL_RIGHT], [ALT]],
+      mainCode: null
+    })
+  }
+
+  it('fires one press when the second modifier joins, in either order', () => {
+    for (const order of [
+      [CTRL, ALT],
+      [ALT, CTRL]
+    ]) {
+      const { instance, calls } = modifierTracker()
+
+      instance.keyDown(order[0])
+      expect(calls).toEqual([])
+      instance.keyDown(order[1])
+
+      expect(calls).toEqual(['press'])
+    }
+  })
+
+  it('ignores auto-repeat and extra modifiers while held', () => {
+    const { instance, calls } = modifierTracker()
+
+    instance.keyDown(CTRL)
+    instance.keyDown(ALT)
+    instance.keyDown(ALT)
+    instance.keyDown(CTRL)
+    instance.keyDown(SHIFT)
+    instance.keyUp(SHIFT)
+
+    expect(calls).toEqual(['press'])
+  })
+
+  it('releases when either chord key is released', () => {
+    for (const released of [CTRL, ALT]) {
+      const { instance, calls } = modifierTracker()
+
+      instance.keyDown(CTRL)
+      instance.keyDown(ALT)
+      instance.keyUp(released)
+
+      expect(calls).toEqual(['press', 'release'])
+    }
   })
 })

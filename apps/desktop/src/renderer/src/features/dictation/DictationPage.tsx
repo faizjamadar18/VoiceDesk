@@ -42,7 +42,7 @@ export function DictationPage({ userName, userEmail }: DictationPageProps): JSX.
   )
 
   return (
-    <div className="dictation-page">
+    <div className="dictation-page @container w-full min-w-0">
       <h1 className="dictation-title">Dictation</h1>
 
       <PolishingSection

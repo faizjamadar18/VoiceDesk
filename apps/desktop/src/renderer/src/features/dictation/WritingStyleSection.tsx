@@ -199,7 +199,9 @@ export function WritingStyleSection({
           {/* Presets Grid */}
           <div
             className={`grid gap-3 items-stretch ${
-              presets.length === 4 ? 'grid-cols-2 xl:grid-cols-4' : 'grid-cols-3'
+              presets.length === 4
+                ? 'dictation-style-grid--4cols grid-cols-1 @[500px]:grid-cols-2 @[800px]:grid-cols-4'
+                : 'dictation-style-grid--3cols grid-cols-1 @[600px]:grid-cols-3'
             }`}
           >
             {presets.map((preset) => {

@@ -5,11 +5,23 @@ import {
   NOTCH_ANSWER_MAX_HEIGHT_PX,
   applyNotchHistoryRestore,
   computeNotchRegion,
+  deriveHasExpandedContent,
   deriveShowBottomHint
 } from './Notch'
 import { resolveNotchCards, retainConfirmation } from './card-derivation'
-import { VoiceOsPrompt, VoiceOsAnswer } from './voiceos-notch/markdown'
+import {
+  VoiceOsAnswer,
+  VoiceOsBottomHint,
+  VoiceOsPrompt
+} from './voiceos-notch/markdown'
 import { deriveNotchPresentation } from './voiceos-notch/notch-ui'
+import {
+  NotchContextStack,
+  SELECTED_TEXT_CHIP_MAX_WIDTH_PX,
+  SelectedTextChip,
+  buildAgentNotchContextItems,
+  getAgentNotchContextPlacement
+} from './voiceos-notch/selection-chip'
 import VoiceOsNotch from './voiceos-notch/VoiceOsNotch'
 import { GoogleCalendarCard } from './components/GoogleCalendarCard'
 import { GmailComposeCard } from './components/GmailComposeCard'
@@ -655,5 +667,204 @@ describe('notch body shows one thing', () => {
         })
       )
     ).toContain('Copy to Clipboard')
+  })
+})
+
+describe('notch expansion', () => {
+  const collapsed = {
+    isEditingText: false,
+    hasTranscript: false,
+    showAnswer: false,
+    showCards: false,
+    hasCardContent: false
+  }
+
+  it('stays collapsed on a turn that only pins a selected text chip', () => {
+    expect(deriveHasExpandedContent(collapsed)).toBe(false)
+  })
+
+  it('expands once the turn has a transcript', () => {
+    expect(
+      deriveHasExpandedContent({ ...collapsed, hasTranscript: true })
+    ).toBe(true)
+  })
+
+  it('expands a settled edit turn that shows its prompt, so the chip stays visible', () => {
+    expect(
+      deriveHasExpandedContent({
+        ...collapsed,
+        hasTranscript: true,
+        showCards: true
+      })
+    ).toBe(true)
+  })
+})
+
+describe('pinned selected text', () => {
+  const longSelection =
+    'not real time insights until the quarter closes and the vendor confirms the pipeline'
+
+  it('renders one collapsed chip with the full selection on the title', () => {
+    const [item] = buildAgentNotchContextItems({
+      selectedText: ['  not   real time\ninsights  ']
+    })
+
+    const chipHtml = renderToStaticMarkup(
+      createElement(SelectedTextChip, { item, index: 0, onRemove: () => {} })
+    )
+
+    // The label is the collapsed selection, on one line.
+    expect(chipHtml).toContain('agent-notch-context-chip')
+    expect(chipHtml).toContain('>not real time insights<')
+    expect(chipHtml).toContain('title="not real time insights"')
+    expect(chipHtml).toContain('white-space:nowrap')
+
+    // A 190px box plus CSS ellipsis shortens a long label.
+    expect(chipHtml).toContain(
+      `max-width:${SELECTED_TEXT_CHIP_MAX_WIDTH_PX}px`
+    )
+    expect(chipHtml).toContain('text-overflow:ellipsis')
+
+    // The 16px X sits inside the chip.
+    expect(chipHtml).toContain('aria-label="Remove attachment"')
+  })
+
+  it('keeps the whole long selection in the DOM so only CSS shortens it', () => {
+    const [item] = buildAgentNotchContextItems({
+      selectedText: [longSelection]
+    })
+
+    const chipHtml = renderToStaticMarkup(
+      createElement(SelectedTextChip, { item, index: 0, onRemove: () => {} })
+    )
+
+    expect(item.description).toBe(longSelection)
+    expect(chipHtml).toContain(longSelection)
+    expect(chipHtml).not.toContain('...')
+    expect(chipHtml).not.toContain('…')
+  })
+
+  it('renders one chip per pinned selection inside the context stack', () => {
+    const items = buildAgentNotchContextItems({
+      selectedText: ['first selection', 'second selection']
+    })
+
+    const stackHtml = renderToStaticMarkup(
+      createElement(NotchContextStack, { items, onRemove: () => {} })
+    )
+
+    expect(stackHtml).toContain('agent-notch-context-stack')
+    expect(stackHtml).toContain('>first selection<')
+    expect(stackHtml).toContain('>second selection<')
+    expect(stackHtml.split('agent-notch-context-chip').length - 1).toBe(2)
+  })
+
+  it('places chips above the turn, or before the composer when one is shown', () => {
+    const items = buildAgentNotchContextItems({
+      selectedText: ['pinned words']
+    })
+
+    expect(
+      getAgentNotchContextPlacement({
+        contextItems: [],
+        hasBottomComposer: false
+      })
+    ).toBe('hidden')
+    expect(
+      getAgentNotchContextPlacement({
+        contextItems: items,
+        hasBottomComposer: false
+      })
+    ).toBe('before-turn')
+    expect(
+      getAgentNotchContextPlacement({
+        contextItems: items,
+        hasBottomComposer: true
+      })
+    ).toBe('before-composer')
+  })
+
+  it('renders the chips above the prompt card, or after the answer above the hint', () => {
+    const items = buildAgentNotchContextItems({
+      selectedText: ['pinned words']
+    })
+    const prompt = createElement(VoiceOsPrompt, { text: 'typed question' })
+    const answer = createElement(VoiceOsAnswer, {
+      text: 'the spoken reply',
+      maxHeight: NOTCH_ANSWER_MAX_HEIGHT_PX,
+      isError: false
+    })
+    const stack = createElement(NotchContextStack, {
+      items,
+      onRemove: () => {}
+    })
+
+    const beforeTurn = renderToStaticMarkup(
+      createElement(
+        VoiceOsNotch,
+        { mode: 'responding', expanded: true, showCancel: false },
+        stack,
+        prompt,
+        answer
+      )
+    )
+    expect(beforeTurn.indexOf('pinned words')).toBeLessThan(
+      beforeTurn.indexOf('typed question')
+    )
+
+    const beforeComposer = renderToStaticMarkup(
+      createElement(
+        VoiceOsNotch,
+        { mode: 'responding', expanded: true, showCancel: false },
+        prompt,
+        answer,
+        stack,
+        createElement(VoiceOsBottomHint, { keys: ['alt', 'control'] })
+      )
+    )
+    expect(beforeComposer.indexOf('the spoken reply')).toBeLessThan(
+      beforeComposer.indexOf('pinned words')
+    )
+    expect(beforeComposer.indexOf('pinned words')).toBeLessThan(
+      beforeComposer.indexOf('to speak')
+    )
+  })
+
+  it('orders a settled edit turn as prompt, chip, then hint with no answer', () => {
+    const items = buildAgentNotchContextItems({
+      selectedText: ['pinned words']
+    })
+
+    // The plain predicate is false for an edit result, which is why the chip
+    // alone cannot be what turns the hint on.
+    expect(
+      deriveShowBottomHint({
+        isEditingText: false,
+        phase: 'result',
+        showCards: true,
+        showAnswer: false,
+        results: null,
+        weather: null,
+        emailList: null,
+        hasPreviewModel: false
+      })
+    ).toBe(false)
+
+    const editTurn = renderToStaticMarkup(
+      createElement(
+        VoiceOsNotch,
+        { mode: 'responding', expanded: true, showCancel: false },
+        createElement(VoiceOsPrompt, { text: 'make it clearer' }),
+        createElement(NotchContextStack, { items, onRemove: () => {} }),
+        createElement(VoiceOsBottomHint, { keys: ['alt', 'control'] })
+      )
+    )
+
+    expect(editTurn.indexOf('make it clearer')).toBeLessThan(
+      editTurn.indexOf('pinned words')
+    )
+    expect(editTurn.indexOf('pinned words')).toBeLessThan(
+      editTurn.indexOf('to speak')
+    )
   })
 })

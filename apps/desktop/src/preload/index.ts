@@ -77,6 +77,7 @@ const api: KestrelApi = {
   cancelNotchActive: () => ipcRenderer.send(IPC.notchCancelActive),
   decideNotch: (action, edits) => ipcRenderer.send(IPC.notchDecide, { action, edits }),
   submitNotchText: (text) => ipcRenderer.send(IPC.notchSubmitText, text),
+  removeNotchSelectedText: (index) => ipcRenderer.send(IPC.notchRemoveSelectedText, index),
   setNotchFocusable: (focusable) => ipcRenderer.send(IPC.notchSetFocusable, focusable),
   startNotchTyping: () => ipcRenderer.send(IPC.notchStartTyping),
   copyToClipboard: (text) => ipcRenderer.send(IPC.copyToClipboard, text),

@@ -575,10 +575,10 @@ function DashboardApp(): JSX.Element {
             />
 
             <div className="dashboard-content-centering">
-              <div className="dashboard-content">
+              <div className="dashboard-content @container w-full min-w-0">
                 {activeTab === 'dashboard' && (
-                  <div className="dashboard-home-view">
-                    <div className="greeting">
+                  <div className="dashboard-home-view @container w-full min-w-0">
+                    <div className="greeting flex min-w-0 items-center gap-4 mb-6">
                       <div className="orb" role="img" aria-label="VoiceOS orb">
                         <div
                           className="cloud-viewport orb-cloud"
@@ -586,10 +586,10 @@ function DashboardApp(): JSX.Element {
                         />
                         <img src={lensOverlay} alt="" className="orb-lens" />
                       </div>
-                      <h1>{greeting}, {userName}</h1>
+                      <h1 className="min-w-0 break-words text-[1.7rem] @max-[480px]:text-[1.4rem] font-semibold">{greeting}, {userName}</h1>
                     </div>
 
-                    <div className="quick-start-grid">
+                    <div className="quick-start-grid mb-6 grid gap-4 grid-cols-1 @[600px]:grid-cols-2">
                       <section
                         className="card quick-card"
                         style={{

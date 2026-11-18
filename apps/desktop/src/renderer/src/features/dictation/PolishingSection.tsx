@@ -162,7 +162,7 @@ export function PolishingSection({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 items-stretch">
+      <div className="dictation-polish-grid grid grid-cols-1 @[600px]:grid-cols-3 gap-3 items-stretch">
         {POLISH_OPTIONS.map((option) => {
           const isSelected = option.id === selectedStyle
 

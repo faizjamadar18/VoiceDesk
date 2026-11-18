@@ -8,10 +8,18 @@ import { parseHotkey } from './hotkey'
 export type { AsrMode, KestrelSettings }
 
 export const DEFAULT_SETTINGS: KestrelSettings = {
-  hotkey: 'Control+Space',
+  hotkey: 'Control+Alt',
   dictationHotkey: DEFAULT_DICTATION_HOTKEY,
   asrMode: 'nemo',
   dictation: DEFAULT_DICTATION_SETTINGS
+}
+
+/**
+ * Older installs stored `Control+Space`, which the Windows IME owns and which
+ * leaks a literal Space into the focused app. Rewrite only that exact value.
+ */
+function migrateHotkey(hotkey: string): string {
+  return hotkey === 'Control+Space' ? 'Control+Alt' : hotkey
 }
 
 /**
@@ -45,10 +53,10 @@ export class SettingsStore {
     const next = this.normalize({ ...this.load(), ...patch })
 
     if (typeof patch.hotkey === 'string' && parseHotkey(patch.hotkey) === null) {
-      throw new Error('Use a modifier plus a key, for example Control+Space or Alt+F8.')
+      throw new Error('Use a key combination, for example Control+Alt or Alt+F8.')
     }
     if (typeof patch.dictationHotkey === 'string' && parseHotkey(patch.dictationHotkey) === null) {
-      throw new Error('Use a modifier plus a key, for example Control+Shift or Alt+Shift.')
+      throw new Error('Use a key combination, for example Control+Shift or Alt+Shift.')
     }
 
     mkdirSync(dirname(this.filePath), { recursive: true })
@@ -57,9 +65,10 @@ export class SettingsStore {
   }
 
   private normalize(raw: Partial<KestrelSettings>): KestrelSettings {
+    const storedHotkey = typeof raw.hotkey === 'string' ? migrateHotkey(raw.hotkey) : null
     const hotkey =
-      typeof raw.hotkey === 'string' && parseHotkey(raw.hotkey) !== null
-        ? raw.hotkey
+      storedHotkey !== null && parseHotkey(storedHotkey) !== null
+        ? storedHotkey
         : DEFAULT_SETTINGS.hotkey
     const dictationHotkey =
       typeof raw.dictationHotkey === 'string' && parseHotkey(raw.dictationHotkey) !== null

@@ -47,6 +47,13 @@ import {
   type DismissAnimator
 } from './voiceos-notch/notch-ui'
 import {
+  NotchContextStack,
+  SelectionBandBadge,
+  buildAgentNotchContextItems,
+  getAgentNotchContextPlacement,
+  type NotchContextItem
+} from './voiceos-notch/selection-chip'
+import {
   INITIAL_SOUND_GATE,
   playSound,
   preloadSounds,
@@ -712,9 +719,32 @@ export function deriveShowBottomHint(params: {
   )
 }
 
+/**
+ * Whether the notch has anything of its own to show, which is the only thing
+ * that may grow it from the compact band to the expanded body. A pinned
+ * selection chip is deliberately not an input: it rides along inside a surface
+ * that is expanded for a prompt, an answer or a card, and never opens one.
+ */
+export function deriveHasExpandedContent(params: {
+  isEditingText: boolean
+  hasTranscript: boolean
+  showAnswer: boolean
+  showCards: boolean
+  hasCardContent: boolean
+}): boolean {
+  return (
+    params.isEditingText ||
+    params.hasTranscript ||
+    params.showAnswer ||
+    (params.showCards && params.hasCardContent)
+  )
+}
+
 export default function Notch(): JSX.Element {
   const [phase, setPhase] = useState<NotchPhase>('listening')
   const [transcript, setTranscript] = useState('')
+  /** Pinned selections for this turn, shown as chips in the expanded body. */
+  const [selectedText, setSelectedText] = useState<string[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [card, setCard] = useState<NotchCard | null>(null)
   const [results, setResults] = useState<NotchFileResult[] | null>(null)
@@ -1037,6 +1067,7 @@ export default function Notch(): JSX.Element {
       setSessionKey((key) => key + 1)
       setPhase('listening')
       resetContent()
+      setSelectedText([])
       micAudioSentRef.current = false
       errorSoundRef.current = false
       completionSoundRef.current = false
@@ -1071,6 +1102,7 @@ export default function Notch(): JSX.Element {
       }
       setPhase(state.phase)
       if (state.transcript !== null) setTranscript(state.transcript)
+      setSelectedText(Array.isArray(state.selectedText) ? state.selectedText : [])
       setMessage(state.message)
       setDecision(state.decision ?? null)
       if (state.card !== undefined) setCard(state.card ?? null)
@@ -1132,6 +1164,7 @@ export default function Notch(): JSX.Element {
       setAnsweredPlanIds([])
       setConfirmationCard(null)
       respondedPlanIdRef.current = null
+      setSelectedText([])
     })
 
     const offDismiss = api.onNotchDismiss(() => {
@@ -1300,6 +1333,21 @@ export default function Notch(): JSX.Element {
 
   cancelEditRef.current = handleCancelEdit
 
+  const handleRemoveSelectedText = (
+    item: NotchContextItem,
+    index: number
+  ): void => {
+    // Chips are built one-for-one from the selections, so the chip's source
+    // index identifies the selection the main process must drop. The stack
+    // index is the fallback if the two ever disagree.
+    const sourceIndex =
+      selectedText[item.selectedTextIndex] === item.text
+        ? item.selectedTextIndex
+        : index
+    setSelectedText((current) => current.filter((_, i) => i !== sourceIndex))
+    window.kestrel?.removeNotchSelectedText(sourceIndex)
+  }
+
   // The card behind an answered decision survives the busy emit. It is only
   // used for the plan it belongs to, so a later confirmation never inherits it.
   const retainedCard =
@@ -1337,20 +1385,33 @@ export default function Notch(): JSX.Element {
   // card can never light together.
   const showAnswer = showCards && source === 'text'
   const hasTranscript = transcript.trim().length > 0
-  const hasExpandedContent =
-    isEditingText ||
-    hasTranscript ||
-    showAnswer ||
-    (showCards && (results !== null || showsCard))
-  const showBottomHint = deriveShowBottomHint({
+  const selectedTextItems = buildAgentNotchContextItems({ selectedText })
+  // A settled edit turn keeps its chip but has no answer bubble, so the hint
+  // still has to show. Without it the chip would jump above the prompt.
+  const showBottomHint =
+    deriveShowBottomHint({
+      isEditingText,
+      phase,
+      showCards,
+      showAnswer,
+      results,
+      weather,
+      emailList,
+      hasPreviewModel
+    }) || (phase === 'result' && selectedTextItems.length > 0)
+  // A pinned selection never expands the notch by itself. While the surface is
+  // collapsed the band badge carries it (VoiceOS image 1); the chip only shows
+  // inside a body that is already open for a prompt, an answer or a card.
+  const hasExpandedContent = deriveHasExpandedContent({
     isEditingText,
-    phase,
-    showCards,
+    hasTranscript,
     showAnswer,
-    results,
-    weather,
-    emailList,
-    hasPreviewModel
+    showCards,
+    hasCardContent: results !== null || showsCard
+  })
+  const contextPlacement = getAgentNotchContextPlacement({
+    contextItems: selectedTextItems,
+    hasBottomComposer: showBottomHint
   })
 
   const presentation = deriveNotchPresentation({
@@ -1372,8 +1433,20 @@ export default function Notch(): JSX.Element {
       onCancel={startDismissAnimation}
       onActivate={handleStartTypingFromIdle}
       remainingSeconds={remainingSeconds}
+      bandAccessory={
+        phase === 'listening' && selectedTextItems.length > 0 ? (
+          <SelectionBandBadge count={selectedTextItems.length} />
+        ) : undefined
+      }
       onGeometryChange={setSurface}
     >
+      {hasExpandedContent && contextPlacement === 'before-turn' && (
+        <NotchContextStack
+          items={selectedTextItems}
+          onRemove={handleRemoveSelectedText}
+        />
+      )}
+
       {(hasTranscript || isEditingText) && (
         <VoiceOsPrompt
           text={isEditingText ? typedDraft : transcript}
@@ -1548,6 +1621,13 @@ export default function Notch(): JSX.Element {
             </button>
           </div>
         </div>
+      )}
+
+      {hasExpandedContent && contextPlacement === 'before-composer' && (
+        <NotchContextStack
+          items={selectedTextItems}
+          onRemove={handleRemoveSelectedText}
+        />
       )}
 
       {showBottomHint && <VoiceOsBottomHint keys={hotkeyKeys} />}

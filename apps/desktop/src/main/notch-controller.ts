@@ -124,6 +124,7 @@ const MAX_SESSION_SECONDS = 120
 const FILE_RESULTS_SAFETY_MS = 120_000
 const DEFAULT_SCREEN_QUESTION = 'What is this?'
 const DEFAULT_SCREEN_RESULT_VISIBLE_MS = 8_000
+const REPLACE_SELECTION_FAILED = "Couldn't replace your selection."
 /** A short beat after the voice ends before the notch leaves. */
 const SPEECH_END_GRACE_MS = 1_200
 /** Safety cap if the renderer never reports the end of speech. */
@@ -189,6 +190,11 @@ export class NotchController {
   private submissionGeneration = 0
   private acting = false
   private disposed = false
+  /** Text pinned for this turn, one chip per captured selection. */
+  private selectedText: string[] = []
+  /** True when a capture landed while the hold was still arming. */
+  private selectionFromPress = false
+  private lastState: NotchStatePayload | null = null
 
   constructor(options: NotchControllerOptions) {
     this.options = options
@@ -229,6 +235,41 @@ export class NotchController {
     return this.hasActiveWork() || this.isActing() || this.hideWhenSpeechEnds
   }
 
+  get selectedTextSnapshot(): string[] {
+    return [...this.selectedText]
+  }
+
+  /**
+   * Pin text the user highlighted in another app. The clipboard capture lands
+   * asynchronously, so this can happen after listening has already started.
+   * Trimming is deliberate: collapsing belongs to the chip layer.
+   */
+  attachSelectedText(text: string): void {
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    if (this.session === null && !this.selectionFromPress) {
+      // The capture landed while the hotkey was still arming, so it belongs to
+      // the turn about to start: drop the previous turn's chip but keep this
+      // one when `start()` runs.
+      this.selectedText = []
+      this.selectionFromPress = true
+    }
+
+    if (this.selectedText.includes(trimmed)) return
+
+    this.selectedText.push(trimmed)
+    this.republish()
+  }
+
+  /** The chip's X button. An out-of-range index is ignored. */
+  removeSelectedText(index: number): void {
+    if (!Number.isInteger(index) || index < 0 || index >= this.selectedText.length) return
+
+    this.selectedText.splice(index, 1)
+    this.republish()
+  }
+
   hasActiveWork(): boolean {
     return (
       this.session !== null ||
@@ -251,6 +292,10 @@ export class NotchController {
     this.clearFileResults()
     this.decision = null
     this.acting = false
+    // A fresh turn never inherits the previous turn's chip, but a selection
+    // captured during this press must survive into the listening state.
+    if (!this.selectionFromPress) this.selectedText = []
+    this.selectionFromPress = false
     const session: ActiveSession = {
       id: this.nextSessionId++,
       turn: null,
@@ -420,6 +465,8 @@ export class NotchController {
     this.clearHideTimer()
     this.resetSpeechState()
     this.acting = false
+    this.selectedText = []
+    this.selectionFromPress = false
     if (this.session !== null) {
       const session = this.session
       this.session = null
@@ -463,7 +510,9 @@ export class NotchController {
     this.emit('acting', trimmed, 'Working on it…')
 
     try {
-      const response: ActionResponse = await this.options.actionClient.act(trimmed)
+      const response: ActionResponse = await this.options.actionClient.act(trimmed, {
+        selectedText: this.selectedText[0] ?? null
+      })
       if (this.disposed || generation !== this.submissionGeneration) return
 
       console.log(
@@ -488,14 +537,35 @@ export class NotchController {
         return
       }
 
+      if (response.text && response.action === 'edit_text') {
+        try {
+          await this.options.paste.paste(response.text)
+          if (this.disposed || generation !== this.submissionGeneration) return
+        } catch {
+          if (this.disposed || generation !== this.submissionGeneration) return
+          this.clearFileResults()
+          this.decision = null
+          this.cancelScreen()
+          this.emit('error', trimmed, REPLACE_SELECTION_FAILED, 'error', {
+            spoken: REPLACE_SELECTION_FAILED
+          })
+          this.scheduleHide(this.options.errorVisibleMs ?? 3_500)
+          this.options.onTurnComplete?.()
+          return
+        }
+      }
+
       const fileResults = Array.isArray(response.results)
         ? this.buildFileResults(response.results)
         : null
       const decision = this.pendingDecision(response)
 
+      // A pasted edit is spoken, not printed: the rewritten selection is the
+      // answer, and VoiceOS shows only the chip and the hint beneath it.
+      const pastedEdit = response.action === 'edit_text' && Boolean(response.text)
       this.lastTranscript = trimmed
       this.decision = decision
-      this.emit('result', trimmed, response.message, response.status, {
+      this.emit('result', trimmed, pastedEdit ? null : response.message, response.status, {
         spoken: response.spokenResponse || response.message,
         card: response.card ?? null,
         results: fileResults?.results ?? null,
@@ -547,12 +617,17 @@ export class NotchController {
     if (this.disposed) return
     this.clearEscapeHideTimer()
     this.clearActiveState({ cancelPresenterSession: false, logLabel: 'restoreHistory' })
+    // Replaying old history must not keep a chip from an earlier turn.
+    this.selectedText = []
+    this.selectionFromPress = false
     this.showPresenter()
     this.lastTranscript = prompt
     this.emit('result', prompt, reply, 'ok', { spoken: null })
   }
 
   cancel(): void {
+    this.selectedText = []
+    this.selectionFromPress = false
     this.clearActiveState({ cancelPresenterSession: true, logLabel: 'cancel' })
     this.hidePresenter()
     this.options.onTurnComplete?.()
@@ -811,7 +886,9 @@ export class NotchController {
     this.emit('acting', displayTranscript, 'Working on it…')
 
     try {
-      const response: ActionResponse = await this.options.actionClient.act(transcript)
+      const response: ActionResponse = await this.options.actionClient.act(transcript, {
+        selectedText: this.selectedText[0] ?? null
+      })
       if (this.session !== session) return
       console.log(
         `[notch] action status=${response.status} action=${response.action} dryRun=${response.dryRun ?? false}`
@@ -832,6 +909,16 @@ export class NotchController {
         return
       }
 
+      if (response.text && response.action === 'edit_text') {
+        try {
+          await this.options.paste.paste(response.text)
+          if (this.session !== session) return
+        } catch {
+          await this.fail(session, REPLACE_SELECTION_FAILED, displayTranscript)
+          return
+        }
+      }
+
       if (response.action === 'look_at_screen') {
         await this.captureAndAskScreen(session, transcript, displayTranscript)
         return
@@ -842,16 +929,25 @@ export class NotchController {
         : null
       const decision = this.pendingDecision(response)
 
+      // A pasted edit is spoken, not printed: the rewritten selection is the
+      // answer, and VoiceOS shows only the chip and the hint beneath it.
+      const pastedEdit = response.action === 'edit_text' && Boolean(response.text)
       this.session = null
       this.lastTranscript = displayTranscript
       this.decision = decision
-      this.emit('result', displayTranscript, response.message, response.status, {
-        spoken: response.spokenResponse || response.message,
-        card: response.card ?? null,
-        results: fileResults?.results ?? null,
-        resultsLabel: fileResults?.label ?? null,
-        decision: decision ? this.decisionPayload(decision, false) : null
-      })
+      this.emit(
+        'result',
+        displayTranscript,
+        pastedEdit ? null : response.message,
+        response.status,
+        {
+          spoken: response.spokenResponse || response.message,
+          card: response.card ?? null,
+          results: fileResults?.results ?? null,
+          resultsLabel: fileResults?.label ?? null,
+          decision: decision ? this.decisionPayload(decision, false) : null
+        }
+      )
       console.log(
         `[notch] result phase=result status=${response.status} results=${fileResults?.results.length ?? 0} decision=${decision?.kind ?? 'none'}`
       )
@@ -1101,10 +1197,30 @@ export class NotchController {
       results: extras?.results ?? null,
       resultsLabel: extras?.resultsLabel ?? null,
       decision: extras?.decision ?? null,
+      selectedText: this.selectedText.length > 0 ? [...this.selectedText] : null,
+      at: this.options.now?.() ?? Date.now()
+    }
+    this.lastState = state
+    this.options.presenter.update(state)
+    this.options.onActivity?.({ ...state })
+  }
+
+  /**
+   * Re-send the current state with a new chip list so the pinned selection
+   * appears or vanishes without waiting for the next phase. Nothing but
+   * `selectedText` and the timestamp changes.
+   */
+  private republish(): void {
+    const last = this.lastState
+    if (!last) return
+
+    const state: NotchStatePayload = {
+      ...last,
+      selectedText: this.selectedText.length > 0 ? [...this.selectedText] : null,
       at: this.options.now?.() ?? Date.now()
     }
     this.options.presenter.update(state)
-    this.options.onActivity?.({ ...state })
+    this.options.onActivity?.(state)
   }
 
   private showPresenter(): void {

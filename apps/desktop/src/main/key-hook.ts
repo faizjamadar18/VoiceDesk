@@ -14,6 +14,14 @@ export interface KeyHookHandle {
   stop: () => void
 }
 
+export interface KeyHookOptions {
+  /**
+   * Polled for every keyboard event. When it returns true the event belongs to
+   * an input we synthesised ourselves (a clipboard capture) and is dropped.
+   */
+  isEventSuppressed?: () => boolean
+}
+
 export type KeyCodeMap = Record<string, number>
 
 const MODIFIER_CODES = {
@@ -31,9 +39,14 @@ export function buildKeyBinding(
   chord: HotkeyChord,
   keys: KeyCodeMap
 ): HotkeyBinding | null {
-  const mainCode = keys[chord.key]
+  const mainCode = chord.key ? keys[chord.key] : null
   const escapeCode = keys.Escape
-  if (typeof mainCode !== 'number' || typeof escapeCode !== 'number') return null
+  if (
+    (mainCode !== null && typeof mainCode !== 'number') ||
+    typeof escapeCode !== 'number'
+  ) {
+    return null
+  }
 
   const modifierGroups: number[][] = []
   for (const modifier of ['ctrl', 'alt', 'shift', 'meta'] as const) {
@@ -44,6 +57,8 @@ export function buildKeyBinding(
     if (codes.length === 0) return null
     modifierGroups.push(codes)
   }
+
+  if (mainCode === null && modifierGroups.length === 0) return null
 
   return { modifierGroups, mainCode, escapeCode }
 }
@@ -68,7 +83,8 @@ function safe(callback: () => void, label: string): () => void {
  */
 export async function startKeyHook(
   chord: HotkeyChord,
-  callbacks: KeyHookCallbacks
+  callbacks: KeyHookCallbacks,
+  options: KeyHookOptions = {}
 ): Promise<KeyHookHandle> {
   const { uIOhook, UiohookKey } = await import('uiohook-napi')
 
@@ -85,9 +101,11 @@ export async function startKeyHook(
   })
 
   const onKeyDown = (event: UiohookKeyboardEvent): void => {
+    if (options.isEventSuppressed?.()) return
     tracker.keyDown(event.keycode)
   }
   const onKeyUp = (event: UiohookKeyboardEvent): void => {
+    if (options.isEventSuppressed?.()) return
     tracker.keyUp(event.keycode)
   }
   const onMouseDown = callbacks.onMouseDown

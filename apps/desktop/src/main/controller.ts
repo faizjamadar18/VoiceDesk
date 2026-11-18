@@ -67,12 +67,12 @@ export class DictationController {
     return this.snapshot()
   }
 
-  /** Called by the low-level key hook on Ctrl+Space keydown. */
+  /** Called by the low-level key hook on chord keydown. */
   handlePress(): void {
     for (const event of this.gesture.pressed()) this.applyGestureEvent(event)
   }
 
-  /** Called by the low-level key hook when Space or Ctrl is released. */
+  /** Called by the low-level key hook when a chord key is released. */
   handleRelease(): void {
     for (const event of this.gesture.released()) this.applyGestureEvent(event)
   }

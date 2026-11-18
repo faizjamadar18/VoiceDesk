@@ -1,7 +1,12 @@
 import type { ActionResponse, ScreenAnswerResponse, ScreenAskInput } from '../shared/types'
 
+export interface ActOptions {
+  /** Text the user highlighted in another app when the turn started. */
+  selectedText?: string | null
+}
+
 export interface ActionClient {
-  act(transcript: string): Promise<ActionResponse>
+  act(transcript: string, options?: ActOptions): Promise<ActionResponse>
   confirm(
     planId: string,
     approved: boolean,
@@ -53,8 +58,13 @@ export class HttpActionClient implements ActionClient {
     this.screenTimeoutMs = options.screenTimeoutMs ?? SCREEN_TIMEOUT_MS
   }
 
-  async act(transcript: string): Promise<ActionResponse> {
-    return this.post<ActionResponse>('/act', { transcript }, this.actionOptions())
+  async act(transcript: string, options?: ActOptions): Promise<ActionResponse> {
+    const body: Record<string, unknown> = { transcript }
+    const selectedText = options?.selectedText
+    if (typeof selectedText === 'string' && selectedText) {
+      body['selectedText'] = selectedText
+    }
+    return this.post<ActionResponse>('/act', body, this.actionOptions())
   }
 
   async confirm(

@@ -599,6 +599,14 @@ export function getVoiceOsNotchStyleSheet(transitionMs: number, easing: string):
         .agent-notch-response-widget {
           -electron-corner-smoothing: system-ui;
         }
+        /* Selected-text context chips (see selection-chip.tsx). Box, label and
+           remove badge are drawn inline because the entrance stagger is
+           per-item; only the hover state inline styles cannot express lives
+           here. */
+        .agent-notch-context-remove:hover {
+          background: rgba(255,255,255,0.18);
+          color: rgba(255,255,255,0.8);
+        }
         /* Ghosted action buttons inside the notch band (screenshot,
            upload, type). The pattern is "no chrome at rest, soft
            background on hover" so the notch reads as one continuous

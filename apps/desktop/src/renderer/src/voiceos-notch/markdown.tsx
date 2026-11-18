@@ -610,17 +610,19 @@ export function VoiceOsPrompt({
       <div
         className="agent-notch-card-present"
         style={{
-          background: "rgba(255, 255, 255, 0.08)",
-          border: "1px solid rgba(255, 255, 255, 0.18)",
+          position: "relative",
+          background: "rgba(255, 255, 255, 0.09)",
           borderRadius: "24px",
-          padding: "10px 16px",
+          padding: "16px 16px",
           fontSize: 15,
           lineHeight: "22px",
-          color: "rgba(255, 255, 255, 0.95)",
+          color: "rgba(255, 255, 255, 0.9)",
           boxSizing: "border-box",
           width: "100%",
           display: "flex",
-          alignItems: "center"
+          alignItems: "center",
+          cursor: "text",
+          transition: "background 140ms ease"
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -651,7 +653,7 @@ export function VoiceOsPrompt({
             padding: 0,
             fontSize: 15,
             lineHeight: "22px",
-            color: "rgba(255, 255, 255, 0.95)",
+            color: "rgba(255, 255, 255, 0.9)",
             fontFamily: "inherit",
             resize: "none",
             boxSizing: "border-box",
@@ -670,19 +672,20 @@ export function VoiceOsPrompt({
       onClick={() => onStartEdit?.()}
       style={{
         position: "relative",
-        background: "rgba(255, 255, 255, 0.08)",
-        border: `1px solid ${isHovered && onStartEdit ? "rgba(255, 255, 255, 0.14)" : "rgba(255, 255, 255, 0.08)"}`,
-        borderRadius: "14px",
-        padding: "10px 16px",
+        background: isHovered
+          ? "rgba(255, 255, 255, 0.09)"
+          : "rgba(255, 255, 255, 0.07)",
+        borderRadius: "24px",
+        padding: "16px 16px",
         fontSize: 15,
         lineHeight: "22px",
-        color: "rgba(255, 255, 255, 0.95)",
+        color: "rgba(255, 255, 255, 0.9)",
         boxSizing: "border-box",
         width: "100%",
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
         cursor: onStartEdit ? "pointer" : "default",
-        transition: "border-color 160ms ease, background 160ms ease"
+        transition: "background 140ms ease"
       }}
     >
       <VoiceOsMarkdown text={text} />

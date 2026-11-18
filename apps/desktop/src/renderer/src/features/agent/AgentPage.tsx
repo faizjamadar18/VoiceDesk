@@ -168,7 +168,7 @@ export function AgentPage({
   }
 
   return (
-    <div className="agent-page">
+    <div className="agent-page @container w-full min-w-0">
       <h1 className="agent-title">Agent</h1>
 
       <AgentVoiceSection

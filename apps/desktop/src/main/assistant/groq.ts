@@ -21,6 +21,9 @@ export const GROQ_FALLBACK_MODELS = [
 ] as const
 export const GROQ_TIMEOUT_SECONDS = 15.0
 
+/** Most selection text sent to the model; the HTTP route caps it earlier. */
+export const MAX_EMBEDDED_SELECTION_CHARS = 100_000
+
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
 
 export class GroqError extends Error {
@@ -96,7 +99,8 @@ export class GroqClient implements LlmClient {
   async choose(
     transcript: string,
     specs: ToolSpec[],
-    history: ChatTurn[] = []
+    history: ChatTurn[] = [],
+    selectedText?: string | null
   ): Promise<LlmReply> {
     const url = `${this.baseUrl}/chat/completions`
     const headers = {
@@ -108,7 +112,7 @@ export class GroqClient implements LlmClient {
     let response: Response | undefined
     let elapsedMs = 0
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const body = this.buildBody(transcript, remaining, history)
+      const body = this.buildBody(transcript, remaining, history, selectedText)
       const startedAt = this.clock().getTime()
       response = await this.post(url, headers, body)
       elapsedMs = this.clock().getTime() - startedAt
@@ -161,7 +165,8 @@ export class GroqClient implements LlmClient {
   private buildBody(
     transcript: string,
     specs: ToolSpec[],
-    history: ChatTurn[]
+    history: ChatTurn[],
+    selectedText?: string | null
   ): ChatBody {
     const tools: FunctionTool[] = specs.map((spec) => ({
       type: 'function',
@@ -171,6 +176,7 @@ export class GroqClient implements LlmClient {
         parameters: spec.parameters
       }
     }))
+    const selection = selectionMessage(selectedText)
     return {
       model: this.model,
       messages: [
@@ -226,6 +232,7 @@ export class GroqClient implements LlmClient {
             'absolute ISO 8601 datetime such as 2026-11-13T15:00:00 to the tool. ' +
             'Never pass a date word to a tool.'
         },
+        ...(selection === null ? [] : [selection]),
         ...history.map((turn) => ({ role: turn.role, content: turn.content })),
         { role: 'user', content: transcript }
       ],
@@ -284,6 +291,30 @@ export function formatLocalTimestamp(date: Date): string {
     `${pad(date.getSeconds())}`
 
   return `${datePart}T${timePart}${offset}`
+}
+
+/**
+ * The second system message that hands the model the text the user had
+ * highlighted. Returns null when there is no selection, so the request body is
+ * byte-for-byte what it was before selection capture existed.
+ */
+function selectionMessage(
+  selectedText: string | null | undefined
+): ChatMessage | null {
+  const text = (selectedText ?? '').trim()
+  if (!text) return null
+  return {
+    role: 'system',
+    content:
+      'The user has selected the following text in another application. ' +
+      'If they ask you to change it (rewrite, rephrase, shorten, translate, ' +
+      'fix grammar, make it sound more formal/polite/etc.), call `edit_text` ' +
+      'with the complete replacement text. Read the selection as context; ' +
+      'never answer about text that is not present.\n' +
+      '---\n' +
+      text.slice(0, MAX_EMBEDDED_SELECTION_CHARS) +
+      '\n---'
+  }
 }
 
 export function replyFromResponse(data: unknown): LlmReply {
@@ -514,7 +545,8 @@ export class ResilientLlmClient implements LlmClient {
   async choose(
     transcript: string,
     specs: ToolSpec[],
-    history: ChatTurn[] = []
+    history: ChatTurn[] = [],
+    selectedText?: string | null
   ): Promise<LlmReply> {
     const failures: string[] = []
     const now = this.clock()
@@ -541,7 +573,7 @@ export class ResilientLlmClient implements LlmClient {
           if (used > 0) {
             await this.sleep(this.backoff * used)
           }
-          return await client.choose(transcript, specs, history)
+          return await client.choose(transcript, specs, history, selectedText)
         } catch (error) {
           if (error instanceof GroqQuotaError) {
             this.skipUntil.set(client.model, this.clock() + this.cooldown)
