@@ -63,6 +63,7 @@ describe('filterRecords', () => {
   it('filters by selectedApp', () => {
     expect(filterRecords(RECORDS, '', 'Slack')).toEqual([RECORDS[2]])
     expect(filterRecords(RECORDS, '', 'Google Calendar')).toEqual([RECORDS[0]])
+    expect(filterRecords(RECORDS, '', 'VoiceDesk')).toEqual([RECORDS[1]])
   })
 
   it('filters by selectedMode', () => {
@@ -115,7 +116,7 @@ describe('HistoryPage component markup', () => {
     expect(markup).toContain('Search history')
     expect(markup).toContain('All Apps')
     expect(markup).toContain('All Modes')
-    expect(markup).toContain('No voice sessions yet. Start using VoiceOS to see your history here.')
+    expect(markup).toContain('No voice sessions yet. Start using VoiceDesk to see your history here.')
   })
 
   it('renders cards with correct mode subheaders, app names, prompts, and replies', () => {
@@ -130,5 +131,14 @@ describe('HistoryPage component markup', () => {
     expect(markup).toContain('Book a meeting with Alice')
     expect(markup).toContain('cloud-viewport')
     expect(markup).toContain('Done — the meeting is booked for Monday.')
+  })
+
+  it('renders a record stored as VoiceOS under the VoiceDesk name', () => {
+    const legacyRecord = { ...RECORDS[2], id: 'record-legacy', appName: 'VoiceOS' }
+    const markup = renderToStaticMarkup(
+      createElement(HistoryPage, { records: [legacyRecord] })
+    )
+    expect(markup).toContain('>VoiceDesk</span>')
+    expect(markup).not.toContain('>VoiceOS</span>')
   })
 })

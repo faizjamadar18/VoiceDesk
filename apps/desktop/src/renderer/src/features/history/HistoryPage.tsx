@@ -13,6 +13,7 @@ import {
   XIcon
 } from '../../components/dashboard-icons'
 import { useSystemTheme } from '../../context/ThemeContext'
+import { displayAppName } from '../../../../shared/app-name'
 import type { HistoryRecord } from '../../../../shared/types'
 import voiceosAppIcon from '../../assets/voiceos-app-icon.png'
 import { AgentThinkingOrb } from '../../voiceos-notch/orb'
@@ -63,7 +64,7 @@ export function filterRecords(
 
   if (selectedApp) {
     filtered = filtered.filter(
-      (record) => (record.appName || 'VoiceOS') === selectedApp
+      (record) => displayAppName(record.appName) === selectedApp
     )
   }
 
@@ -80,7 +81,7 @@ export function filterRecords(
     (record) =>
       record.prompt.toLowerCase().includes(needle) ||
       record.reply.toLowerCase().includes(needle) ||
-      (record.appName && record.appName.toLowerCase().includes(needle))
+      displayAppName(record.appName).toLowerCase().includes(needle)
   )
 }
 
@@ -144,7 +145,7 @@ export function HistoryPage({
     const apps = new Set<string>()
     const icons = new Map<string, string>()
     for (const record of records) {
-      const appName = record.appName?.trim() || 'VoiceOS'
+      const appName = displayAppName(record.appName)
       apps.add(appName)
       if (record.appIcon && !icons.has(appName)) {
         icons.set(appName, record.appIcon)
@@ -508,7 +509,7 @@ export function HistoryPage({
           }}
         >
           {records.length === 0
-            ? 'No voice sessions yet. Start using VoiceOS to see your history here.'
+            ? 'No voice sessions yet. Start using VoiceDesk to see your history here.'
             : 'No sessions found matching your filters.'}
         </div>
       ) : (
@@ -519,7 +520,7 @@ export function HistoryPage({
             const isPromptCopied = copiedItems.has(promptCopyKey)
             const isReplyCopied = copiedItems.has(replyCopyKey)
             const mode = record.mode ?? 'agent'
-            const appName = record.appName?.trim() || 'VoiceOS'
+            const appName = displayAppName(record.appName)
             const appIcon = record.appIcon || appIcons.get(appName) || voiceosAppIcon
 
             return (
