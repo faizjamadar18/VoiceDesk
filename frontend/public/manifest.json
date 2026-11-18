@@ -1,0 +1,24 @@
+{
+  "name": "VoiceOS - AI Voice Productivity for Mac & Windows",
+  "short_name": "VoiceOS",
+  "description": "An agentic voice app that lets you talk to your computer instead of typing. Voice-powered productivity for macOS and Windows.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F9F9F9",
+  "theme_color": "#2045EA",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32 48x48 64x64 128x128 256x256",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/voiceOsIcon-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

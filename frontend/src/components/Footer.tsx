@@ -1,0 +1,200 @@
+"use client";
+
+import React, { useEffect, useRef, useState } from "react";
+
+const LETTERS = [
+  { char: "v", triangle: true, anchor: true, collapsed: 520, final: 170, appearAt: 0 },
+  { char: "o", collapsed: 648, final: 320, appearAt: 0.1 },
+  { char: "i", collapsed: 656, final: 445, appearAt: 0.2 },
+  { char: "c", collapsed: 662, final: 565, appearAt: 0.3 },
+  { char: "e", collapsed: 670, final: 712, appearAt: 0.4 },
+  { char: "o", filled: true, anchor: true, collapsed: 665, final: 868, appearAt: 0 },
+  { char: "s", collapsed: 685, final: 1015, appearAt: 0.5 },
+];
+
+const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
+
+function getTrianglePath(cx: number) {
+  const a = 138 / Math.sqrt(3);
+  const pts = [
+    { x: cx - a, y: 122 },
+    { x: cx + a, y: 122 },
+    { x: cx, y: 260 },
+  ];
+  const n = pts.length;
+  const inPts: { x: number; y: number }[] = [];
+  const outPts: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const cur = pts[i];
+    const nxt = pts[(i + 1) % n];
+    const prv = pts[(i + 2) % n];
+    const distNext = Math.hypot(nxt.x - cur.x, nxt.y - cur.y);
+    const distPrev = Math.hypot(prv.x - cur.x, prv.y - cur.y);
+    const p = Math.min(20, distNext / 2, distPrev / 2);
+    inPts[i] = { x: cur.x + ((nxt.x - cur.x) / distNext) * p, y: cur.y + ((nxt.y - cur.y) / distNext) * p };
+    outPts[i] = { x: cur.x + ((prv.x - cur.x) / distPrev) * p, y: cur.y + ((prv.y - cur.y) / distPrev) * p };
+  }
+  let path = `M ${inPts[0].x.toFixed(2)} ${inPts[0].y.toFixed(2)}`;
+  for (let i = 0; i < n; i++) {
+    const nextIdx = (i + 1) % n;
+    path += ` L ${outPts[nextIdx].x.toFixed(2)} ${outPts[nextIdx].y.toFixed(2)} Q ${pts[nextIdx].x.toFixed(2)} ${pts[nextIdx].y.toFixed(2)} ${inPts[nextIdx].x.toFixed(2)} ${inPts[nextIdx].y.toFixed(2)}`;
+  }
+  return `${path} Z`;
+}
+
+export default function Footer() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [progress, setProgress] = useState(1); // Default to full expanded so it's always complete
+  const [lang, setLang] = useState<"EN" | "JA">("EN");
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        let start: number | null = null;
+        const duration = 750;
+        const animate = (timestamp: number) => {
+          if (!start) start = timestamp;
+          const elapsed = timestamp - start;
+          const p = clamp(elapsed / duration, 0, 1);
+          setProgress(p);
+          if (p < 1) {
+            requestAnimationFrame(animate);
+          }
+        };
+        requestAnimationFrame(animate);
+      }
+    });
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+  const stdDev = 1 + 10 * Math.exp(-Math.pow((progress - 0.45) / 0.24, 2));
+
+  return (
+    <footer className="w-full bg-white border-t border-neutral-100 py-16">
+      <div className="max-w-7xl mx-auto px-6">
+        {/* Navigation columns */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-medium text-muted-foreground">Product</h3>
+            <ul className="flex flex-col gap-2 text-sm">
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/demo">Try the demo</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features/agent">Agent Mode</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features/dictation">Dictation Mode</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/pricing">Pricing</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/app-store">App Store</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/blog">Blog</a></li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-medium text-muted-foreground">Company</h3>
+            <ul className="flex flex-col gap-2 text-sm">
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/about">About</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/contact">Contact</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="https://partners.dub.co/voice-os" target="_blank" rel="noopener noreferrer">Affiliates</a></li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-medium text-muted-foreground">Resources</h3>
+            <ul className="flex flex-col gap-2 text-sm">
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/features">All features</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/glossary">Voice glossary</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/changelog">Changelog</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="https://docs.voiceos.com/" target="_blank" rel="noopener noreferrer">Documentation</a></li>
+            </ul>
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-medium text-muted-foreground">Legal</h3>
+            <ul className="flex flex-col gap-2 text-sm">
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/terms">Terms of Use</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/privacy">Privacy Policy</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/security">Security</a></li>
+              <li><a className="text-muted-foreground hover:text-primary transition-colors" href="/affiliate">Affiliate Policy</a></li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Big animated VoiceOS gooey SVG logo */}
+        <div ref={containerRef} className="w-full select-none pointer-events-none text-neutral-300 my-8" aria-hidden="true">
+          <svg viewBox="90 48 1000 240" fill="none" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", width: "100%", height: "auto", aspectRatio: "1000 / 240" }}>
+            <defs>
+              <filter id="voiceos-goo" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation={stdDev} result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+              </filter>
+            </defs>
+            <g filter="url(#voiceos-goo)" fill="currentColor">
+              {LETTERS.map((item, idx) => {
+                const currentX = item.collapsed + (item.final - item.collapsed) * ease;
+                const opacity = item.appearAt === 0 ? 1 : clamp((progress - item.appearAt) / 0.22, 0, 1);
+                if (item.triangle) {
+                  return <path key={idx} d={getTrianglePath(currentX)} opacity={opacity} />;
+                }
+                if (item.filled) {
+                  return <circle key={idx} cx={currentX} cy={191} r={71} opacity={opacity} />;
+                }
+                return (
+                  <text
+                    key={idx}
+                    x={currentX}
+                    y={256}
+                    textAnchor="middle"
+                    opacity={opacity}
+                    fontSize={250}
+                    fontWeight={800}
+                    fontFamily="'SF Pro Display', 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif"
+                  >
+                    {item.char}
+                  </text>
+                );
+              })}
+            </g>
+          </svg>
+        </div>
+
+        {/* Footer bottom bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 border-t border-neutral-100 text-sm text-neutral-500">
+          <p>© 2026 WakoAI, Inc. All Rights Reserved.</p>
+          <div className="flex items-center gap-6">
+            <a href="https://www.linkedin.com/company/voice-os/" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-800 transition-colors">
+              <span className="sr-only">LinkedIn</span>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" /></svg>
+            </a>
+            <a href="mailto:support@voiceos.com" className="hover:text-neutral-800 transition-colors">
+              <span className="sr-only">Email</span>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M0 3v18h24v-18h-24zm6.623 7.929l-4.623 5.712v-9.458l4.623 3.746zm-4.141-5.929h19.035l-9.517 7.713-9.518-7.713zm5.694 7.188l3.824 3.099 3.83-3.104 5.612 6.817h-18.779l5.513-6.812zm9.208-1.264l4.616-3.741v9.348l-4.616-5.607z" /></svg>
+            </a>
+            <a href="https://x.com/VoiceOSApp" target="_blank" rel="noopener noreferrer" className="hover:text-neutral-800 transition-colors">
+              <span className="sr-only">X (Twitter)</span>
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+            </a>
+            {/* Language toggle EN / JA */}
+            <div className="flex items-center gap-1 rounded-full p-0.5 bg-neutral-100 border border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setLang("EN")}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 ${lang === "EN" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                style={{ minWidth: "36px" }}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang("JA")}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 ${lang === "JA" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                style={{ minWidth: "36px" }}
+              >
+                JA
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
