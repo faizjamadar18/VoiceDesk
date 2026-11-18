@@ -66,7 +66,7 @@ function decodeJwtUser(token: string): AuthUser | null {
     if (!sub && !email) return null
     return {
       id: sub || 'user',
-      email: email || 'user@voiceos.com',
+      email: email || 'user@voicedesk.app',
       name,
       avatarUrl
     }
@@ -155,7 +155,7 @@ export class AuthService {
       } else {
         user = decodeJwtUser(tokens.accessToken) ?? {
           id: 'user',
-          email: 'user@voiceos.com'
+          email: 'user@voicedesk.app'
         }
       }
 

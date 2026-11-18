@@ -381,7 +381,7 @@ export class AssistantService {
         ? null
         : response.action
     const appContext = this.options.getActiveAppContext?.()
-    const appName = appContext?.appName || 'VoiceOS'
+    const appName = appContext?.appName || 'VoiceDesk'
     const appIcon = appContext?.appIcon ?? null
     const saved = this.history?.record({
       prompt,
@@ -621,7 +621,7 @@ export class AssistantService {
 
     const cleaned = answer.trim()
     const appContext = this.options.getActiveAppContext?.()
-    const appName = appContext?.appName || 'VoiceOS'
+    const appName = appContext?.appName || 'VoiceDesk'
     const appIcon = appContext?.appIcon ?? null
     const saved = this.history?.record({
       prompt: input.question.trim(),
