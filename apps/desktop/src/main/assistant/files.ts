@@ -353,7 +353,7 @@ export class FileOps {
 
   private async requireDir(target: string): Promise<string> {
     if (isBlocked(this.home, target)) {
-      throw new UnsafeLocation(`Kestrel won't write inside ${target}.`)
+      throw new UnsafeLocation(`VoiceDesk won't write inside ${target}.`)
     }
     if (!(await isDirectory(target))) {
       throw new LocationNotFound(`I couldn't find the folder "${target}".`)
@@ -382,10 +382,10 @@ export class FileOps {
     }
     const target = path.resolve(base, cleaned)
     if (path.dirname(target) !== base) {
-      throw new UnsafeLocation("Kestrel won't write outside the chosen folder.")
+      throw new UnsafeLocation("VoiceDesk won't write outside the chosen folder.")
     }
     if (isBlocked(this.home, target)) {
-      throw new UnsafeLocation(`Kestrel won't write inside ${target}.`)
+      throw new UnsafeLocation(`VoiceDesk won't write inside ${target}.`)
     }
     return target
   }
@@ -538,7 +538,7 @@ export class FileOps {
     }
     const resolved = path.resolve(target)
     if (isBlocked(this.home, resolved)) {
-      throw new UnsafeLocation("Kestrel won't touch files inside system folders.")
+      throw new UnsafeLocation("VoiceDesk won't touch files inside system folders.")
     }
     if (!(await isFile(resolved))) {
       throw new FileNotFoundError(`"${path.basename(resolved)}" is no longer there.`)
@@ -555,7 +555,7 @@ export class FileOps {
   async removeCreated(target: string): Promise<void> {
     const resolved = path.resolve(target)
     if (isBlocked(this.home, resolved)) {
-      throw new UnsafeLocation(`Kestrel won't write inside ${resolved}.`)
+      throw new UnsafeLocation(`VoiceDesk won't write inside ${resolved}.`)
     }
     if (await exists(resolved)) {
       await this.trashImpl(resolved)
