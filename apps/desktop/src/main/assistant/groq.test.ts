@@ -204,7 +204,7 @@ describe('GroqClient', () => {
     expect(toolNames(calls[0])).toEqual(['open_app'])
     const messages = body.messages as Array<{ role: string; content: string }>
     expect(messages[0].role).toBe('system')
-    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[0].content).toContain('You are VoiceDesk')
     expect(messages[0].content).toContain('Always call a tool')
     expect(messages[0].content).toContain(
       'Never ask the user which calendar, mailbox, or app to use.'
@@ -285,7 +285,7 @@ describe('GroqClient', () => {
     }>
     expect(messages).toHaveLength(4)
     expect(messages[0].role).toBe('system')
-    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[0].content).toContain('You are VoiceDesk')
     expect(messages[1]).toEqual({ role: 'user', content: 'hi' })
     expect(messages[2]).toEqual({ role: 'assistant', content: 'hello' })
     expect(messages[3]).toEqual({ role: 'user', content: 'and now' })
@@ -305,7 +305,7 @@ describe('GroqClient', () => {
     }>
     expect(messages).toHaveLength(2)
     expect(messages[0].role).toBe('system')
-    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[0].content).toContain('You are VoiceDesk')
     expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
   })
 
@@ -322,7 +322,7 @@ describe('GroqClient', () => {
       content: string
     }>
     expect(messages).toHaveLength(2)
-    expect(messages[0].content).toContain('You are Kestrel')
+    expect(messages[0].content).toContain('You are VoiceDesk')
     expect(messages[1].role).toBe('user')
     expect(messages[1].content).toContain(
       'The user has selected the following text in another application.'
