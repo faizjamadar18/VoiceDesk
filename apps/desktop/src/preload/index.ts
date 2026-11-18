@@ -24,6 +24,8 @@ import {
   type IntegrationDisconnectResult,
   type IntegrationId,
   type IntegrationsStatus,
+  type NotchSlackRecentMessage,
+  type NotchSlackTargetItem,
   type PillStatePayload,
   type SidebarPointerPayload
 } from '../shared/types'
@@ -132,7 +134,18 @@ const api: KestrelApi = {
   onPillHide: (callback) => subscribeEvent(IPC.pillHide, callback),
   onPillState: (callback) => subscribe<PillStatePayload>(IPC.pillState, callback),
   onPillAudioWave: (callback) => subscribe<number>(IPC.pillAudioWave, callback),
-  notifyPillReady: () => ipcRenderer.send(IPC.pillReady)
+  notifyPillReady: () => ipcRenderer.send(IPC.pillReady),
+  slackFetchMessages: (channelId: string, threadTs?: string) =>
+    ipcRenderer.invoke(IPC.slackFetchMessages, channelId, threadTs) as Promise<{
+      success: boolean
+      messages: NotchSlackRecentMessage[]
+      users: Record<string, { name: string; avatar?: string }>
+    }>,
+  slackListChannels: () =>
+    ipcRenderer.invoke(IPC.slackListChannels) as Promise<{
+      success: boolean
+      targets: NotchSlackTargetItem[]
+    }>
 }
 
 contextBridge.exposeInMainWorld('kestrel', api)

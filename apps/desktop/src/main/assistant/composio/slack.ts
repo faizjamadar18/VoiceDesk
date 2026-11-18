@@ -14,7 +14,11 @@
  */
 
 import type { Tool, ToolContext, ToolOutcome, ToolPreparation } from '../types'
-import type { NotchSlackCard } from '../../../shared/types'
+import type {
+  NotchSlackCard,
+  NotchSlackRecentMessage,
+  NotchSlackTargetItem
+} from '../../../shared/types'
 import type { CallTool } from './support'
 import {
   EMAIL,
@@ -817,7 +821,10 @@ export function createSlackTools(options: SlackToolOptions): Tool[] {
         mode: 'send',
         target: resolved.target.label,
         message,
-        when: null
+        when: null,
+        channelId: resolved.target.id,
+        isDm: resolved.target.id.startsWith('D'),
+        threadTs: optionalString(args, 'thread_ts')
       }
       const short = truncate(message, CONFIRM_LIMIT)
       return {
@@ -956,7 +963,10 @@ export function createSlackTools(options: SlackToolOptions): Tool[] {
         mode: 'schedule',
         target: resolved.target.label,
         message,
-        when
+        when,
+        channelId: resolved.target.id,
+        isDm: resolved.target.id.startsWith('D'),
+        threadTs: optionalString(args, 'thread_ts')
       }
       const short = truncate(message, CONFIRM_LIMIT)
       return {
@@ -1343,4 +1353,211 @@ function applySlackEdits(
   }
 
   return next
+}
+
+function extractAvatar(record: Record<string, unknown>): string | undefined {
+  const profile = isRecord(record['profile']) ? record['profile'] : null
+  if (profile) {
+    const avatar =
+      stringOf(profile['image_72']) ??
+      stringOf(profile['image_48']) ??
+      stringOf(profile['image_192']) ??
+      stringOf(profile['image_512']) ??
+      stringOf(profile['avatar_hash']) ??
+      stringOf(profile['image_original'])
+    if (avatar) return avatar
+  }
+  const direct =
+    stringOf(record['image_72']) ??
+    stringOf(record['image_48']) ??
+    stringOf(record['avatar'])
+  return direct ?? undefined
+}
+
+function userNameFromRecord(
+  record: Record<string, unknown>,
+  fallbackId: string
+): string {
+  const profile = isRecord(record['profile']) ? record['profile'] : null
+  return (
+    (profile === null ? null : stringOf(profile['display_name'])) ??
+    stringOf(record['real_name']) ??
+    (profile === null ? null : stringOf(profile['real_name'])) ??
+    stringOf(record['name']) ??
+    stringOf(record['username']) ??
+    fallbackId
+  )
+}
+
+function userRecordFromData(data: unknown): Record<string, unknown> | null {
+  const value = unwrap(data)
+  if (!isRecord(value)) return null
+  if (isRecord(value['user'])) return value['user'] as Record<string, unknown>
+  if (isRecord(value['member'])) return value['member'] as Record<string, unknown>
+  return value
+}
+
+export async function fetchSlackRecentMessages(
+  callTool: CallTool,
+  channelId: string,
+  threadTs?: string | null,
+  limit?: number
+): Promise<{
+  success: boolean
+  messages: NotchSlackRecentMessage[]
+  users: Record<string, { name: string; avatar?: string }>
+}> {
+  try {
+    const hasThread = typeof threadTs === 'string' && threadTs.trim().length > 0
+    const slug = hasThread ? SLUG.thread : SLUG.history
+    const args: Record<string, unknown> = { channel: channelId }
+    if (hasThread) {
+      args['ts'] = threadTs.trim()
+    }
+    const fetchLimit = limit ?? (hasThread ? 4 : 5)
+    args['limit'] = Math.max(fetchLimit, 10)
+
+    const response = await callTool(slug, args)
+    if (response.isError) {
+      return { success: false, messages: [], users: {} }
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(response.text)
+    } catch {
+      return { success: false, messages: [], users: {} }
+    }
+
+    const messages = extractMessages(parsed)
+    const sortedNewest = sortMessages(messages)
+    const count = limit ?? (hasThread ? 4 : 5)
+    const pickedNewest = sortedNewest.slice(0, count)
+    const oldestToNewest = [...pickedNewest].reverse()
+
+    const users: Record<string, { name: string; avatar?: string }> = {}
+    const userIds = Array.from(
+      new Set(oldestToNewest.map((m) => m.user).filter((u): u is string => Boolean(u)))
+    )
+
+    await Promise.all(
+      userIds.map(async (uid) => {
+        try {
+          const userRes = await callTool(SLUG.userInfo, { user: uid })
+          if (!userRes.isError) {
+            const userJson = JSON.parse(userRes.text)
+            const userRecord = userRecordFromData(userJson)
+            if (userRecord) {
+              const name = userNameFromRecord(userRecord, uid)
+              const avatar = extractAvatar(userRecord)
+              users[uid] = { name, avatar }
+            }
+          }
+        } catch {
+          // Gracefully continue
+        }
+      })
+    )
+
+    const formattedMessages: NotchSlackRecentMessage[] = oldestToNewest.map((m) => {
+      const userInfo = m.user ? users[m.user] : undefined
+      return {
+        user: m.user,
+        username: userInfo?.name ?? null,
+        text: m.text,
+        ts: m.ts,
+        avatar: userInfo?.avatar
+      }
+    })
+
+    return {
+      success: true,
+      messages: formattedMessages,
+      users
+    }
+  } catch {
+    return { success: false, messages: [], users: {} }
+  }
+}
+
+export async function fetchSlackTargets(
+  callTool: CallTool
+): Promise<{ success: boolean; targets: NotchSlackTargetItem[] }> {
+  try {
+    const targets: NotchSlackTargetItem[] = []
+    const seen = new Set<string>()
+    let anySuccess = false
+
+    try {
+      let chanRes = await callTool(SLUG.listChannels, {})
+      if (chanRes.isError) {
+        chanRes = await callTool(SLUG.findChannels, { query: '' })
+      }
+      if (!chanRes.isError) {
+        anySuccess = true
+        const parsed = JSON.parse(chanRes.text)
+        const found = recordArray(unwrap(parsed), ['channels', 'items', 'results']) ?? []
+        for (const record of found) {
+          const id =
+            stringOf(record['id']) ??
+            stringOf(record['channel_id']) ??
+            stringOf(record['channelId'])
+          if (id === null || !CHANNEL_ID.test(id) || seen.has(id)) continue
+          seen.add(id)
+          const name =
+            stringOf(record['name']) ??
+            stringOf(record['channel_name']) ??
+            stringOf(record['normalized_name']) ??
+            ''
+          const isPrivate =
+            record['is_private'] === true ||
+            record['isPrivate'] === true ||
+            record['is_group'] === true
+          targets.push({
+            id,
+            name: name.replace(/^#/, ''),
+            type: 'channel',
+            isPrivate
+          })
+        }
+      }
+    } catch {
+      // Continue to users
+    }
+
+    try {
+      const userRes = await callTool(SLUG.findUsers, { query: '' })
+      if (!userRes.isError) {
+        anySuccess = true
+        const parsed = JSON.parse(userRes.text)
+        const found =
+          recordArray(unwrap(parsed), ['members', 'users', 'items', 'results']) ?? []
+        for (const record of found) {
+          const id =
+            stringOf(record['id']) ??
+            stringOf(record['user']) ??
+            stringOf(record['user_id'])
+          if (id === null || !USER_ID.test(id) || seen.has(id)) continue
+          seen.add(id)
+          const name = userNameFromRecord(record, id)
+          const avatar = extractAvatar(record)
+          targets.push({
+            id,
+            name,
+            type: 'dm',
+            avatar
+          })
+        }
+      }
+    } catch {
+      // Best effort
+    }
+
+    return {
+      success: anySuccess,
+      targets
+    }
+  } catch {
+    return { success: false, targets: [] }
+  }
 }

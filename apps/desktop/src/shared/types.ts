@@ -102,7 +102,9 @@ export const IPC = {
   speechStreamCancel: 'speech:stream-cancel',
   speechChunk: 'speech:chunk',
   speechStreamDone: 'speech:stream-done',
-  speechStreamError: 'speech:stream-error'
+  speechStreamError: 'speech:stream-error',
+  slackFetchMessages: 'kestrel:slack-fetch-messages',
+  slackListChannels: 'kestrel:slack-list-channels'
 } as const
 
 /** Dedicated channels for the transparent screen overlay renderer. */
@@ -224,6 +226,22 @@ export interface NotchNotionCard {
   parentId?: string
 }
 
+export interface NotchSlackRecentMessage {
+  user: string | null
+  username?: string | null
+  text: string
+  ts: string
+  avatar?: string
+}
+
+export interface NotchSlackTargetItem {
+  id: string
+  name: string
+  type: 'channel' | 'dm'
+  isPrivate?: boolean
+  avatar?: string
+}
+
 /** A Slack message or reminder waiting on the user's approval. */
 export interface NotchSlackCard {
   kind: 'slack_message'
@@ -233,6 +251,11 @@ export interface NotchSlackCard {
   message: string
   /** Human-readable time for schedule/reminder, null for send. */
   when: string | null
+  channelId?: string
+  threadTs?: string | null
+  isDm?: boolean
+  avatar?: string
+  recentMessages?: NotchSlackRecentMessage[]
 }
 
 /**
@@ -700,6 +723,15 @@ export interface KestrelApi {
   onPillState?: (callback: (state: PillStatePayload) => void) => () => void
   onPillAudioWave?: (callback: (level: number) => void) => () => void
   notifyPillReady?: () => void
+  slackFetchMessages: (
+    channelId: string,
+    threadTs?: string
+  ) => Promise<{
+    success: boolean
+    messages: NotchSlackRecentMessage[]
+    users: Record<string, { name: string; avatar?: string }>
+  }>
+  slackListChannels: () => Promise<{ success: boolean; targets: NotchSlackTargetItem[] }>
 }
 
 /** One app's usage in the Insights top-apps list. */

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Tool, ToolContext } from '../types'
-import { createSlackTools } from './slack'
+import {
+  createSlackTools,
+  fetchSlackRecentMessages,
+  fetchSlackTargets
+} from './slack'
 
 /** A UTC instant, so every expected string is host-independent. */
 const FIXED_NOW = new Date('2026-11-16T09:00:00Z')
@@ -549,7 +553,10 @@ describe('slack confirmation cards', () => {
       mode: 'send',
       target: '#design',
       message: 'Hello team',
-      when: null
+      when: null,
+      channelId: CHANNEL,
+      isDm: false,
+      threadTs: null
     })
   })
 
@@ -637,5 +644,239 @@ describe('slack applyEdits', () => {
     expect(applied['message']).toBe('Hello')
     expect(applied['when']).toBe(SCHEDULE_ISO)
     expect(applied['recipient']).toBe('design')
+  })
+})
+
+describe('slack prepare card metadata', () => {
+  it('populates channelId, isDm, and threadTs on send message card', async () => {
+    const { tools } = makeTools({
+      SLACK_FIND_CHANNELS: () => ({
+        text: okPayload({ channels: [channelRecord(CHANNEL, 'design')] })
+      })
+    })
+    const tool = toolNamed(tools, 'slack_send_message')
+    const prep = await tool.prepare!(
+      { recipient: 'design', message: 'Hello', thread_ts: '1700000000.123' },
+      makeContext()
+    )
+
+    expect(prep.card).toBeDefined()
+    expect(prep.card?.['channelId']).toBe(CHANNEL)
+    expect(prep.card?.['isDm']).toBe(false)
+    expect(prep.card?.['threadTs']).toBe('1700000000.123')
+  })
+
+  it('sets isDm to true when recipient is a DM channel', async () => {
+    const { tools } = makeTools({
+      SLACK_FIND_CHANNELS: () => ({ text: okPayload({ channels: [] }) }),
+      SLACK_FIND_USERS: () => ({
+        text: okPayload({ members: [userRecord(USER_ID, 'Sarah', 'sarah')] })
+      }),
+      SLACK_OPEN_DM: () => ({
+        text: okPayload({ channel: { id: DM } })
+      })
+    })
+    const tool = toolNamed(tools, 'slack_send_message')
+    const prep = await tool.prepare!(
+      { recipient: 'Sarah', message: 'Hello DM' },
+      makeContext()
+    )
+
+    expect(prep.card?.['channelId']).toBe(DM)
+    expect(prep.card?.['isDm']).toBe(true)
+  })
+
+  it('populates channelId and isDm on schedule message card', async () => {
+    const { tools } = makeTools({
+      SLACK_FIND_CHANNELS: () => ({
+        text: okPayload({ channels: [channelRecord(CHANNEL, 'design')] })
+      })
+    })
+    const tool = toolNamed(tools, 'slack_schedule_message')
+    const prep = await tool.prepare!(
+      { recipient: 'design', message: 'Hello future', when: SCHEDULE_ISO },
+      makeContext()
+    )
+
+    expect(prep.card?.['channelId']).toBe(CHANNEL)
+    expect(prep.card?.['isDm']).toBe(false)
+  })
+})
+
+describe('fetchSlackRecentMessages', () => {
+  it('fetches recent channel messages, sorts oldest to newest, and resolves user info', async () => {
+    const calls: Array<{ slug: string; args: Record<string, unknown> }> = []
+    const callTool = async (slug: string, args: Record<string, unknown>) => {
+      calls.push({ slug, args })
+      if (slug === 'SLACK_FETCH_CONVERSATION_HISTORY') {
+        return {
+          text: okPayload({
+            messages: [
+              { user: 'U1', text: 'First message', ts: '100.0' },
+              { user: 'U2', text: 'Second message', ts: '200.0' },
+              { user: 'U1', text: 'Third message', ts: '300.0' }
+            ]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION') {
+        const uid = args['user']
+        if (uid === 'U1') {
+          return {
+            text: okPayload({
+              user: {
+                id: 'U1',
+                name: 'alice',
+                real_name: 'Alice W',
+                profile: { display_name: 'Alice', image_72: 'https://avatar/u1.png' }
+              }
+            }),
+            isError: false
+          }
+        }
+        if (uid === 'U2') {
+          return {
+            text: okPayload({
+              user: {
+                id: 'U2',
+                name: 'bob',
+                real_name: 'Bob K',
+                profile: { display_name: 'Bob', image_72: 'https://avatar/u2.png' }
+              }
+            }),
+            isError: false
+          }
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackRecentMessages(callTool, CHANNEL)
+    expect(result.success).toBe(true)
+    expect(result.messages).toHaveLength(3)
+    // Sorted oldest to newest: 100.0, 200.0, 300.0
+    expect(result.messages[0].ts).toBe('100.0')
+    expect(result.messages[0].text).toBe('First message')
+    expect(result.messages[0].username).toBe('Alice')
+    expect(result.messages[0].avatar).toBe('https://avatar/u1.png')
+
+    expect(result.messages[2].ts).toBe('300.0')
+    expect(result.messages[2].text).toBe('Third message')
+
+    expect(result.users['U1']).toEqual({
+      name: 'Alice',
+      avatar: 'https://avatar/u1.png'
+    })
+    expect(result.users['U2']).toEqual({
+      name: 'Bob',
+      avatar: 'https://avatar/u2.png'
+    })
+  })
+
+  it('fetches thread messages when threadTs is supplied', async () => {
+    let calledThread = false
+    const callTool = async (slug: string, _args: Record<string, unknown>) => {
+      if (slug === 'SLACK_FETCH_MESSAGE_THREAD_FROM_A_CONVERSATION') {
+        calledThread = true
+        return {
+          text: okPayload({
+            messages: [{ user: 'U1', text: 'Thread reply', ts: '150.0' }]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_RETRIEVE_DETAILED_USER_INFORMATION') {
+        return {
+          text: okPayload({
+            user: { id: 'U1', name: 'alice' }
+          }),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: true }
+    }
+
+    const result = await fetchSlackRecentMessages(callTool, CHANNEL, '100.0')
+    expect(calledThread).toBe(true)
+    expect(result.success).toBe(true)
+    expect(result.messages[0].text).toBe('Thread reply')
+  })
+
+  it('handles error in message fetching gracefully', async () => {
+    const callTool = async () => ({ text: 'Slack error', isError: true })
+    const result = await fetchSlackRecentMessages(callTool, CHANNEL)
+    expect(result.success).toBe(false)
+    expect(result.messages).toEqual([])
+    expect(result.users).toEqual({})
+  })
+})
+
+describe('fetchSlackTargets', () => {
+  it('fetches channels and users and returns target items', async () => {
+    const callTool = async (slug: string) => {
+      if (slug === 'SLACK_LIST_ALL_CHANNELS') {
+        return {
+          text: okPayload({
+            channels: [
+              { id: 'C01111111', name: 'general', is_private: false },
+              { id: 'C02222222', name: 'secret', is_private: true }
+            ]
+          }),
+          isError: false
+        }
+      }
+      if (slug === 'SLACK_FIND_USERS') {
+        return {
+          text: okPayload({
+            members: [
+              {
+                id: 'U03333333',
+                name: 'alice',
+                real_name: 'Alice Smith',
+                profile: { display_name: 'Alice', image_72: 'https://avatar/alice.png' }
+              }
+            ]
+          }),
+          isError: false
+        }
+      }
+      return { text: '{}', isError: false }
+    }
+
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(true)
+    expect(result.targets).toHaveLength(3)
+
+    const general = result.targets.find((t) => t.id === 'C01111111')
+    expect(general).toEqual({
+      id: 'C01111111',
+      name: 'general',
+      type: 'channel',
+      isPrivate: false
+    })
+
+    const secret = result.targets.find((t) => t.id === 'C02222222')
+    expect(secret).toEqual({
+      id: 'C02222222',
+      name: 'secret',
+      type: 'channel',
+      isPrivate: true
+    })
+
+    const alice = result.targets.find((t) => t.id === 'U03333333')
+    expect(alice).toEqual({
+      id: 'U03333333',
+      name: 'Alice',
+      type: 'dm',
+      avatar: 'https://avatar/alice.png'
+    })
+  })
+
+  it('handles error in target fetching gracefully', async () => {
+    const callTool = async () => ({ text: 'Error', isError: true })
+    const result = await fetchSlackTargets(callTool)
+    expect(result.success).toBe(false)
+    expect(result.targets).toEqual([])
   })
 })

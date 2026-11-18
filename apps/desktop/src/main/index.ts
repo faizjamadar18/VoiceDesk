@@ -29,6 +29,8 @@ import {
   type NotchActivity,
   type NotchAudioPayload,
   type NotchOpenResult,
+  type NotchSlackRecentMessage,
+  type NotchSlackTargetItem,
   type SaveSettingsResult
 } from '../shared/types'
 import { normalizeDictationSettings } from '../shared/dictation'
@@ -39,6 +41,12 @@ import {
   ComposioIntegration,
   DEFAULT_CALLBACK_URL
 } from './assistant/composio/integration'
+import {
+  fetchSlackRecentMessages,
+  fetchSlackTargets
+} from './assistant/composio/slack'
+import type { CallTool } from './assistant/composio/support'
+import type { McpClient, McpTool } from './assistant/mcp/types'
 import { ComposioKeyStore } from './assistant/composio/key'
 import { loadEnvFiles } from './assistant/env'
 import { AssistantServer, parseApiAddress } from './assistant/server'
@@ -612,6 +620,46 @@ async function saveSettings(patch: Partial<KestrelSettings>): Promise<SaveSettin
   return { state: runtimeState(), settings }
 }
 
+function getSlackCallTool(): CallTool | null {
+  if (!composioIntegration) return null
+  const slackProvider = composioIntegration
+    .status()
+    .providers.find((p) => p.id === 'slack')
+  if (!slackProvider?.connected) return null
+
+  const internal = composioIntegration as unknown as {
+    mcpClient?: McpClient | null
+    advertised?: McpTool[] | null
+  }
+  const mcpClient = internal.mcpClient
+  if (!mcpClient) return null
+
+  const advertised = internal.advertised ?? []
+  const advertisedNames = advertised.map((t) => t.name)
+
+  return async (slug: string, args: Record<string, unknown>) => {
+    let name = slug
+    if (advertisedNames.includes(slug)) {
+      name = slug
+    } else {
+      const lower = slug.toLowerCase()
+      const matched = advertisedNames.find((c) => c.toLowerCase() === lower)
+      if (matched !== undefined) {
+        name = matched
+      } else {
+        const prefix = 'slack_'
+        const suffix = lower.startsWith(prefix) ? lower.slice(prefix.length) : lower
+        const suffixMatched = advertisedNames.find(
+          (c) => c.toLowerCase() === suffix
+        )
+        if (suffixMatched !== undefined) name = suffixMatched
+      }
+    }
+    const result = await mcpClient.callTool(name, args)
+    return { text: result.text, isError: result.isError }
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle(IPC.getState, () => runtimeState())
   ipcMain.handle(IPC.getSettings, () => settings)
@@ -766,6 +814,51 @@ function registerIpc(): void {
       ({ ok: false, message: 'Integrations are not available.' } satisfies IntegrationDisconnectResult)
     )
   })
+  ipcMain.handle(
+    IPC.slackFetchMessages,
+    async (
+      _event,
+      channelId: unknown,
+      threadTs?: unknown
+    ): Promise<{
+      success: boolean
+      messages: NotchSlackRecentMessage[]
+      users: Record<string, { name: string; avatar?: string }>
+    }> => {
+      if (typeof channelId !== 'string' || !channelId.trim()) {
+        return { success: false, messages: [], users: {} }
+      }
+      const callTool = getSlackCallTool()
+      if (!callTool) {
+        return { success: false, messages: [], users: {} }
+      }
+      const thread = typeof threadTs === 'string' ? threadTs : null
+      try {
+        return await fetchSlackRecentMessages(callTool, channelId.trim(), thread)
+      } catch (error) {
+        console.error('[slack] fetch messages failed', error)
+        return { success: false, messages: [], users: {} }
+      }
+    }
+  )
+  ipcMain.handle(
+    IPC.slackListChannels,
+    async (): Promise<{
+      success: boolean
+      targets: NotchSlackTargetItem[]
+    }> => {
+      const callTool = getSlackCallTool()
+      if (!callTool) {
+        return { success: false, targets: [] }
+      }
+      try {
+        return await fetchSlackTargets(callTool)
+      } catch (error) {
+        console.error('[slack] list channels failed', error)
+        return { success: false, targets: [] }
+      }
+    }
+  )
   ipcMain.handle(IPC.insightsGet, () => getInsightsForUser(currentUserId()))
   ipcMain.handle(IPC.accountDelete, async (): Promise<DeleteAccountResult> => {
     const userId = currentUserId()
