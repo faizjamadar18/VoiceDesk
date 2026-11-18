@@ -39,9 +39,9 @@ export function Screen1Permissions({
               <PermissionCard
                 isGranted={true}
                 grantedTitle="Microphone permission granted."
-                pendingTitle="Allow VoiceOS to use your microphone."
+                pendingTitle="Allow VoiceDesk to use your microphone."
                 grantedDescription="Your speech will be transcribed."
-                pendingDescription="Let VoiceOS transcribe your speech. Only active during dictation."
+                pendingDescription="Let VoiceDesk transcribe your speech. Only active during dictation."
                 isExpanded={false}
               />
 
@@ -49,9 +49,9 @@ export function Screen1Permissions({
               <PermissionCard
                 isGranted={true}
                 grantedTitle="Accessibility permission granted."
-                pendingTitle="Allow VoiceOS to insert spoken words."
-                grantedDescription="VoiceOS can insert and edit text."
-                pendingDescription="Let VoiceOS type your spoken words in the textbox."
+                pendingTitle="Allow VoiceDesk to insert spoken words."
+                grantedDescription="VoiceDesk can insert and edit text."
+                pendingDescription="Let VoiceDesk type your spoken words in the textbox."
                 isExpanded={false}
               />
 
@@ -59,7 +59,7 @@ export function Screen1Permissions({
               <PermissionCard
                 isGranted={screenPermissionGranted}
                 grantedTitle="Screen permission granted."
-                pendingTitle="Allow VoiceOS to see your screen."
+                pendingTitle="Allow VoiceDesk to see your screen."
                 grantedDescription="Agent Mode can answer questions about your screen."
                 pendingDescription="Only when you ask Agent Mode for help. Screenshots are never stored or shared."
                 isExpanded={!screenPermissionGranted}

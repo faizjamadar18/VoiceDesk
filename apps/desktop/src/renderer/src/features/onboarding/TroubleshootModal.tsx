@@ -48,7 +48,7 @@ export function TroubleshootModal({
     setCopiedContact(true)
     setTimeout(() => setCopiedContact(false), 2000)
     try {
-      window.open('mailto:support@voiceos.com')
+      window.open('mailto:support@voicedesk.app')
     } catch {
       // fallback
     }
@@ -125,7 +125,7 @@ export function TroubleshootModal({
           <div className="p-4 rounded-xl bg-white border border-gray-100 shadow-xs">
             <h4 className="text-sm font-medium text-gray-900">Getting a service error?</h4>
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              VPNs, corporate networks, or network filters can block VoiceOS. Please turn off your VPN and try again. If that does not fix it, sign out and log back in.
+              VPNs, corporate networks, or network filters can block VoiceDesk. Please turn off your VPN and try again. If that does not fix it, sign out and log back in.
             </p>
           </div>
 
@@ -144,7 +144,7 @@ export function TroubleshootModal({
               <div>
                 <h4 className="text-sm font-medium text-gray-900">Talk to us</h4>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {copiedContact ? 'support@voiceos.com' : "Send us a message and we'll help you out"}
+                  {copiedContact ? 'support@voicedesk.app' : "Send us a message and we'll help you out"}
                 </p>
               </div>
             </div>

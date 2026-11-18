@@ -17,7 +17,7 @@ export function Screen3DictationIntro({ onNext }: Screen3DictationIntroProps): J
               Dictation Mode
             </h1>
             <p className="text-lg text-gray-700 leading-relaxed font-normal">
-              VoiceOS transcribes your words, removing filler words and correcting mistakes.
+              VoiceDesk transcribes your words, removing filler words and correcting mistakes.
             </p>
           </div>
 
