@@ -4,8 +4,8 @@ import voiceOsWordmarkWhite from './assets/voiceos-wordmark.png'
 import voiceOsWordmarkBlack from './assets/voiceos-wordmark-black.png'
 import voiceOsLogoWhite from './assets/voiceOsLogoWhite.png'
 import voiceOsLogoBlack from './assets/voiceOsLogoBlack.png'
-import cloudsBlue from './voiceos-notch/assets/cloudsBlue.png'
 import lensOverlay from './voiceos-notch/assets/lens.png'
+import { AgentThinkingOrb } from './voiceos-notch/orb'
 import { HistoryPage } from './features/history/HistoryPage'
 import type { HistoryRecord } from '../../shared/types'
 import { DictationPage } from './features/dictation/DictationPage'
@@ -579,12 +579,8 @@ function DashboardApp(): JSX.Element {
                 {activeTab === 'dashboard' && (
                   <div className="dashboard-home-view @container w-full min-w-0">
                     <div className="greeting flex min-w-0 items-center gap-4 mb-6">
-                      <div className="orb" role="img" aria-label="VoiceOS orb">
-                        <div
-                          className="cloud-viewport orb-cloud"
-                          style={{ backgroundImage: `url(${cloudsBlue})` }}
-                        />
-                        <img src={lensOverlay} alt="" className="orb-lens" />
+                      <div className="orb" role="img" aria-label="Incredible orb">
+                        <AgentThinkingOrb size={30} />
                       </div>
                       <h1 className="min-w-0 break-words text-[1.7rem] @max-[480px]:text-[1.4rem] font-semibold">{greeting}, {userName}</h1>
                     </div>

@@ -15,7 +15,7 @@ import {
 import { useSystemTheme } from '../../context/ThemeContext'
 import type { HistoryRecord } from '../../../../shared/types'
 import voiceosAppIcon from '../../assets/voiceos-app-icon.png'
-import cloudsBlue from '../../voiceos-notch/assets/cloudsBlue.png'
+import { AgentThinkingOrb } from '../../voiceos-notch/orb'
 
 export interface HistoryPageProps {
   /** Saved turns, newest first. */
@@ -659,25 +659,25 @@ export function HistoryPage({
                       >
                         <div className="relative">
                           <div
-                            className="history-markdown text-sm leading-relaxed pr-8"
+                            className="history-markdown flex items-start gap-2.5 text-sm leading-relaxed pr-8"
                             style={{
                               color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : '#666'
                             }}
                           >
-                            <div
-                              className="cloud-viewport"
+                            <span
+                              className="cloud-viewport flex-shrink-0 inline-flex items-center justify-center self-start mt-0.5"
                               style={{
-                                width: '14px',
-                                height: '14px',
-                                float: 'left',
-                                marginRight: '6px',
-                                marginTop: '5px',
-                                backgroundImage: `url(${cloudsBlue})`,
-                                boxShadow:
-                                  '0 1px 4px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2)'
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                overflow: 'hidden'
                               }}
-                            />
-                            {stripMarkdownLinks(record.reply)}
+                            >
+                              <AgentThinkingOrb size={18} />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              {stripMarkdownLinks(record.reply)}
+                            </span>
                           </div>
                           <button
                             type="button"
