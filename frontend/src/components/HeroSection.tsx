@@ -616,17 +616,6 @@ export default function HeroSection() {
             style={{ minHeight: "min(100vh, 1200px)" }}
           >
             <div className="relative text-center max-w-4xl" style={{ zIndex: 3 }}>
-              {/* Backed by Y Combinator */}
-              <div className="inline-flex items-center gap-2 mb-4">
-                <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "#767676", letterSpacing: "-0.01em" }}>
-                  Backed by
-                </span>
-                <Image src="/YCombinatorIcon.svg" alt="Y" width={18} height={18} style={{ display: "block" }} />
-                <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "#767676", letterSpacing: "-0.01em" }}>
-                  Combinator
-                </span>
-              </div>
-
               {/* Title */}
               <h1
                 className="section-title mb-6 leading-tight"
