@@ -112,7 +112,7 @@ export class DictationController {
   /** Renderer reloaded or crashed while a gesture was in flight. */
   handleRendererUnavailable(): void {
     if (this.session.state === 'recording' || this.session.state === 'transcribing') {
-      this.fail('Kestrel reloaded before the microphone audio arrived.', true)
+      this.fail('VoiceDesk reloaded before the microphone audio arrived.', true)
     }
   }
 
@@ -162,7 +162,7 @@ export class DictationController {
     }
 
     if (!this.options.isRendererReady()) {
-      this.fail('Microphone is not ready — the Kestrel window is still loading.', true)
+      this.fail('Microphone is not ready — the VoiceDesk window is still loading.', true)
       return
     }
 
