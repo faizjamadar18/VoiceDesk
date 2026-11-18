@@ -14,7 +14,7 @@ export function TeamSettingsTab({
 }: TeamSettingsTabProps): JSX.Element {
   const [hasTeam, setHasTeam] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
-  const [teamName, setTeamName] = useState('VoiceOS Team')
+  const [teamName, setTeamName] = useState('VoiceDesk Team')
   const [isEditingTeamName, setIsEditingTeamName] = useState(false)
 
   return (
@@ -29,7 +29,7 @@ export function TeamSettingsTab({
                 <div>
                   <h4 className="voiceos-row-title">Team plan required</h4>
                   <p className="voiceos-row-desc">
-                    Upgrade to VoiceOS Team to create and manage a team
+                    Upgrade to VoiceDesk Team to create and manage a team
                   </p>
                 </div>
               </div>
@@ -136,7 +136,7 @@ export function TeamSettingsTab({
                     <span className="voiceos-team-avatar">F</span>
                     <div>
                       <p className="voiceos-row-title">Faiz (You)</p>
-                      <p className="voiceos-row-desc">faiz@voiceos.com</p>
+                      <p className="voiceos-row-desc">faiz@voicedesk.app</p>
                     </div>
                   </div>
                   <span className="voiceos-role-badge">Owner</span>

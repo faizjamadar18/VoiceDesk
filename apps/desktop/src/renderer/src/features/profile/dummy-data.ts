@@ -3,7 +3,7 @@ import type { HelpCenterItem, SettingsTabId, ShortcutCardData, UserProfileData }
 export const INITIAL_USER_PROFILE: UserProfileData = {
   firstName: 'Faiz',
   lastName: '',
-  email: 'faiz@voiceos.com',
+  email: 'faiz@voicedesk.app',
   avatarInitial: 'F'
 }
 
@@ -81,7 +81,7 @@ export const HELP_CENTER_ITEMS: HelpCenterItem[] = [
     title: 'Discord Community',
     description: 'Join our community for help and updates',
     actionType: 'discord',
-    url: 'https://discord.gg/voiceos'
+    url: 'https://discord.gg/voicedesk'
   },
   {
     id: 'twitter',
@@ -93,9 +93,9 @@ export const HELP_CENTER_ITEMS: HelpCenterItem[] = [
   {
     id: 'email',
     title: 'Email Support',
-    description: 'support@voiceos.com',
+    description: 'support@voicedesk.app',
     actionType: 'email',
-    email: 'support@voiceos.com'
+    email: 'support@voicedesk.app'
   }
 ]
 

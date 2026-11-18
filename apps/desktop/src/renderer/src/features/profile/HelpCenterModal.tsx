@@ -13,8 +13,8 @@ export interface HelpCenterModalProps {
   onClose: () => void
 }
 
-const SUPPORT_EMAIL = 'support@voiceos.com'
-const DISCORD_URL = 'https://discord.gg/voiceos'
+const SUPPORT_EMAIL = 'support@voicedesk.app'
+const DISCORD_URL = 'https://discord.gg/voicedesk'
 const TWITTER_URL = 'https://x.com/kai_brokering'
 
 export function HelpCenterModal({ isOpen, onClose }: HelpCenterModalProps): JSX.Element | null {
