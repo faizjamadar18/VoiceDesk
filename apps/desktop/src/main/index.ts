@@ -36,6 +36,7 @@ import {
 import { normalizeDictationSettings } from '../shared/dictation'
 import { deleteAccount } from './account/delete-account'
 import { HttpActionClient } from './action-client'
+import { migrateUserData } from './app-data-migration'
 import { loadOrCreateUserId } from './assistant/composio/identity'
 import {
   ComposioIntegration,
@@ -269,13 +270,13 @@ function hideMainWindow(): void {
 function updateTray(): void {
   if (!tray) return
   const label = hotkeyLabel(settings.hotkey).join('+')
-  tray.setToolTip(`Kestrel — ${label}: hold to talk or circle`)
+  tray.setToolTip(`VoiceDesk — ${label}: hold to talk or circle`)
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Kestrel', click: showMainWindow },
+      { label: 'Open VoiceDesk', click: showMainWindow },
       { type: 'separator' },
       {
-        label: 'Quit Kestrel',
+        label: 'Quit VoiceDesk',
         click: () => {
           isQuitting = true
           app.quit()
@@ -292,7 +293,7 @@ function createMainWindow(): void {
     minWidth: 520,
     minHeight: 400,
     show: false,
-    title: 'Kestrel',
+    title: 'VoiceDesk',
     frame: false,
     backgroundColor: '#16171a',
     icon: resourcePath('icon.png'),
@@ -1017,7 +1018,7 @@ function createNotch(): void {
         `[dictation] context=${meta.contextType} style=${meta.style} polish=${meta.polishedBy} raw: "${raw}" -> polished: "${polished}"`
       )
       const activeWindow = getActiveWindowService().getActiveWindow()
-      const appName = activeWindow?.appName || 'VoiceOS'
+      const appName = activeWindow?.appName || 'VoiceDesk'
       const appIcon = activeWindow?.appName ? getActiveWindowService().getCachedAppIcon(activeWindow.appName) : null
       historyStore?.record({
         prompt: polished,
@@ -1089,6 +1090,21 @@ function registerProtocolClient(): void {
 }
 
 async function initialize(): Promise<void> {
+  // The app's userData folder is derived from its name, so copy the previous
+  // folder before anything reads settings, auth, history, or integration files.
+  const dataMigration = migrateUserData({
+    legacyDirs: [
+      join(app.getPath('appData'), 'VoiceOS'),
+      join(app.getPath('appData'), 'voiceos')
+    ],
+    currentDir: app.getPath('userData')
+  })
+  if (dataMigration.outcome === 'failed') {
+    console.error('[app-data] could not copy data from the previous app folder', dataMigration.error)
+  } else if (dataMigration.migrated) {
+    console.log('[app-data] copied data from the previous app folder')
+  }
+
   Menu.setApplicationMenu(null)
   nativeTheme.themeSource = 'dark'
 
@@ -1131,7 +1147,7 @@ async function initialize(): Promise<void> {
     history: historyStore,
     getActiveAppContext: () => {
       const activeWindow = getActiveWindowService().getActiveWindow()
-      const appName = activeWindow?.appName || 'VoiceOS'
+      const appName = activeWindow?.appName || 'VoiceDesk'
       const appIcon = activeWindow?.appName ? getActiveWindowService().getCachedAppIcon(activeWindow.appName) : null
       return { appName, appIcon }
     },
