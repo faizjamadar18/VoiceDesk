@@ -22,7 +22,7 @@ export interface NativeActionMeta {
 export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   insertText: {
     glyph: 'pointerTrail',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -57,7 +57,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   },
   editText: {
     glyph: 'textSelection',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -90,7 +90,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   },
   createPrompt: {
     glyph: 'promptDocument',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -99,7 +99,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
         queryChunks: ['Create ', 'a ', 'prompt ', 'to ', 'fix ', 'this'],
         answer: "Prompt's ready — open Claude and hit Insert.",
         about:
-          'Talk through what you want while circling things on screen with your cursor. Each circle captures that window — with your ink and a number on it — and floats into the notch. VoiceOS turns it all into one polished prompt that references every screenshot, with an Insert button that places the images and text straight into Claude, ChatGPT, Cursor, or your terminal agent. Uses the same screen access as “Point and ask about your screen.”',
+          'Talk through what you want while circling things on screen with your cursor. Each circle captures that window — with your ink and a number on it — and floats into the notch. VoiceDesk turns it all into one polished prompt that references every screenshot, with an Insert button that places the images and text straight into Claude, ChatGPT, Cursor, or your terminal agent. Uses the same screen access as “Point and ask about your screen.”',
         sampleCommands: [
           'Create a prompt to fix this layout',
           'Make a prompt for Claude about these designs',
@@ -112,7 +112,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
         queryChunks: ['これを直す', 'プロンプトを', '作って'],
         answer: 'プロンプトができました。Claudeを開いてInsertを押してください。',
         about:
-          '話しながら、カーソルで画面上のものを丸く囲んでください。囲むたびにそのウィンドウが番号つきでキャプチャされ、ノッチに集まります。VoiceOSがすべてを1つの洗練されたプロンプトにまとめ、InsertボタンでClaude・ChatGPT・Cursor・ターミナルのAIに画像ごと挿入できます。画面へのアクセスは「カーソルで指して質問する」と共通です。',
+          '話しながら、カーソルで画面上のものを丸く囲んでください。囲むたびにそのウィンドウが番号つきでキャプチャされ、ノッチに集まります。VoiceDeskがすべてを1つの洗練されたプロンプトにまとめ、InsertボタンでClaude・ChatGPT・Cursor・ターミナルのAIに画像ごと挿入できます。画面へのアクセスは「カーソルで指して質問する」と共通です。',
         sampleCommands: [
           'このレイアウトを直すプロンプトを作って',
           'このデザインについてClaude用のプロンプトを作って',
@@ -123,7 +123,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   },
   controlPlayback: {
     glyph: 'music',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -148,7 +148,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   },
   openApp: {
     glyph: 'appLaunch',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -157,7 +157,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
         queryChunks: ['Open ', 'Figma'],
         answer: 'Figma is open.',
         about:
-          "Launch or focus any installed app by name. If it's already running, VoiceOS brings it to the front instead of opening a second copy.",
+          "Launch or focus any installed app by name. If it's already running, VoiceDesk brings it to the front instead of opening a second copy.",
         sampleCommands: ['Open Chrome', 'Switch to Slack', 'Open Spotify']
       },
       ja: {
@@ -177,7 +177,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
   },
   reminders: {
     glyph: 'clock',
-    developer: 'VoiceOS',
+    developer: 'VoiceDesk',
     type: 'System action',
     copy: {
       en: {
@@ -195,7 +195,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
         ],
         answer: "Saved — I'll remind you at 5:20 PM to stand up and stretch.",
         about:
-          'Set a reminder for a time you name and VoiceOS notifies you when it comes around. Works entirely on your computer, with no connected account. Turning this off stops new reminders being made; anything already scheduled still fires, and you can still list or cancel it.',
+          'Set a reminder for a time you name and VoiceDesk notifies you when it comes around. Works entirely on your computer, with no connected account. Turning this off stops new reminders being made; anything already scheduled still fires, and you can still list or cancel it.',
         sampleCommands: [
           'Remind me in 10 minutes to stand up',
           'Remind me at 3pm to call the bank',
@@ -208,7 +208,7 @@ export const NATIVE_ACTION_META: Record<AgentActionId, NativeActionMeta> = {
         queryChunks: ['10分後に', '立ち上がるよう', 'リマインドして'],
         answer: '17:20に「立ち上がって伸びをする」と通知します。',
         about:
-          '指定した時刻にVoiceOSが通知します。アカウント連携は不要で、パソコンのなかだけで完結します。オフにすると新しいリマインダーは作れなくなりますが、設定済みのものはそのまま通知され、一覧の確認や取り消しもできます。',
+          '指定した時刻にVoiceDeskが通知します。アカウント連携は不要で、パソコンのなかだけで完結します。オフにすると新しいリマインダーは作れなくなりますが、設定済みのものはそのまま通知され、一覧の確認や取り消しもできます。',
         sampleCommands: [
           '10分後に立ち上がるようリマインドして',
           '15時に銀行へ電話するようリマインドして',
