@@ -7,6 +7,8 @@ import type { DecodedSpeechAudio, SpeechAudioSink } from './speech-player'
 export class WebAudioSink implements SpeechAudioSink {
   private context: AudioContext | null = null
   private readonly sources = new Set<AudioBufferSourceNode>()
+  private analyser: AnalyserNode | null = null
+  private pcmData: Float32Array<ArrayBuffer> | null = null
 
   async decode(bytes: Uint8Array): Promise<DecodedSpeechAudio> {
     // Wait for a running clock so start times are never measured against a frozen one.
@@ -25,7 +27,8 @@ export class WebAudioSink implements SpeechAudioSink {
 
     const source = context.createBufferSource()
     source.buffer = handle as AudioBuffer
-    source.connect(context.destination)
+    const analyser = this.ensureAnalyser(context)
+    source.connect(analyser)
     this.sources.add(source)
 
     source.onended = (): void => {
@@ -62,6 +65,21 @@ export class WebAudioSink implements SpeechAudioSink {
     this.sources.clear()
   }
 
+  getVolume(): number {
+    if (this.analyser === null || this.sources.size === 0) return 0
+    if (this.pcmData === null || this.pcmData.length !== this.analyser.fftSize) {
+      this.pcmData = new Float32Array(this.analyser.fftSize)
+    }
+    this.analyser.getFloatTimeDomainData(this.pcmData)
+    let sum = 0
+    for (let i = 0; i < this.pcmData.length; i++) {
+      const sample = this.pcmData[i]
+      sum += sample * sample
+    }
+    const rms = Math.sqrt(sum / this.pcmData.length)
+    return Math.min(1, Math.max(0, rms * 4))
+  }
+
   /** Create the context on first use and wait for it to leave the suspended state. */
   private async ensureRunningContext(): Promise<AudioContext> {
     const context = this.ensureContext()
@@ -72,5 +90,15 @@ export class WebAudioSink implements SpeechAudioSink {
   private ensureContext(): AudioContext {
     if (this.context === null) this.context = new AudioContext()
     return this.context
+  }
+
+  private ensureAnalyser(context: AudioContext): AnalyserNode {
+    if (this.analyser === null) {
+      this.analyser = context.createAnalyser()
+      this.analyser.fftSize = 256
+      this.analyser.smoothingTimeConstant = 0.3
+      this.analyser.connect(context.destination)
+    }
+    return this.analyser
   }
 }

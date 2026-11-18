@@ -800,6 +800,26 @@ export default function Notch(): JSX.Element {
   const agcRef = useRef<AgcNormalizer>(new AgcNormalizer())
   const soundGateRef = useRef<SoundGateState>(INITIAL_SOUND_GATE)
   const micAudioSentRef = useRef(false)
+
+  // Track playback volume while assistant is speaking speech audio
+  useEffect(() => {
+    if (!isSpeaking) return
+    let rafId = 0
+    const tick = (): void => {
+      if (speechSink) {
+        const vol = speechSink.getVolume()
+        if (vol > 0) {
+          audioLevelRef.current = vol
+        }
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(rafId)
+      audioLevelRef.current = 0
+    }
+  }, [isSpeaking])
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const warningPlayedRef = useRef(false)
   const errorSoundRef = useRef(false)
