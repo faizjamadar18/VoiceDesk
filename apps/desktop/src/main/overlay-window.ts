@@ -182,7 +182,7 @@ export class OverlayWindowPresenter implements ScreenOverlayController {
       width: Math.max(1, Math.round(bounds.width)),
       height: Math.max(1, Math.round(bounds.height)),
       cursor: initialCursor,
-      tagText: 'Point to show VoiceOS'
+      tagText: 'Point to show VoiceDesk'
     }
     this.pendingStart = start
     if (this.ready) {

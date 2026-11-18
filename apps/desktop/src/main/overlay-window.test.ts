@@ -89,7 +89,7 @@ describe('OverlayWindowPresenter', () => {
           width: 800,
           height: 600,
           cursor: undefined,
-          tagText: 'Point to show VoiceOS'
+          tagText: 'Point to show VoiceDesk'
         }
       }
     ])
@@ -111,7 +111,7 @@ describe('OverlayWindowPresenter', () => {
           width: 640,
           height: 480,
           cursor: undefined,
-          tagText: 'Point to show VoiceOS'
+          tagText: 'Point to show VoiceDesk'
         }
       },
       {
@@ -136,7 +136,7 @@ describe('OverlayWindowPresenter', () => {
           width: 800,
           height: 600,
           cursor: { x: 120, y: 240 },
-          tagText: 'Point to show VoiceOS'
+          tagText: 'Point to show VoiceDesk'
         }
       }
     ])
