@@ -286,7 +286,7 @@ export function VoiceTypeModal({ isOpen, onClose, data, isDarkMode = true }: Voi
   }
 
   const handlePostToTwitter = (): void => {
-    const text = `I'm ${model.typeName}, says @VoiceOSApp. What's your Voice Type?\n\n(Paste image below ⬇️)`
+    const text = `I'm ${model.typeName}, says @VoiceDesk. What's your Voice Type?\n\n(Paste image below ⬇️)`
     const url = `https://x.com/intent/post?text=${encodeURIComponent(text)}`
     window.open(url, '_blank', 'noopener,noreferrer')
     triggerConfirmation('twitter')

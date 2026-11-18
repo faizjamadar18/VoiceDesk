@@ -55,7 +55,7 @@ function formatDuration(seconds: number): string {
 
 export function buildVoiceTypeModel(data: InsightsData): VoiceTypeCardModel {
   return {
-    brand: 'VoiceOS',
+    brand: 'VoiceDesk',
     kicker: 'YOUR VOICE TYPE',
     typeName: voiceTypeName(data),
     stats: [

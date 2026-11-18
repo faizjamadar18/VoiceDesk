@@ -132,7 +132,7 @@ function realPayload(): InsightsPayload {
     dayMap,
     hourCounts,
     topApps: [
-      { appName: 'VoiceOS', sessions: 78, words: 1350, relative: 1.0, share: 0.5 },
+      { appName: 'VoiceDesk', sessions: 78, words: 1350, relative: 1.0, share: 0.5 },
       { appName: 'explorer', sessions: 27, words: 450, relative: 0.35, share: 0.17 },
       { appName: 'Antigravity IDE', sessions: 26, words: 460, relative: 0.33, share: 0.17 },
       { appName: 'msedge', sessions: 26, words: 457, relative: 0.33, share: 0.17 }
@@ -362,13 +362,13 @@ describe('Insights Components Suite', () => {
   })
 
   describe('6. AppUsageCard', () => {
-    it('renders App usage, APPS USED | 4, app names VoiceOS, explorer, Antigravity IDE, msedge', () => {
+    it('renders App usage, APPS USED | 4, app names VoiceDesk, explorer, Antigravity IDE, msedge', () => {
       const html = renderToStaticMarkup(
         createElement(AppUsageCard, { data: toInsightsData(realPayload()), isDarkMode: true })
       )
       expect(html).toContain('App usage')
       expect(html).toContain('APPS USED | 4')
-      expect(html).toContain('VoiceOS')
+      expect(html).toContain('VoiceDesk')
       expect(html).toContain('explorer')
       expect(html).toContain('Antigravity IDE')
       expect(html).toContain('msedge')
