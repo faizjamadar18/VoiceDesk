@@ -124,7 +124,14 @@ interface NotchOrbProps {
 
 function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const isOrb = mode === "orb";
+
+  useEffect(() => {
+    if (isOrb && videoRef.current) {
+      videoRef.current.play()?.catch(() => {});
+    }
+  }, [isOrb]);
 
   useEffect(() => {
     let animId: number;
@@ -136,21 +143,23 @@ function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
       barsRef.current.forEach((bar, index) => {
         if (!bar) return;
         if (mode === "waveform") {
-          // Dynamic oscillatory audio wave heights between 3px and 16px
+          // Dynamic oscillatory audio wave heights in pure white
           const wave =
             Math.sin(elapsed * 9 + index * 1.5) * 4.5 +
             Math.sin(elapsed * 16 - index * 2.2) * 2.5 +
             Math.cos(elapsed * 5.2 + index) * 3;
           const h = Math.max(3, Math.min(16, 9 + wave));
           bar.style.height = `${h.toFixed(1)}px`;
-          bar.style.background = index === 1 || index === 2 ? "#60a5fa" : "#3b82f6";
+          bar.style.background = "#ffffff";
+          bar.style.boxShadow = "0 0 3px rgba(255, 255, 255, 0.45)";
           bar.style.borderRadius = h <= 3 ? "50%" : "1.25px";
         } else if (mode === "loading") {
-          // Smooth pulsating dots
+          // Smooth pulsating white dots
           const pulse = Math.sin(elapsed * 7 - index * 0.8);
           const h = Math.max(3, Math.min(8, 5 + pulse * 2.5));
           bar.style.height = `${h.toFixed(1)}px`;
-          bar.style.background = "#93c5fd";
+          bar.style.background = "rgba(255, 255, 255, 0.85)";
+          bar.style.boxShadow = "0 0 2px rgba(255, 255, 255, 0.3)";
           bar.style.borderRadius = "50%";
         }
       });
@@ -176,7 +185,7 @@ function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
       }}
       aria-hidden="true"
     >
-      {/* 4 Oscillating audio equalizer bars */}
+      {/* 4 Oscillating audio equalizer bars in white */}
       <div
         style={{
           position: "absolute",
@@ -202,7 +211,8 @@ function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
               height: "4px",
               margin: "0 1.5px",
               borderRadius: "50%",
-              background: "#60a5fa",
+              background: "#ffffff",
+              boxShadow: "0 0 2px rgba(255, 255, 255, 0.35)",
               flexShrink: 0,
               willChange: "height, background",
             }}
@@ -210,7 +220,7 @@ function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
         ))}
       </div>
 
-      {/* VoiceOS Living Glass Orb */}
+      {/* Incredible Voice Orb (video-backed from our notch codebase) */}
       <div
         style={{
           position: "absolute",
@@ -225,52 +235,38 @@ function NotchOrb({ mode, size = 18 }: NotchOrbProps) {
           transition: "opacity 280ms cubic-bezier(0.4, 0, 0.2, 1), transform 280ms cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
-        <div style={{ position: "relative", width: `${size}px`, height: `${size}px`, flexShrink: 0 }}>
-          <div
+        <div
+          data-testid="voice-orb"
+          data-renderer="video"
+          role="img"
+          aria-label="Incredible voice orb"
+          style={{
+            position: "relative",
+            width: `${size}px`,
+            height: `${size}px`,
+            flexShrink: 0,
+            borderRadius: "50%",
+            overflow: "hidden",
+            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.2)",
+          }}
+        >
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            loop
+            autoPlay
+            preload="auto"
+            src="/voice-orb-small.mp4"
+            aria-hidden="true"
             style={{
-              position: "absolute",
-              inset: 0,
+              width: "100%",
+              height: "100%",
+              display: "block",
               borderRadius: "50%",
-              overflow: "hidden",
-              background: "url(/cloudsBlue.webp) 90% 100% / 120% 120% no-repeat",
-              boxShadow:
-                "0 2px 6px rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.2), inset 0 2px 3px rgba(255, 255, 255, 0.35), inset 0 -2px 3px rgba(0, 0, 0, 0.2)",
+              objectFit: "cover",
+              pointerEvents: "none",
             }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(ellipse 70% 50% at 40% 25%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.15) 40%, transparent 70%)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(ellipse 60% 30% at 55% 80%, rgba(200,230,255,0.2) 0%, transparent 70%)",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              boxShadow:
-                "inset 0 0 4px rgba(210, 235, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -1px 2px rgba(0, 0, 0, 0.15)",
-              border: "0.5px solid rgba(255, 255, 255, 0.25)",
-            }}
-          />
-          <Image
-            src="/lens.png"
-            alt="Glass lens highlight on the VoiceOS orb"
-            fill
-            sizes="32px"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
           />
         </div>
       </div>
@@ -330,7 +326,21 @@ interface CalendarCardData {
   sent: string;
 }
 
-type CardData = GmailCardData | CalendarCardData;
+interface SlackCardData {
+  type: "slack";
+  app: string;
+  recipientName: string;
+  recipientInitial: string;
+  avatarColor: string;
+  recentContextName: string;
+  recentContextTime: string;
+  recentContextText: string;
+  placeholder: string;
+  message: string;
+  sent: string;
+}
+
+type CardData = GmailCardData | CalendarCardData | SlackCardData;
 
 const CARDS_DATA: CardData[] = [
   {
@@ -338,9 +348,9 @@ const CARDS_DATA: CardData[] = [
     app: "/icons/gmailApp.webp",
     header: "New Message",
     to: "To",
-    recipient: "david@company.com",
+    recipient: "faiz@company.com",
     subject: "Project update and Thursday sync",
-    body: "Hi David,\n\nThe designs look great. Let's sync Thursday.\n\nBest",
+    body: "Hi Faiz,\n\nThe designs look great. Let's sync Thursday.\n\nBest",
     send: "Send",
     sent: "Email sent",
   },
@@ -348,12 +358,25 @@ const CARDS_DATA: CardData[] = [
     type: "calendar",
     app: "/icons/googlecalendarApp.png",
     header: "New Event",
-    title: "Design review with David",
+    title: "Design review with Faiz",
     when: "Thursday · 2:00 – 2:30 PM",
-    guest: "david@company.com",
+    guest: "faiz@company.com",
     meet: "Google Meet",
     save: "Save",
     sent: "Scheduled",
+  },
+  {
+    type: "slack",
+    app: "/icons/slackApp.webp",
+    recipientName: "Faiz",
+    recipientInitial: "F",
+    avatarColor: "#1264A3",
+    recentContextName: "Faiz",
+    recentContextTime: "9:14 AM",
+    recentContextText: "Faiz joined Slack — take a second to say hello.",
+    placeholder: "Message Faiz",
+    message: "Hi Faiz, the v2 release build is ready for review. Let's sync on the deployment checklist today.",
+    sent: "Message sent",
   },
 ];
 
@@ -381,16 +404,27 @@ export default function HeroSection() {
 
   // Helper calculation for typewriter offsets
   const isGmail = activeCard.type === "gmail";
-  const subjectTotalLen = activeCard.type === "gmail" ? activeCard.subject.length : activeCard.title.length;
-  const bodyTotalLen = activeCard.type === "gmail" ? activeCard.body.length : 0;
+  const isCalendar = activeCard.type === "calendar";
+  const isSlack = activeCard.type === "slack";
 
-  const typedSubjectLen = Math.min(charCount, subjectTotalLen);
+  const subjectTotalLen = isGmail
+    ? activeCard.subject.length
+    : isCalendar
+    ? activeCard.title.length
+    : 0;
+  const bodyTotalLen = isGmail ? activeCard.body.length : 0;
+  const slackTotalLen = isSlack ? activeCard.message.length : 0;
+
+  const typedSubjectLen = isSlack ? 0 : Math.min(charCount, subjectTotalLen);
   const typedBodyLen = isGmail ? Math.max(0, Math.min(charCount - subjectTotalLen, bodyTotalLen)) : 0;
+  const typedSlackLen = isSlack ? Math.min(charCount, slackTotalLen) : 0;
 
-  const isSubjectFinished = typedSubjectLen >= subjectTotalLen;
+  const isSubjectFinished = isSlack ? true : typedSubjectLen >= subjectTotalLen;
   const isTypingComplete = isGmail
     ? isSubjectFinished && typedBodyLen >= bodyTotalLen
-    : isSubjectFinished;
+    : isCalendar
+    ? isSubjectFinished
+    : typedSlackLen >= slackTotalLen;
 
   // Step advancement timer loop: smoothly cycles timelineStep 0..4 and advances cardIndex
   useEffect(() => {
@@ -430,14 +464,14 @@ export default function HeroSection() {
 
     if (isTypingComplete) return;
 
-    // Fast typing: subject/title at 16ms, body at 8ms
-    const delay = !isSubjectFinished ? 16 : 8;
+    // Fast typing: subject/title at 16ms, body at 8ms, Slack message at 10ms
+    const delay = isSlack ? 10 : !isSubjectFinished ? 16 : 8;
     const typeTimer = setTimeout(() => {
       setCharCount((prev) => prev + 1);
     }, delay);
 
     return () => clearTimeout(typeTimer);
-  }, [timelineStep, charCount, isTypingComplete, isSubjectFinished]);
+  }, [timelineStep, charCount, isTypingComplete, isSubjectFinished, isSlack]);
 
   // Animate cursor hint to Send/Save button and click it once typing completes
   useEffect(() => {
@@ -786,7 +820,7 @@ export default function HeroSection() {
                           </span>
                         </div>
                       </div>
-                    ) : (
+                    ) : activeCard.type === "calendar" ? (
                       <div className="hero-screen-card-inner hero-screen-card-inner--cal">
                         <div className="hero-screen-card-header hero-screen-card-header--cal">
                           <Image
@@ -830,6 +864,101 @@ export default function HeroSection() {
                           >
                             {activeCard.save}
                           </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="hero-screen-card-inner hero-screen-card-inner--slack">
+                        <div className="hero-screen-card-header--slack">
+                          <div className="hero-screen-slack-target">
+                            <Image
+                              src={activeCard.app}
+                              alt="Slack app icon"
+                              width={14}
+                              height={14}
+                              style={{ borderRadius: "3px", flexShrink: 0 }}
+                            />
+                            <div
+                              className="hero-screen-slack-avatar-sm"
+                              style={{ background: activeCard.avatarColor }}
+                            >
+                              {activeCard.recipientInitial}
+                            </div>
+                            <span className="hero-screen-slack-name">{activeCard.recipientName}</span>
+                            <svg
+                              width="8"
+                              height="5"
+                              viewBox="0 0 10 6"
+                              fill="none"
+                              style={{ flexShrink: 0, opacity: 0.7 }}
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M1 1L5 5L9 1"
+                                stroke="#ABABAD"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <div className="hero-screen-slack-close" aria-hidden="true">
+                            <svg width="7" height="7" viewBox="0 0 10 10" fill="none">
+                              <path
+                                d="M1 1l8 8M9 1L1 9"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Recent context section */}
+                        <div className="hero-screen-slack-context">
+                          <div
+                            className="hero-screen-slack-avatar-md"
+                            style={{ background: activeCard.avatarColor }}
+                          >
+                            {activeCard.recipientInitial}
+                          </div>
+                          <div className="hero-screen-slack-context-info">
+                            <div className="hero-screen-slack-context-top">
+                              <span className="hero-screen-slack-context-name">{activeCard.recentContextName}</span>
+                              <span className="hero-screen-slack-context-time">{activeCard.recentContextTime}</span>
+                            </div>
+                            <div className="hero-screen-slack-context-text">
+                              {activeCard.recentContextText}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Composer box */}
+                        <div className="hero-screen-slack-composer-wrap">
+                          <div className="hero-screen-slack-composer">
+                            <div className="hero-screen-slack-input-text">
+                              {typedSlackLen > 0 ? (
+                                <>
+                                  {activeCard.message.slice(0, typedSlackLen)}
+                                  {!isTypingComplete && <Caret />}
+                                </>
+                              ) : (
+                                <span className="hero-screen-slack-placeholder">{activeCard.placeholder}</span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              aria-label="Send message"
+                              tabIndex={-1}
+                              className={`hero-screen-slack-send-btn${isSendPressed ? " is-pressed" : ""}`}
+                              style={{
+                                opacity: isTypingComplete ? 1 : 0.45,
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="white" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
