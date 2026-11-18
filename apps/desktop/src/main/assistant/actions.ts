@@ -127,7 +127,7 @@ export function planAction(transcript: string, now: Date = new Date()): ActionPl
     action: 'none',
     message:
       'I didn\'t catch a command. Try \u201copen Notepad\u201d, \u201csearch the web for ' +
-      'Kestrel\u201d, or \u201ctype hello\u201d.'
+      'VoiceDesk\u201d, or \u201ctype hello\u201d.'
   })
 }
 
