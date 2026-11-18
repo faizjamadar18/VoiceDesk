@@ -110,7 +110,7 @@ export function SpellingSection({
             <p
               className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
             >
-              Teach VoiceOS how to spell names, jargon, or acronyms.
+              Teach VoiceDesk how to spell names, jargon, or acronyms.
             </p>
           </div>
         </div>
@@ -288,7 +288,7 @@ export function SpellingSection({
                 <input
                   id="word-input"
                   type="text"
-                  placeholder="e.g., VoiceOS, Claude, GTM"
+                  placeholder="e.g., VoiceDesk, Claude, GTM"
                   value={wordText}
                   onChange={(e) => setWordText(e.target.value)}
                   onKeyDown={(e) => {
@@ -400,7 +400,7 @@ export function SpellingSection({
                 <textarea
                   id="import-textarea"
                   rows={5}
-                  placeholder={'VoiceOS\nClaude\nGTM\nlmk'}
+                  placeholder={'VoiceDesk\nClaude\nGTM\nlmk'}
                   value={importText}
                   onChange={(e) => setImportText(e.target.value)}
                   className={`w-full px-3 py-2 text-xs rounded-lg border outline-none focus:ring-2 focus:ring-blue-500 ${

@@ -139,7 +139,7 @@ export function getPreviewText(
 }
 
 export const DICTIONARY_EXAMPLES: Array<{ text: string; description?: string }> = [
-  { text: 'VoiceOS', description: 'Product name' },
+  { text: 'VoiceDesk', description: 'Product name' },
   { text: 'Claude', description: 'AI assistant' },
   { text: 'lmk', description: 'Let me know' },
   { text: 'GTM', description: 'Go to market' },

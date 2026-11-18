@@ -157,7 +157,7 @@ export function PolishingSection({
           <p
             className={`text-xs mt-0.5 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
           >
-            Choose how much VoiceOS cleans up your dictation
+            Choose how much VoiceDesk cleans up your dictation
           </p>
         </div>
       </div>
