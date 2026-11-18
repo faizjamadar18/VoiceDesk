@@ -147,7 +147,7 @@ export function AboutYouSection({
               <>
                 <div className="agent-memories-panel-header">
                   <p className="agent-memories-panel-desc">
-                    What the VoiceOS agent remembers about you, so it can help with your tasks.
+                    What the VoiceDesk agent remembers about you, so it can help with your tasks.
                   </p>
 
                   <button

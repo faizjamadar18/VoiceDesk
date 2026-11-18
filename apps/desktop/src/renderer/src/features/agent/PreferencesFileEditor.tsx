@@ -7,14 +7,14 @@ export const PREFERENCES_FILE_MAX_CHARS = 4000
 export const PREFERENCES_STRINGS = {
   agentPreferencesTitle: 'Memory',
   agentPreferencesDesc:
-    'What VoiceOS remembers about you. The agent reads this on every turn and updates it as you talk — click to edit it yourself.',
+    'What VoiceDesk remembers about you. The agent reads this on every turn and updates it as you talk — click to edit it yourself.',
   agentPreferencesEmpty:
-    'Nothing yet. VoiceOS fills this in as you use Agent Mode — or click to write it yourself.',
+    'Nothing yet. VoiceDesk fills this in as you use Agent Mode — or click to write it yourself.',
   agentPreferencesPlaceholder:
     '# About me\n\n- Prefers short emails\n- Uses Todoist for reminders',
   agentPreferencesGoalLabel: 'Goal',
   agentPreferencesGoalPending:
-    "Nothing yet — VoiceOS fills this in once it can tell what you're working toward.",
+    "Nothing yet — VoiceDesk fills this in once it can tell what you're working toward.",
   agentPreferencesPreferencesLabel: 'Preferences',
   agentPreferencesPreferencesPending:
     'Nothing yet — say things like “always use Todoist” and they\'ll be saved here.',

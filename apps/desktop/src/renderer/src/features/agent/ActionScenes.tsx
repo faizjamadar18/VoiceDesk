@@ -748,7 +748,7 @@ function AskScreenScene({
           <WandTrail d={ASK_LOOP} />
           <WandRider
             d={ASK_LOOP}
-            hintLabel="Point to show VoiceOS"
+            hintLabel="Point to show VoiceDesk"
             hintAt={{ left: 46, top: 214 }}
           />
         </>
