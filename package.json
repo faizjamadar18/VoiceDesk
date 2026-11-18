@@ -1,8 +1,8 @@
 {
   "name": "voiceos",
-  "productName": "VoiceOS",
+  "productName": "VoiceDesk",
   "version": "0.1.40",
-  "description": "VoiceOS, the universal voice interface",
+  "description": "VoiceDesk, the universal voice interface",
   "main": "./out/main/main.js",
   "license": "MIT",
   "author": {
