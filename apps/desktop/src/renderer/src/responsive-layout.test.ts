@@ -16,10 +16,10 @@ describe('VoiceOS Responsive Layout & Container Queries', () => {
     const fsMod = proc?.getBuiltinModule?.('node:fs')
     const pathMod = proc?.getBuiltinModule?.('node:path')
     if (fsMod && pathMod && proc) {
-      const cssPath = pathMod.resolve(
-        proc.cwd(),
-        'apps/desktop/src/renderer/src/styles.css'
-      )
+      const inDesktop = fsMod.existsSync(pathMod.resolve(proc.cwd(), 'src/renderer/src/styles.css'))
+      const cssPath = inDesktop
+        ? pathMod.resolve(proc.cwd(), 'src/renderer/src/styles.css')
+        : pathMod.resolve(proc.cwd(), 'apps/desktop/src/renderer/src/styles.css')
       stylesCss = fsMod.readFileSync(cssPath, 'utf-8')
     }
   })
