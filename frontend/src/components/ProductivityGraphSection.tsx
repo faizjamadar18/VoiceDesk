@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
+import WorksWhereverDock from "./WorksWhereverDock";
+
+/*
+// ============================================================================
+// Previous Productivity Graph Wave & Chart Data (Keep for easy re-enabling)
+// ============================================================================
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 
 const APPS = [
@@ -65,52 +72,34 @@ function computeWavePath(w: number, h: number, config: { amp: number; crestY: nu
     to: x
   };
 }
+*/
 
 export default function ProductivityGraphSection() {
-  const bandRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const updateWave = () => {
-      const band = bandRef.current;
-      if (!band) return;
-      const w = band.clientWidth || 1200;
-      const h = band.clientHeight || 500;
-      const iconSize = band.querySelector<HTMLElement>(".aw-icon")?.offsetWidth || 64;
-      const wave = computeWavePath(w, h, { amp: 0.15, crestY: 0.3 }, iconSize);
-      band.style.setProperty("--aw-path", wave.path);
-      const m = 3 * iconSize;
-      band.style.setProperty("--aw-fade-a", `${wave.from.toFixed(1)}px`);
-      band.style.setProperty("--aw-fade-b", `${(wave.from > 0 ? wave.from + m : 0).toFixed(1)}px`);
-      band.style.setProperty("--aw-fade-c", `${(wave.to < w ? wave.to - m : w).toFixed(1)}px`);
-      band.style.setProperty("--aw-fade-d", `${wave.to.toFixed(1)}px`);
-    };
-
-    updateWave();
-    window.addEventListener("resize", updateWave);
-    return () => window.removeEventListener("resize", updateWave);
-  }, []);
-
-  // Compute a default wave for SSR
-  const defaultWave = computeWavePath(1200, 500, { amp: 0.15, crestY: 0.3 }, 64);
-
   return (
     <section
       id="productivity-graph"
       className="jsx-ca39cb8ef7861e9f relative bg-transparent pt-10 md:pt-16 pb-14 md:pb-20 pg--visible"
     >
       <div className="jsx-ca39cb8ef7861e9f pg-card">
-        {/* Animated App Wave Band */}
+        {/* Interactive 'Works wherever you can type' macOS Dock */}
+        <WorksWhereverDock />
+
+        {/*
+        ========================================================================
+        PREVIOUS COMPONENT CONTENT (Commented out for easy re-enabling)
+        ========================================================================
+        */}
+        {/*
         <div
-          ref={bandRef}
           aria-hidden="true"
           className="jsx-1390364078 aw-band aw--ready aw--run"
           style={
             {
-              "--aw-path": defaultWave.path,
-              "--aw-fade-a": `${defaultWave.from.toFixed(1)}px`,
+              "--aw-path": 'path("M0,0")',
+              "--aw-fade-a": "0px",
               "--aw-fade-b": "0px",
               "--aw-fade-c": "100%",
-              "--aw-fade-d": `${defaultWave.to.toFixed(1)}px`,
+              "--aw-fade-d": "1200px",
             } as React.CSSProperties
           }
         >
@@ -131,7 +120,6 @@ export default function ProductivityGraphSection() {
           ))}
         </div>
 
-        {/* Inner Content */}
         <div className="jsx-ca39cb8ef7861e9f pg-inner">
           <div className="jsx-ca39cb8ef7861e9f pg-copy">
             <h2 className="jsx-ca39cb8ef7861e9f section-title pg-title">Not just another dictation app</h2>
@@ -225,6 +213,7 @@ export default function ProductivityGraphSection() {
             </div>
           </div>
         </div>
+        */}
       </div>
     </section>
   );
