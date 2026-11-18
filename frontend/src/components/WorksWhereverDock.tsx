@@ -68,7 +68,6 @@ const RUNNING_APPS = new Set([
 
 // Set of app indices for auto-rotation across responsive viewports
 const AUTO_ROTATE_INDICES = [0, 1, 2, 3, 5, 6]; // Slack, Gmail, Notion, Cursor, Claude, ChatGPT
-const INITIAL_ROTATE_INDEX = 4; // Points to Claude (index 5 in APPS)
 
 function getZoom(el: HTMLElement | null): number {
   if (typeof window === "undefined") return 1;
@@ -104,34 +103,34 @@ export default function WorksWhereverDock() {
 
   const reducedMotion = usePrefersReducedMotion();
 
-  const [rotateIndex, setRotateIndex] = useState(INITIAL_ROTATE_INDEX);
+  const [rotateIndex, setRotateIndex] = useState(0);
   const [isInView, setIsInView] = useState(false);
   const [canMagnify, setCanMagnify] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [clickedIndex, setClickedIndex] = useState<number | null>(null);
-  const [focusedIndex, setFocusedIndex] = useState(5); // Claude initially focused
-  const [tipIndex, setTipIndex] = useState<number | null>(5); // Claude tooltip initially visible
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
-  const autoIndex = AUTO_ROTATE_INDICES.length ? AUTO_ROTATE_INDICES[rotateIndex % AUTO_ROTATE_INDICES.length] : 5;
+  const autoIndex = AUTO_ROTATE_INDICES.length ? AUTO_ROTATE_INDICES[rotateIndex % AUTO_ROTATE_INDICES.length] : 0;
   const activeIndex = hoveredIndex ?? clickedIndex ?? autoIndex;
-  const activeApp = APPS[activeIndex] ?? APPS[5];
+  const activeApp = APPS[activeIndex] ?? APPS[0];
   const activeQuote = QUOTES[activeApp.logo] ?? "";
-  const effectiveTipIndex = tipIndex ?? activeIndex;
+  const currentTipIdx = hoveredIndex ?? clickedIndex ?? activeIndex;
+  const currentTipApp = APPS[currentTipIdx] ?? APPS[0];
 
   const stateRef = useRef({
     at: activeIndex,
     px: null as number | null,
     magnify: false,
     reduced: reducedMotion,
-    tip: effectiveTipIndex,
+    tip: currentTipIdx,
   });
 
   useEffect(() => {
     stateRef.current.at = activeIndex;
     stateRef.current.magnify = canMagnify && !reducedMotion;
     stateRef.current.reduced = reducedMotion;
-    stateRef.current.tip = effectiveTipIndex;
-  }, [activeIndex, canMagnify, reducedMotion, effectiveTipIndex]);
+    stateRef.current.tip = currentTipIdx;
+  }, [activeIndex, canMagnify, reducedMotion, currentTipIdx]);
 
   const geomRef = useRef<{
     c: number[];
@@ -219,8 +218,8 @@ export default function WorksWhereverDock() {
 
       const isHoverMagnify = state.px !== null && state.magnify;
       const targetCenter = isHoverMagnify && state.px !== null ? state.px : (geom.c[state.at] ?? 0);
-      const peakScale = state.reduced ? 0 : isHoverMagnify ? 0.65 : 0.38;
-      const radius = (isHoverMagnify ? 2.8 : 1.88) * geom.tile;
+      const peakScale = state.reduced ? 0 : isHoverMagnify ? 0.7 : 0.22;
+      const radius = (isHoverMagnify ? 3.1 : 1.6) * geom.tile;
 
       const getTargetScale = (i: number) => {
         if (!geom.shown[i] || peakScale === 0) return 1;
@@ -283,10 +282,10 @@ export default function WorksWhereverDock() {
         const child = children[i] as HTMLElement | undefined;
         if (!child || !geom.shown[i]) continue;
         const scale = phys.s[i];
-        const liftY = ((scale - 1) / 0.38) * 7.5;
+        const a = ((scale - 1) / 0.7) * 6;
         child.style.setProperty("--tx", `${offsets[i].toFixed(2)}px`);
         child.style.setProperty("--e", `${expansions[i].toFixed(2)}px`);
-        child.style.setProperty("--ty", `${(-liftY).toFixed(2)}px`);
+        child.style.setProperty("--ty", `${(-a).toFixed(2)}px`);
         child.style.setProperty("--s", scale.toFixed(4));
       }
 
@@ -295,6 +294,9 @@ export default function WorksWhereverDock() {
         glassEl.style.width = `calc(100% + ${totalExpansion.toFixed(2)}px)`;
         glassEl.style.transform = `translateX(${(-totalExpansion / 2).toFixed(2)}px)`;
       }
+
+      const M = (idx: number) =>
+        geom.shown[idx] ? (phys.s[idx] - 1) * geom.tile + ((phys.s[idx] - 1) / 0.7) * 6 : 0;
 
       let pillOffsetX = 0;
       let leftIdx = -1;
@@ -313,26 +315,20 @@ export default function WorksWhereverDock() {
         pillOffsetX = offsets[leftIdx] + (offsets[rightIdx] - offsets[leftIdx]) * frac;
       }
 
-      const activeScale = phys.s[state.at] ?? 1;
-      const activeLift = ((activeScale - 1) / 0.38) * 7.5;
-      const activeExpansion = (activeScale - 1) * geom.tile;
-      const pillOffsetY = -(activeLift + activeExpansion + 14);
+      const R = -M(state.at) - 30;
+      const pillX = phys.px + pillOffsetX;
 
       const pillEl = pillRef.current;
       if (pillEl) {
-        pillEl.style.transform = `translate(${(phys.px + pillOffsetX).toFixed(2)}px, ${pillOffsetY.toFixed(2)}px)`;
+        pillEl.style.transform = `translate(${pillX.toFixed(2)}px, ${R.toFixed(2)}px)`;
         pillEl.style.opacity = "1";
       }
 
       const tipEl = tipRef.current;
       if (tipEl && state.tip !== null) {
         const tIdx = state.tip;
-        const tScale = phys.s[tIdx] ?? 1;
-        const tLift = ((tScale - 1) / 0.38) * 7.5;
-        const tExpansion = (tScale - 1) * geom.tile;
-        const basePillY = tIdx === state.at ? pillOffsetY : -(tLift + tExpansion + 14);
-        const tipY = basePillY - 32;
-        const tipX = (geom.c[tIdx] ?? 0) + (offsets[tIdx] ?? 0);
+        const tipX = tIdx === state.at ? pillX : (geom.c[tIdx] ?? 0) + (offsets[tIdx] ?? 0);
+        const tipY = (tIdx === state.at ? R : -M(tIdx) - 2) - 34;
         tipEl.style.transform = `translate(${tipX.toFixed(2)}px, ${tipY.toFixed(2)}px)`;
         tipEl.style.opacity = "1";
       }
@@ -368,21 +364,6 @@ export default function WorksWhereverDock() {
       geomRef.current.shown = items.map((el) => el.offsetParent !== null);
       geomRef.current.tile = items[0]?.offsetWidth || 48;
       geomRef.current.pad = parseFloat(getComputedStyle(listEl).paddingLeft) || 9;
-
-      const claudeIdx = 5;
-      const claudeCenter = geomRef.current.c[claudeIdx] ?? 0;
-      if (!physRef.current.init && claudeCenter > 0) {
-        physRef.current.px = claudeCenter;
-        const count = geomRef.current.c.length;
-        physRef.current.s = Array(count).fill(1);
-        physRef.current.v = Array(count).fill(0);
-        const radius = 1.88 * geomRef.current.tile;
-        for (let i = 0; i < count; i++) {
-          const dist = Math.abs(geomRef.current.c[i] - claudeCenter) / radius;
-          physRef.current.s[i] = dist >= 1 ? 1 : 1 + 0.38 * (0.5 + 0.5 * Math.cos(Math.PI * dist));
-        }
-        physRef.current.init = true;
-      }
       requestTick();
     };
 
@@ -401,9 +382,9 @@ export default function WorksWhereverDock() {
 
   useEffect(() => {
     requestTick();
-  }, [activeIndex, effectiveTipIndex, canMagnify, reducedMotion, requestTick]);
+  }, [activeIndex, canMagnify, reducedMotion, requestTick]);
 
-  // Auto-rotation timer
+  // Auto-rotation timer (2800ms)
   useEffect(() => {
     if (!isInView || reducedMotion || hoveredIndex !== null || AUTO_ROTATE_INDICES.length < 2) return;
     const timer = window.setTimeout(() => {
@@ -414,7 +395,7 @@ export default function WorksWhereverDock() {
       } else {
         setRotateIndex((prev) => prev + 1);
       }
-    }, 3600);
+    }, 2800);
     return () => window.clearTimeout(timer);
   }, [isInView, reducedMotion, hoveredIndex, clickedIndex, rotateIndex]);
 
@@ -460,7 +441,6 @@ export default function WorksWhereverDock() {
 
             if (nearest >= 0 && nearest !== hoveredIndex) {
               setHoveredIndex(nearest);
-              setTipIndex(nearest);
             }
             requestTick();
           }}
@@ -471,7 +451,6 @@ export default function WorksWhereverDock() {
                 setClickedIndex(hoveredIndex);
               }
               setHoveredIndex(null);
-              setTipIndex(null);
               requestTick();
             }
           }}
@@ -500,14 +479,14 @@ export default function WorksWhereverDock() {
             </span>
           </span>
 
-          {/* Tooltip */}
+          {/* Tooltip locked directly above audio pill */}
           <span
             ref={tipRef}
             className="l-dock__tip"
             aria-hidden="true"
             data-on=""
           >
-            <span>{APPS[effectiveTipIndex]?.name ?? "Claude"}</span>
+            <span>{currentTipApp.name}</span>
           </span>
 
           {/* Apps List */}
@@ -544,7 +523,6 @@ export default function WorksWhereverDock() {
                   setClickedIndex(hoveredIndex);
                 }
                 setHoveredIndex(null);
-                setTipIndex(null);
                 requestTick();
               }
             }}
@@ -570,19 +548,16 @@ export default function WorksWhereverDock() {
                     onFocus={() => {
                       setFocusedIndex(idx);
                       setHoveredIndex(idx);
-                      setTipIndex(idx);
                       stateRef.current.px = canMagnify ? (geomRef.current.c[idx] ?? null) : null;
                       requestTick();
                     }}
                     onClick={(e) => {
                       if (!canMagnify || !(e.detail > 0)) {
                         setHoveredIndex(idx);
-                        setTipIndex(idx);
                         window.clearTimeout(timerRef.current);
                         timerRef.current = window.setTimeout(() => {
                           setClickedIndex(idx);
                           setHoveredIndex(null);
-                          setTipIndex(null);
                         }, 2800);
                       } else {
                         setClickedIndex(idx);
