@@ -153,7 +153,7 @@ export function AppDetailModal({
     {
       label: 'DEVELOPER',
       value: <UserCircleIcon size={22} />,
-      caption: 'VoiceOS'
+      caption: 'VoiceDesk'
     },
     {
       label: 'ACTIONS',

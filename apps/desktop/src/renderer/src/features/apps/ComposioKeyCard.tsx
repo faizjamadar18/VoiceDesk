@@ -63,7 +63,7 @@ export function ComposioKeyCard({ status, onSaved }: ComposioKeyCardProps): JSX.
       <p className="composio-key-card-body">
         {hasBrokenKey
           ? 'Your saved key was rejected. Paste a working key below to replace it.'
-          : 'Kestrel uses your own Composio key, so the calls run on your free Composio account and cost nothing to run. Paste it below, then connect an app.'}
+          : 'VoiceDesk uses your own Composio key, so the calls run on your free Composio account and cost nothing to run. Paste it below, then connect an app.'}
       </p>
       <p className="composio-key-card-body">
         Use your Platform project key from Settings → Project Settings → API Keys. It starts with
