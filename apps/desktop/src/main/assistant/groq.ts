@@ -176,7 +176,7 @@ export class GroqClient implements LlmClient {
         parameters: spec.parameters
       }
     }))
-    const selection = selectionMessage(selectedText)
+    const selection = selectionBlock(selectedText)
     return {
       model: this.model,
       messages: [
@@ -232,9 +232,12 @@ export class GroqClient implements LlmClient {
             'absolute ISO 8601 datetime such as 2026-11-13T15:00:00 to the tool. ' +
             'Never pass a date word to a tool.'
         },
-        ...(selection === null ? [] : [selection]),
         ...history.map((turn) => ({ role: turn.role, content: turn.content })),
-        { role: 'user', content: transcript }
+        {
+          role: 'user',
+          content:
+            selection === null ? transcript : `${selection}\n\n${transcript}`
+        }
       ],
       tools,
       tool_choice: 'auto',
@@ -294,27 +297,25 @@ export function formatLocalTimestamp(date: Date): string {
 }
 
 /**
- * The second system message that hands the model the text the user had
- * highlighted. Returns null when there is no selection, so the request body is
- * byte-for-byte what it was before selection capture existed.
+ * The block that hands the model the text the user had highlighted, prepended
+ * to the current user turn. Returns null when there is no selection, so the
+ * user message is byte-for-byte what it was before selection capture existed.
  */
-function selectionMessage(
+function selectionBlock(
   selectedText: string | null | undefined
-): ChatMessage | null {
+): string | null {
   const text = (selectedText ?? '').trim()
   if (!text) return null
-  return {
-    role: 'system',
-    content:
-      'The user has selected the following text in another application. ' +
-      'If they ask you to change it (rewrite, rephrase, shorten, translate, ' +
-      'fix grammar, make it sound more formal/polite/etc.), call `edit_text` ' +
-      'with the complete replacement text. Read the selection as context; ' +
-      'never answer about text that is not present.\n' +
-      '---\n' +
-      text.slice(0, MAX_EMBEDDED_SELECTION_CHARS) +
-      '\n---'
-  }
+  return (
+    'The user has selected the following text in another application. ' +
+    'If they ask you to change it (rewrite, rephrase, shorten, translate, ' +
+    'fix grammar, make it sound more formal/polite/etc.), call `edit_text` ' +
+    'with the complete replacement text. Read the selection as context; ' +
+    'never answer about text that is not present.\n' +
+    '---\n' +
+    text.slice(0, MAX_EMBEDDED_SELECTION_CHARS) +
+    '\n---'
+  )
 }
 
 export function replyFromResponse(data: unknown): LlmReply {

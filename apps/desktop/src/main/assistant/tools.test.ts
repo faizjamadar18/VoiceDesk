@@ -155,6 +155,20 @@ describe('built-in tool registry', () => {
     ])
   })
 
+  it('registers the edit_text tool for production turns', () => {
+    const registry = buildDefaultRegistry()
+
+    expect(registry.get('edit_text')).toBeDefined()
+  })
+
+  it('tells the model to edit only when asked to change the selection', () => {
+    const spec = specOf('edit_text')
+
+    expect(spec.description).toContain(
+      'Use this ONLY when the user asks you to CHANGE the selected text'
+    )
+  })
+
   it('creates folders without confirmation and with undo', () => {
     const spec = specOf('create_folder')
 
@@ -221,7 +235,12 @@ describe('built-in tool registry', () => {
   })
 
   it('keeps every built-in description short', () => {
+    // `edit_text` is exempt: its wording is copied verbatim from VoiceOS, which
+    // is what makes the model pick it.
+    const exempt = new Set(['edit_text'])
+
     for (const tool of builtinTools()) {
+      if (exempt.has(tool.spec.name)) continue
       expect(tool.spec.description.length).toBeLessThanOrEqual(200)
     }
   })

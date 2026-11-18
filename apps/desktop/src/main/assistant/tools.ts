@@ -566,9 +566,16 @@ export class EditTextTool implements Tool {
   readonly spec: ToolSpec = {
     name: 'edit_text',
     description:
-      'Rewrite the selected text when the user asks to change it (rewrite, ' +
-      'edit, rephrase, translate, shorten, fix, polish). Return the full ' +
-      'new text, never a diff. Not for questions about it.',
+      "Replace the user's currently selected text with a new, rewritten " +
+      'version. Use this ONLY when the user asks you to CHANGE the selected ' +
+      'text: rewrite, edit, rephrase, translate, shorten, lengthen, fix, ' +
+      "polish, or otherwise transform it. The user's selected text is " +
+      'provided to you as context — return the FULL replacement text in ' +
+      '`new_text`, not a diff or summary. The replacement is pasted directly ' +
+      "over the selection in the user's active app. Do NOT call this when " +
+      'the user asks a QUESTION about the selected text (an opinion, ' +
+      'feedback, whether the tone or wording is good, what it means) — answer ' +
+      'their question as a normal reply and leave their text untouched.',
     parameters: objectSchema(
       {
         new_text: {

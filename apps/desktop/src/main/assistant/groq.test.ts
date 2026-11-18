@@ -309,7 +309,7 @@ describe('GroqClient', () => {
     expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
   })
 
-  it('adds the selection as a second system message', async () => {
+  it('prepends the selection to the user message', async () => {
     const { fetch, calls } = recordingFetch(() =>
       jsonResponse({ choices: [{ message: { content: 'ok' } }] })
     )
@@ -321,9 +321,9 @@ describe('GroqClient', () => {
       role: string
       content: string
     }>
-    expect(messages).toHaveLength(3)
+    expect(messages).toHaveLength(2)
     expect(messages[0].content).toContain('You are Kestrel')
-    expect(messages[1].role).toBe('system')
+    expect(messages[1].role).toBe('user')
     expect(messages[1].content).toContain(
       'The user has selected the following text in another application.'
     )
@@ -332,7 +332,7 @@ describe('GroqClient', () => {
       'Read the selection as context; never answer about text that is not present.'
     )
     expect(messages[1].content).toContain('---\nA much longer sentence.\n---')
-    expect(messages[2]).toEqual({ role: 'user', content: 'shorten this' })
+    expect(messages[1].content.endsWith('\n\nshorten this')).toBe(true)
   })
 
   it('omits the selection block when the selection is blank', async () => {
@@ -352,10 +352,9 @@ describe('GroqClient', () => {
       }>
       expect(messages).toHaveLength(2)
       expect(
-        messages.some((message) =>
-          message.content.includes('The user has selected the following text')
-        )
-      ).toBe(false)
+        messages.filter((message) => message.role === 'system')
+      ).toHaveLength(1)
+      expect(messages[1]).toEqual({ role: 'user', content: 'open notepad' })
     }
   })
 
@@ -395,7 +394,7 @@ describe('GroqClient', () => {
     const description = tools[0].function.description.toLowerCase()
     expect(description).toContain('selected text')
     expect(description).toContain('rewrite')
-    expect(description).toContain('questions')
+    expect(description).toContain('question')
   })
 
   it('replays the same history on the schema retry', async () => {
