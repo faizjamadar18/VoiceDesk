@@ -245,7 +245,7 @@ export function GeneralSettingsTab({
               <div>
                 <h3 className="voiceos-row-title">Languages</h3>
                 <p className="voiceos-row-desc">
-                  Select the languages for dictation. VoiceOS will automatically detect.
+                  Select the languages for dictation. VoiceDesk will automatically detect.
                 </p>
               </div>
             </div>
@@ -266,7 +266,7 @@ export function GeneralSettingsTab({
                 <LogInIcon size={20} className="text-gray-300" />
                 <div>
                   <h3 className="voiceos-row-title">Launch at Login</h3>
-                  <p className="voiceos-row-desc">Open VoiceOS automatically when your computer starts.</p>
+                  <p className="voiceos-row-desc">Open VoiceDesk automatically when your computer starts.</p>
                 </div>
               </div>
               <AppleSwitch
@@ -281,7 +281,7 @@ export function GeneralSettingsTab({
               <div className="voiceos-setting-copy">
                 <h4 className="voiceos-row-title">Start in background</h4>
                 <p className="voiceos-row-desc">
-                  Keep the window hidden at startup. Open VoiceOS from the system tray.
+                  Keep the window hidden at startup. Open VoiceDesk from the system tray.
                 </p>
               </div>
               <AppleSwitch
@@ -431,7 +431,7 @@ export function GeneralSettingsTab({
               <MicIcon size={20} className="text-gray-300" />
               <div>
                 <h3 className="voiceos-row-title">Select default microphone</h3>
-                <p className="voiceos-row-desc">Select the microphone VoiceOS will use by default.</p>
+                <p className="voiceos-row-desc">Select the microphone VoiceDesk will use by default.</p>
               </div>
             </div>
             <div className="voiceos-select-wrapper">
@@ -455,7 +455,7 @@ export function GeneralSettingsTab({
               <div>
                 <h3 className="voiceos-row-title">Interaction sounds</h3>
                 <p className="voiceos-row-desc">
-                  Play a sound when VoiceOS starts and stops recording.
+                  Play a sound when VoiceDesk starts and stops recording.
                 </p>
               </div>
             </div>
@@ -500,7 +500,7 @@ export function GeneralSettingsTab({
               <div>
                 <h3 className="voiceos-row-title">Creator Mode</h3>
                 <p className="voiceos-row-desc">
-                  Show a &quot;Powered by VoiceOS&quot; badge while dictating and in Agent Mode.
+                  Show a &quot;Powered by VoiceDesk&quot; badge while dictating and in Agent Mode.
                 </p>
               </div>
             </div>

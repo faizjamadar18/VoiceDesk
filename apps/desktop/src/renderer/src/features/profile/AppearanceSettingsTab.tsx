@@ -245,7 +245,7 @@ export function AppearanceSettingsTab({
         <div className="voiceos-setting-row">
           <div className="voiceos-setting-copy">
             <h3 className="voiceos-row-title">Theme</h3>
-            <p className="voiceos-row-desc">How VoiceOS windows look.</p>
+            <p className="voiceos-row-desc">How VoiceDesk windows look.</p>
           </div>
           <div className="voiceos-preview-group" role="radiogroup" aria-label="Theme">
             {themeOptions.map((opt) => (
