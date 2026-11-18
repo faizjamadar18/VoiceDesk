@@ -8,7 +8,7 @@ export interface VoiceTypeModalProps {
 }
 
 const DEFAULT_VOICE_TYPE_DATA: VoiceTypeData = {
-  brand: 'VoiceOS.com',
+  brand: 'VoiceDesk.app',
   kicker: 'YOUR VOICE TYPE',
   typeName: 'The Agent Commander',
   stats: [
@@ -373,7 +373,7 @@ export function VoiceTypeModal({ isOpen, onClose, data = DEFAULT_VOICE_TYPE_DATA
     setShareFeedback('linkedin')
     setTimeout(() => setShareFeedback(null), 2500)
     const text = encodeURIComponent(
-      `My Voice Type is ${data.typeName} on VoiceOS! 🎙️✨`
+      `My Voice Type is ${data.typeName} on VoiceDesk! 🎙️✨`
     )
     window.open(`https://www.linkedin.com/feed/?shareActive=true&text=${text}`, '_blank')
   }
@@ -383,7 +383,7 @@ export function VoiceTypeModal({ isOpen, onClose, data = DEFAULT_VOICE_TYPE_DATA
     setShareFeedback('twitter')
     setTimeout(() => setShareFeedback(null), 2500)
     const text = encodeURIComponent(
-      `My Voice Type is "${data.typeName}" on @VoiceOS! 🎙️⚡`
+      `My Voice Type is "${data.typeName}" on @VoiceDesk! 🎙️⚡`
     )
     window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank')
   }

@@ -30,7 +30,7 @@ describe('VoiceOS Insights Feature', () => {
       expect(DUMMY_INSIGHTS_DATA.agent.weekMinutes).toBe(49)
 
       expect(DUMMY_INSIGHTS_DATA.apps).toHaveLength(4)
-      expect(DUMMY_INSIGHTS_DATA.apps[0].name).toBe('VoiceOS')
+      expect(DUMMY_INSIGHTS_DATA.apps[0].name).toBe('VoiceDesk')
       expect(DUMMY_INSIGHTS_DATA.apps[0].share).toBe(0.5)
 
       expect(DUMMY_INSIGHTS_DATA.streak.current).toBe(5)
@@ -99,7 +99,7 @@ describe('VoiceOS Insights Feature', () => {
       )
       expect(html).toContain('App usage')
       expect(html).toContain('APPS USED | 4')
-      expect(html).toContain('VoiceOS')
+      expect(html).toContain('VoiceDesk')
       expect(html).toContain('50%')
       expect(html).toContain('explorer')
       expect(html).toContain('Antigravity IDE')

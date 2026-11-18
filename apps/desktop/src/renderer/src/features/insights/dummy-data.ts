@@ -45,7 +45,7 @@ export const DUMMY_INSIGHTS_DATA: InsightsData = {
     weekMinutes: 49
   },
   apps: [
-    { name: 'VoiceOS', sessions: 3, share: 0.5, icon: 'voiceos' },
+    { name: 'VoiceDesk', sessions: 3, share: 0.5, icon: 'voiceos' },
     { name: 'explorer', sessions: 1, share: 0.17, icon: 'explorer' },
     { name: 'Antigravity IDE', sessions: 1, share: 0.17, icon: 'antigravity' },
     { name: 'msedge', sessions: 1, share: 0.17, icon: 'edge' }
@@ -63,7 +63,7 @@ export const DUMMY_INSIGHTS_DATA: InsightsData = {
     busiestHour: 7
   },
   voiceType: {
-    brand: 'VoiceOS.com',
+    brand: 'VoiceDesk.app',
     kicker: 'YOUR VOICE TYPE',
     typeName: 'The Agent Commander',
     stats: [
