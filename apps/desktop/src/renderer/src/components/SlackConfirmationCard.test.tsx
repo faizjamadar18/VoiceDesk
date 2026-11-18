@@ -193,7 +193,7 @@ describe('SlackConfirmationCard', () => {
     expect(html).toContain(SLACK_DARK.green)
   })
 
-  it('renders DM indicator with presence dot when isDm is true', () => {
+  it('renders DM indicator with dark neutral fallback avatar and no green presence dot when isDm is true', () => {
     const dmCard: NotchSlackCard = {
       kind: 'slack_message',
       mode: 'send',
@@ -208,10 +208,56 @@ describe('SlackConfirmationCard', () => {
     )
 
     expect(html).toContain('Sarah Lee')
-    // Green presence dot color
-    expect(html).toContain('#2BAC76')
+    // VoiceOS style: dark rounded rectangle fallback avatar with initial
+    expect(html).toContain('rgba(255, 255, 255, 0.12)')
+    expect(html).toContain('>S<')
+    // No green presence dot in header
+    expect(html).not.toContain('#2BAC76')
     // Placeholder without '#'
     expect(html).toContain('placeholder="Message Sarah Lee"')
+  })
+
+  it('renders header avatar image when card.avatar is provided', () => {
+    const dmCard: NotchSlackCard = {
+      kind: 'slack_message',
+      mode: 'send',
+      target: 'Sarah Lee',
+      avatar: 'https://avatars.slack-edge.com/header-avatar.png',
+      isDm: true,
+      message: 'Hello Sarah',
+      when: null
+    }
+
+    const html = renderToStaticMarkup(
+      createElement(SlackConfirmationCard, { card: dmCard })
+    )
+
+    expect(html).toContain('src="https://avatars.slack-edge.com/header-avatar.png"')
+    expect(html).toContain('width="18"')
+    expect(html).toContain('height="18"')
+    expect(html).toContain('referrerPolicy="no-referrer"')
+  })
+
+  it('renders message avatar image with referrerPolicy when message has avatar URL', () => {
+    const cardWithAvatarMsg: NotchSlackCard = {
+      ...SEND_CARD,
+      recentMessages: [
+        {
+          user: 'U999',
+          username: 'Alex',
+          avatar: 'https://avatars.slack-edge.com/alex-avatar.png',
+          text: 'Hey there!',
+          ts: '1700000000'
+        }
+      ]
+    }
+
+    const html = renderToStaticMarkup(
+      createElement(SlackConfirmationCard, { card: cardWithAvatarMsg })
+    )
+
+    expect(html).toContain('src="https://avatars.slack-edge.com/alex-avatar.png"')
+    expect(html).toContain('referrerPolicy="no-referrer"')
   })
 
   it('renders shimmer loading state when messages are loading', async () => {
@@ -495,5 +541,337 @@ describe('SlackConfirmationCard', () => {
       channelId: 'D1',
       target: 'Alice'
     })
+  })
+
+  it('renders DM targets in switcher dropdown with email address in dimmed text', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          { id: 'D1', name: 'Alice Smith', type: 'dm', email: 'alice@example.com' }
+        ]
+      })
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: SEND_CARD }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    await clickNodeAsync(headerBtn!)
+
+    const emailSpan = findNode(
+      container,
+      (n) => n.nodeName === 'SPAN' && getReactProps(n)?.children === 'alice@example.com'
+    )
+    expect(emailSpan).not.toBeNull()
+    const emailProps = getReactProps(emailSpan!)
+    expect(emailProps?.style?.color).toBe(SLACK_DARK.textDim)
+    expect(emailProps?.style?.fontSize).toBe('12px')
+  })
+
+  it('renders DM targets in switcher dropdown with their real avatar', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          {
+            id: 'D1',
+            name: 'Alice Smith',
+            type: 'dm',
+            email: 'alice@example.com',
+            avatar: 'https://avatars.slack-edge.com/alice-192.png'
+          }
+        ]
+      })
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: SEND_CARD }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    await clickNodeAsync(headerBtn!)
+
+    const avatarImg = findNode(
+      container,
+      (n) =>
+        n.nodeName === 'IMG' &&
+        getReactProps(n)?.src === 'https://avatars.slack-edge.com/alice-192.png' &&
+        getReactProps(n)?.width === 20
+    )
+    expect(avatarImg).not.toBeNull()
+    expect(getReactProps(avatarImg!)?.referrerPolicy).toBe('no-referrer')
+
+    const aliceBtn = findNode(
+      container,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('Alice Smith')
+    )
+    expect(aliceBtn).not.toBeNull()
+    expect(getNodeText(aliceBtn!)).toContain('alice@example.com')
+  })
+
+  it('resolves the header avatar from the fetched target when the card has none', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          {
+            id: 'D1',
+            name: 'Alice Smith',
+            type: 'dm',
+            avatar: 'https://avatars.slack-edge.com/alice-192.png'
+          }
+        ]
+      })
+    }
+
+    const dmCard: NotchSlackCard = {
+      kind: 'slack_message',
+      mode: 'send',
+      target: 'Alice Smith',
+      channelId: 'D1',
+      isDm: true,
+      message: 'Hello Alice',
+      when: null
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: dmCard }))
+    })
+
+    const headerAvatar = findNode(
+      container,
+      (n) =>
+        n.nodeName === 'IMG' &&
+        getReactProps(n)?.src === 'https://avatars.slack-edge.com/alice-192.png' &&
+        getReactProps(n)?.width === 18
+    )
+    expect(headerAvatar).not.toBeNull()
+  })
+
+  it('selects the matching DM after targets load even when a channel is first', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          { id: 'C1', name: 'general', type: 'channel' },
+          {
+            id: 'D1',
+            name: 'Alice Smith',
+            type: 'dm',
+            avatar: 'https://avatars.slack-edge.com/alice-192.png'
+          }
+        ]
+      })
+    }
+
+    const dmCard: NotchSlackCard = {
+      kind: 'slack_message',
+      mode: 'send',
+      target: 'Alice Smith',
+      channelId: 'D1',
+      isDm: true,
+      message: 'Hello Alice',
+      when: null
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: dmCard }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    expect(getNodeText(headerBtn!)).toContain('Alice Smith')
+    expect(getNodeText(headerBtn!)).not.toContain('general')
+
+    const headerAvatar = findNode(
+      container,
+      (n) =>
+        n.nodeName === 'IMG' &&
+        getReactProps(n)?.src === 'https://avatars.slack-edge.com/alice-192.png' &&
+        getReactProps(n)?.width === 18
+    )
+    expect(headerAvatar).not.toBeNull()
+  })
+
+  it('picks the card channel when no initial target was selected', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          { id: 'C1', name: 'general', type: 'channel' },
+          {
+            id: 'D1',
+            name: 'Alice Smith',
+            type: 'dm',
+            avatar: 'https://avatars.slack-edge.com/alice-192.png'
+          }
+        ]
+      })
+    }
+
+    const dmCard: NotchSlackCard = {
+      kind: 'slack_message',
+      mode: 'send',
+      target: '',
+      channelId: 'D1',
+      isDm: true,
+      message: 'Hello Alice',
+      when: null
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: dmCard }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    expect(getNodeText(headerBtn!)).toContain('Alice Smith')
+
+    const headerAvatar = findNode(
+      container,
+      (n) =>
+        n.nodeName === 'IMG' &&
+        getReactProps(n)?.src === 'https://avatars.slack-edge.com/alice-192.png' &&
+        getReactProps(n)?.width === 18
+    )
+    expect(headerAvatar).not.toBeNull()
+  })
+
+  it('filters and displays DM target when searching by email', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          { id: 'C1', name: 'general', type: 'channel' },
+          { id: 'D1', name: 'Alice Smith', type: 'dm', email: 'alice@example.com' },
+          { id: 'D2', name: 'Bob Jones', type: 'dm', email: 'bob@example.com' }
+        ]
+      })
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: SEND_CARD }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    await clickNodeAsync(headerBtn!)
+
+    const searchInput = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Find a channel or person'
+    )
+    expect(searchInput).not.toBeNull()
+
+    // Filter by Bob's email
+    changeInput(searchInput!, 'bob@example')
+
+    const dropdown = findNode(
+      container,
+      (n) => getReactProps(n)?.style?.zIndex === 20
+    )
+    expect(dropdown).not.toBeNull()
+
+    const bobBtn = findNode(
+      dropdown!,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('Bob Jones')
+    )
+    expect(bobBtn).not.toBeNull()
+    expect(getNodeText(bobBtn!)).toContain('bob@example.com')
+
+    const aliceBtn = findNode(
+      dropdown!,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('Alice Smith')
+    )
+    expect(aliceBtn).toBeNull()
+
+    const generalBtn = findNode(
+      dropdown!,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('general')
+    )
+    expect(generalBtn).toBeNull()
+  })
+
+  it('keeps card.target in targets list when slackListChannels does not include it', async () => {
+    ;(globalThis.window as any).kestrel = {
+      slackFetchMessages: vi.fn().mockResolvedValue({ success: true, messages: [], users: {} }),
+      slackListChannels: vi.fn().mockResolvedValue({
+        success: true,
+        targets: [
+          { id: 'C99', name: 'random', type: 'channel' }
+        ]
+      })
+    }
+
+    const container = (globalThis.document as any).createElement('div')
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(createElement(SlackConfirmationCard, { card: SEND_CARD }))
+    })
+
+    const headerBtn = findNode(
+      container,
+      (n) => getReactProps(n)?.['aria-label'] === 'Select channel or person'
+    )
+    expect(headerBtn).not.toBeNull()
+    await clickNodeAsync(headerBtn!)
+
+    // Both 'general' (from card.target) and 'random' (from API) should be in the dropdown
+    const generalBtns = findAllNodes(
+      container,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('general')
+    )
+    // One in header, one in dropdown list
+    expect(generalBtns.length).toBe(2)
+
+    const randomBtn = findNode(
+      container,
+      (n) => n.nodeName === 'BUTTON' && getNodeText(n).includes('random')
+    )
+    expect(randomBtn).not.toBeNull()
   })
 })

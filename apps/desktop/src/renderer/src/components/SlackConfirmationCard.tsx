@@ -106,29 +106,33 @@ function CardCloseButton({ onClick }: { onClick?: () => void }): JSX.Element {
 function SlackAvatarImg({
   src,
   name,
-  color
+  color,
+  size = 28
 }: {
   src?: string
   name: string
   color: string
+  size?: number
 }): JSX.Element {
   const [failed, setFailed] = useState(false)
   const showImg = Boolean(src && !failed)
+  const radius = size <= 20 ? 5 : 6
 
   if (showImg) {
     return (
       <img
         src={src}
         alt={name}
-        width={28}
-        height={28}
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
         onError={() => setFailed(true)}
         style={{
-          width: 28,
-          height: 28,
-          minWidth: 28,
-          minHeight: 28,
-          borderRadius: '6px',
+          width: size,
+          height: size,
+          minWidth: size,
+          minHeight: size,
+          borderRadius: radius,
           flexShrink: 0,
           marginTop: '2px',
           objectFit: 'cover'
@@ -140,15 +144,15 @@ function SlackAvatarImg({
   return (
     <div
       style={{
-        width: 28,
-        height: 28,
-        borderRadius: '6px',
+        width: size,
+        height: size,
+        borderRadius: radius,
         background: color,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        fontSize: '13px',
+        fontSize: size <= 20 ? '10px' : '13px',
         fontWeight: 700,
         color: '#fff',
         marginTop: '2px'
@@ -268,11 +272,45 @@ export function SlackConfirmationCard({
       .then((res) => {
         if (cancelled) return
         if (res?.success && Array.isArray(res.targets) && res.targets.length > 0) {
-          setTargets(res.targets)
-          // If selected target has no channelId, match by name or id
+          const cleanTarget = card.target ? card.target.replace(/^[#@]/, '') : ''
+          let updatedTargets = res.targets
+          if (card.target) {
+            const exists = res.targets.some(
+              (t) =>
+                (card.channelId && t.id === card.channelId) ||
+                t.id === card.target ||
+                t.name.toLowerCase() === cleanTarget.toLowerCase()
+            )
+            if (!exists) {
+              const initialTarget: NotchSlackTargetItem = {
+                id: card.channelId || card.target,
+                name: cleanTarget,
+                type: card.isDm ? 'dm' : 'channel',
+                avatar: card.avatar
+              }
+              updatedTargets = [initialTarget, ...res.targets]
+            }
+          }
+          setTargets(updatedTargets)
+          // Match the card's target before trusting list order, so a DM card
+          // never starts on an unrelated channel.
           setSelectedTarget((current) => {
-            if (!current) return res.targets[0] || null
-            const match = res.targets.find(
+            if (!current) {
+              const wanted = cleanTarget.toLowerCase()
+              const byChannel = card.channelId
+                ? updatedTargets.find((t) => t.id === card.channelId)
+                : undefined
+              const byId = card.target
+                ? updatedTargets.find((t) => t.id === card.target)
+                : undefined
+              const byName = wanted
+                ? updatedTargets.find(
+                    (t) => t.name.toLowerCase() === wanted
+                  )
+                : undefined
+              return byChannel ?? byId ?? byName ?? updatedTargets[0] ?? null
+            }
+            const match = updatedTargets.find(
               (t) => t.id === current.id || t.name === current.name
             )
             return match || current
@@ -284,7 +322,7 @@ export function SlackConfirmationCard({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [card.avatar, card.channelId, card.isDm, card.target])
 
   // Fetch recent messages when target changes
   const activeChannelId = selectedTarget?.id || card.channelId || card.target
@@ -334,13 +372,31 @@ export function SlackConfirmationCard({
     const map: Record<string, { name: string; avatar?: string }> = {
       ...slackUserMap
     }
+    if (card.avatar) {
+      if (card.channelId) {
+        map[card.channelId] = {
+          name: map[card.channelId]?.name || card.target?.replace(/^[#@]/, '') || '',
+          avatar: card.avatar
+        }
+      }
+      if (card.target) {
+        const clean = card.target.replace(/^[#@]/, '')
+        map[clean] = {
+          name: map[clean]?.name || clean,
+          avatar: card.avatar
+        }
+      }
+    }
     for (const t of targets) {
       if (t.type === 'dm') {
-        map[t.id] = { name: t.name, avatar: t.avatar }
+        map[t.id] = { name: t.name, avatar: t.avatar || map[t.id]?.avatar }
+        if (t.avatar) {
+          map[t.name] = { name: t.name, avatar: t.avatar }
+        }
       }
     }
     return map
-  }, [slackUserMap, targets])
+  }, [slackUserMap, targets, card.avatar, card.channelId, card.target])
 
   const renderSlackText = useCallback(
     (text: string) => {
@@ -358,27 +414,33 @@ export function SlackConfirmationCard({
     [targetUserMap]
   )
 
+  const currentChannelId = selectedTarget?.id || card.channelId
+  const currentTargetName = selectedTarget?.name || card.target
   const isDm = selectedTarget ? selectedTarget.type === 'dm' : Boolean(card.isDm)
   const isPrivate = selectedTarget?.isPrivate ?? false
   const targetName = selectedTarget?.name || card.target
   const cleanTargetName = targetName.replace(/^[#@]/, '')
-  const targetAvatar = selectedTarget?.avatar || card.avatar
-  const dmColorIdx =
-    cleanTargetName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) %
-    avatarColors.length
+  const targetAvatar =
+    selectedTarget?.avatar ||
+    card.avatar ||
+    (currentChannelId ? targetUserMap[currentChannelId]?.avatar : undefined) ||
+    (cleanTargetName ? targetUserMap[cleanTargetName]?.avatar : undefined)
 
   const filtered = useMemo(() => {
     const q = channelSearch.trim().toLowerCase()
-    const items = q ? targets.filter((t) => t.name.toLowerCase().includes(q)) : targets
+    const items = q
+      ? targets.filter(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            Boolean(t.email && t.email.toLowerCase().includes(q))
+        )
+      : targets
     return {
       channels: items.filter((t) => t.type === 'channel'),
       dms: items.filter((t) => t.type === 'dm')
     }
   }, [targets, channelSearch])
   const totalResults = filtered.channels.length + filtered.dms.length
-
-  const currentChannelId = selectedTarget?.id || card.channelId
-  const currentTargetName = selectedTarget?.name || card.target
 
   const canConfirm = !busy && message.trim().length > 0
 
@@ -491,44 +553,34 @@ export function SlackConfirmationCard({
             }}
           >
             {isDm ? (
-              <>
-                {targetAvatar ? (
-                  <img
-                    src={targetAvatar}
-                    alt={cleanTargetName}
-                    width={16}
-                    height={16}
-                    style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 4,
-                      background: avatarColors[dmColorIdx],
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      flexShrink: 0
-                    }}
-                  >
-                    {cleanTargetName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+              targetAvatar ? (
+                <img
+                  src={targetAvatar}
+                  alt={cleanTargetName}
+                  width={18}
+                  height={18}
+                  referrerPolicy="no-referrer"
+                  style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
+                />
+              ) : (
                 <div
                   style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: '#2BAC76',
+                    width: 18,
+                    height: 18,
+                    borderRadius: 4,
+                    background: 'rgba(255, 255, 255, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 700,
                     flexShrink: 0
                   }}
-                />
-              </>
+                >
+                  {cleanTargetName.charAt(0).toUpperCase()}
+                </div>
+              )
             ) : (
               <span
                 style={{
@@ -605,7 +657,7 @@ export function SlackConfirmationCard({
                 value={channelSearch}
                 onChange={(e) => setChannelSearch(e.target.value)}
                 aria-label="Find a channel or person"
-                placeholder="Find a channel or person…"
+                placeholder="Find a channel or person\u2026"
                 spellCheck={false}
                 style={{
                   width: '100%',
@@ -714,6 +766,11 @@ export function SlackConfirmationCard({
                     {filtered.dms.map((target) => {
                       const isSelected =
                         target.id === currentChannelId || target.name === currentTargetName
+                      const dmColorIdx =
+                        target.name
+                          .split('')
+                          .reduce((acc, char) => acc + char.charCodeAt(0), 0) %
+                        avatarColors.length
                       return (
                         <button
                           key={target.id}
@@ -738,15 +795,28 @@ export function SlackConfirmationCard({
                             textAlign: 'left'
                           }}
                         >
-                          <span style={{ color: SLACK_DARK.textDim, fontSize: '12px' }}>@</span>
+                          <SlackAvatarImg
+                            src={target.avatar}
+                            name={target.name}
+                            color={avatarColors[dmColorIdx]}
+                            size={20}
+                          />
                           <span
                             style={{
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
+                              whiteSpace: 'nowrap',
+                              display: 'flex',
+                              alignItems: 'baseline',
+                              gap: '6px'
                             }}
                           >
-                            {target.name}
+                            <span>{target.name}</span>
+                            {target.email && (
+                              <span style={{ color: SLACK_DARK.textDim, fontSize: '12px' }}>
+                                {target.email}
+                              </span>
+                            )}
                           </span>
                         </button>
                       )
