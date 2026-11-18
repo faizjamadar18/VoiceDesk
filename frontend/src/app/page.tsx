@@ -5,6 +5,7 @@ import ProductivityGraphSection from "@/components/ProductivityGraphSection";
 import VoiceToActionSection from "@/components/VoiceToActionSection";
 import StopLookingSection from "@/components/StopLookingSection";
 import StayOnTaskSection from "@/components/StayOnTaskSection";
+import LocalByDefaultSection from "@/components/LocalByDefaultSection";
 import PrivacySection from "@/components/PrivacySection";
 // import WallOfLoveSection from "@/components/WallOfLoveSection";
 import FaqSection from "@/components/FaqSection";
@@ -21,6 +22,7 @@ export default function Home() {
       <VoiceToActionSection />
       <StopLookingSection />
       <StayOnTaskSection />
+      <LocalByDefaultSection />
       <PrivacySection />
       {/* <WallOfLoveSection /> */}
       <FaqSection />
