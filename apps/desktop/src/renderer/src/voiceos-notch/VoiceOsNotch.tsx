@@ -333,7 +333,8 @@ export function VoiceOsNotch({
   const customIcon = voiceId ? getAgentVoiceCustomIcon(voiceId) : undefined;
   const glowColor = isError ? AGENT_ERROR_GLOW_COLOR : agentVoice.glowColor;
   /** VoiceOS pulses the orb while the agent is speaking (bundle ~253784). */
-  const orbActive = isResponding || speaking;
+  const isSpeaking = isResponding || Boolean(speaking);
+  const orbActive = isSpeaking;
 
   // deriveAgentNotchActivity (bundle 263841-263849): waveform > loading > orb.
   const indicator: "orb" | "waveform" | "loading" = isListening
@@ -658,12 +659,16 @@ export function VoiceOsNotch({
                       <VoiceVolumePulse
                         volumeRef={volumeRef ?? { current: 0 }}
                         active={orbActive}
+                        isSpeaking={isSpeaking}
                       >
                         <AgentThinkingOrb
                           size={NOTCH_AGENT_ORB_SIZE_PX}
                           animation="none"
                           cloudTone={agentVoice.cloudTone}
                           customIcon={customIcon}
+                          mode={mode}
+                          isSpeaking={isSpeaking}
+                          volumeRef={volumeRef}
                         />
                       </VoiceVolumePulse>
                     }

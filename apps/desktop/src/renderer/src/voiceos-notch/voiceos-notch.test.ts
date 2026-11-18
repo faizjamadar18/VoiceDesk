@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceOsNotch } from './VoiceOsNotch'
+import { AgentThinkingOrb, VoiceVolumePulse } from './orb'
 import {
   VoiceOsAnswer,
   VoiceOsBottomHint,
@@ -369,6 +370,64 @@ describe('voiceos-notch UI', () => {
       expect(animator.start()).toBe(true)
       vi.advanceTimersByTime(NOTCH_DISMISS_ANIMATION_MS)
       expect(onFinish).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('AgentThinkingOrb', () => {
+    it('renders video element with voice-orb-small.mp4 when size <= 64', () => {
+      const html = renderToStaticMarkup(
+        createElement(AgentThinkingOrb, { size: 36 })
+      )
+      expect(html).toContain('voice-orb-small.mp4')
+      expect(html).toContain('<video')
+      expect(html).toContain('width:36px;height:36px')
+      expect(html).toContain('border-radius:50%')
+    })
+
+    it('renders video element with voice-orb-large.mp4 when size > 64', () => {
+      const html = renderToStaticMarkup(
+        createElement(AgentThinkingOrb, { size: 128 })
+      )
+      expect(html).toContain('voice-orb-large.mp4')
+      expect(html).toContain('<video')
+      expect(html).toContain('width:128px;height:128px')
+    })
+
+    it('renders customIcon image when customIcon is provided', () => {
+      const html = renderToStaticMarkup(
+        createElement(AgentThinkingOrb, { size: 36, customIcon: '/test-icon.png' })
+      )
+      expect(html).toContain('src="/test-icon.png"')
+      expect(html).not.toContain('<video')
+    })
+
+    it('supports mode, isSpeaking, and volumeRef without errors', () => {
+      const volumeRef = { current: 0.5 }
+      const html = renderToStaticMarkup(
+        createElement(AgentThinkingOrb, {
+          size: 36,
+          mode: 'responding',
+          isSpeaking: true,
+          volumeRef
+        })
+      )
+      expect(html).toContain('<video')
+      expect(html).toContain('voice-orb-small.mp4')
+    })
+  })
+
+  describe('VoiceVolumePulse', () => {
+    it('renders children with transform style and supports isSpeaking prop', () => {
+      const volumeRef = { current: 0 }
+      const html = renderToStaticMarkup(
+        createElement(
+          VoiceVolumePulse,
+          { volumeRef, active: true, isSpeaking: true },
+          createElement('div', { id: 'child-orb' })
+        )
+      )
+      expect(html).toContain('id="child-orb"')
+      expect(html).toContain('transform:scale(1)')
     })
   })
 })

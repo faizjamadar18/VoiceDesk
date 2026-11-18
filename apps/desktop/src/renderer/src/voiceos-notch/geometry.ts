@@ -38,7 +38,7 @@ export const NOTCH_BAND_SIDE_SLOT_HEIGHT_PX = 22;
 /** Horizontal inset of the band's contents from its edges. 267989 */
 export const NOTCH_BAND_EDGE_INSET_PX = 14;
 /** Diameter of the agent voice orb. 267990 */
-export const NOTCH_AGENT_ORB_SIZE_PX = 18;
+export const NOTCH_AGENT_ORB_SIZE_PX = 20;
 /** Expanded surface *content* width (excludes corner shoulders). 267991 */
 export const NOTCH_EXPANDED_WIDTH_PX = 480;
 

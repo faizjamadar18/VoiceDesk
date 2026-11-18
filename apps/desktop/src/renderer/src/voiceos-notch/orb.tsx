@@ -37,8 +37,8 @@ import {
   lerp,
   parseRgb
 } from "./geometry";
-import lensOverlay from "./assets/lens.png";
-import { getAgentVoiceCloudImage } from "./voices";
+import voiceOrbSmall from "./assets/voice-orb-small.mp4";
+import voiceOrbLarge from "./assets/voice-orb-large.mp4";
 
 const BOUNCE_MAX_SPEED = BOUNCE_CONSTANTS.BOUNCE_MAX_SPEED;
 
@@ -47,24 +47,85 @@ export interface AgentThinkingOrbProps {
   size?: number;
   cloudTone?: string;
   customIcon?: string;
+  mode?: string;
+  isSpeaking?: boolean;
+  volumeRef?: { current: number };
 }
 
-/** AgentThinkingOrb - 167808. */
+/** AgentThinkingOrb - Incredible Voice Orb (video-backed, speech & state adaptive). */
 export function AgentThinkingOrb({
-  animation = "cloud-sphere-spin 2s ease-in-out infinite",
+  animation,
   size = 16,
-  cloudTone = "blue",
-  customIcon
+  customIcon,
+  cloudTone: _cloudTone,
+  mode,
+  isSpeaking = false,
+  volumeRef
 }: AgentThinkingOrbProps): ReactNode {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoSrc = size <= 64 ? voiceOrbSmall : voiceOrbLarge;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.play()?.catch(() => {});
+  }, [videoSrc]);
+
+  // Dynamically adapt video playbackRate based on speech, thinking, listening, or idle state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let rafId = 0;
+    const updatePlaybackRate = (): void => {
+      const vol = Math.min(1, Math.max(0, volumeRef?.current ?? 0));
+      let targetRate = 0.85; // Calm idle swirl
+
+      if (isSpeaking || mode === "responding") {
+        // Incredible's 2.2x speed boost during speech response, modulated by speech loudness
+        targetRate = 1.8 + Math.min(0.4, vol * 0.8);
+      } else if (mode === "thinking") {
+        // Faster, energetic churning swirl while thinking
+        targetRate = 1.35;
+      } else if (mode === "listening") {
+        // Responds to user's mic input intensity while listening
+        targetRate = 1.0 + vol * 0.6;
+      }
+
+      if (Math.abs(video.playbackRate - targetRate) > 0.05) {
+        try {
+          video.playbackRate = targetRate;
+        } catch {
+          // Playback rate safety
+        }
+      }
+
+      rafId = requestAnimationFrame(updatePlaybackRate);
+    };
+
+    rafId = requestAnimationFrame(updatePlaybackRate);
+    return () => cancelAnimationFrame(rafId);
+  }, [isSpeaking, mode, volumeRef]);
+
   return (
     <div
+      data-testid="voice-orb"
+      data-renderer="video"
+      role="img"
+      aria-label="Incredible voice orb"
       style={{
         position: "relative",
         width: `${size}px`,
         height: `${size}px`,
         flexShrink: 0,
         borderRadius: "50%",
-        overflow: "hidden"
+        overflow: "hidden",
+        animation:
+          animation &&
+          animation !== "none" &&
+          animation !== "cloud-sphere-spin 2s ease-in-out infinite"
+            ? animation
+            : undefined
       }}
     >
       {customIcon ? (
@@ -83,68 +144,25 @@ export function AgentThinkingOrb({
           }}
         />
       ) : (
-        <>
-          <div
-            className="cloud-viewport"
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              overflow: "hidden",
-              backgroundImage: `url(${getAgentVoiceCloudImage(cloudTone)})`,
-              backgroundPosition: "90% 100%",
-              backgroundRepeat: "no-repeat",
-              backgroundSize: "120% 120%",
-              boxShadow:
-                "0 2px 6px rgba(0, 0, 0, 0.35), 0 0 2px rgba(0, 0, 0, 0.2), inset 0 2px 3px rgba(255, 255, 255, 0.35), inset 0 -2px 3px rgba(0, 0, 0, 0.2)",
-              animation
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(ellipse 70% 50% at 40% 25%, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.15) 40%, transparent 70%)",
-              pointerEvents: "none"
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(ellipse 60% 30% at 55% 80%, rgba(200,230,255,0.2) 0%, transparent 70%)",
-              pointerEvents: "none"
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              boxShadow:
-                "inset 0 0 4px rgba(210, 235, 255, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.3), inset 0 -1px 2px rgba(0, 0, 0, 0.15)",
-              border: "0.5px solid rgba(255, 255, 255, 0.25)",
-              pointerEvents: "none"
-            }}
-          />
-          <img
-            src={lensOverlay}
-            alt=""
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              borderRadius: "50%",
-              overflow: "hidden",
-              pointerEvents: "none"
-            }}
-          />
-        </>
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          loop
+          autoPlay
+          preload="auto"
+          src={videoSrc}
+          aria-hidden="true"
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "block",
+            borderRadius: "50%",
+            objectFit: "cover",
+            pointerEvents: "none",
+            transition: "opacity 180ms linear"
+          }}
+        />
       )}
     </div>
   );
@@ -154,14 +172,16 @@ export interface VoiceVolumePulseProps {
   volumeRef: { current: number };
   active: boolean;
   scaleAmount?: number;
-  children: ReactNode;
+  isSpeaking?: boolean;
+  children?: ReactNode;
 }
 
-/** VoiceVolumePulse - 253777. */
+/** VoiceVolumePulse - Incredible-style voice bouncing scale. */
 export function VoiceVolumePulse({
   volumeRef,
   active,
-  scaleAmount = 0.18,
+  scaleAmount = 0.28,
+  isSpeaking = false,
   children
 }: VoiceVolumePulseProps): ReactNode {
   const nodeRef = useRef<HTMLDivElement | null>(null);
@@ -173,17 +193,26 @@ export function VoiceVolumePulse({
       return;
     }
     let rafId = 0;
-    const tick = (): void => {
+    const tick = (now: number): void => {
       const current = nodeRef.current;
       if (current) {
-        const volume = Math.min(1, Math.max(0, volumeRef.current || 0));
+        let volume = Math.min(1, Math.max(0, volumeRef.current || 0));
+        // If speaking but volumeRef is 0/low (e.g. speech-synthesis fallback or between audio packets),
+        // modulate with natural speech syllable cadence so the orb breathes realistically
+        if (isSpeaking && volume <= 0.05) {
+          const t = now / 1000;
+          const primary = Math.max(0, Math.sin(t * 7.5));
+          const secondary = Math.max(0, Math.sin(t * 13.2 + 0.8));
+          const rhythm = (primary * 0.6 + secondary * 0.4) * (0.5 + 0.5 * Math.sin(t * 2.2));
+          volume = Math.min(1, Math.max(0, rhythm));
+        }
         current.style.transform = `scale(${1 + volume * scaleAmount})`;
       }
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [active, scaleAmount, volumeRef]);
+  }, [active, scaleAmount, volumeRef, isSpeaking]);
   return (
     <div
       ref={nodeRef}
