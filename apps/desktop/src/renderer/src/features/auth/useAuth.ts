@@ -71,7 +71,7 @@ export function useAuth(): {
       // Safe fallback for offline / development testing without active Supabase credentials
       await window.kestrel.setAuthSession(
         { accessToken: 'dev-access-token-faiz' },
-        { id: 'usr-faiz', email: 'faiz@voiceos.com', name: 'Faiz' }
+        { id: 'usr-faiz', email: 'faiz@voicedesk.app', name: 'Faiz' }
       )
     } catch (error) {
       console.error('[useAuth] Google sign-in failed:', error)
@@ -109,7 +109,7 @@ export function useAuth(): {
     await window.kestrel?.signOut()
   }, [])
 
-  const devSignIn = useCallback(async (email = 'faiz@voiceos.com', name = 'Faiz') => {
+  const devSignIn = useCallback(async (email = 'faiz@voicedesk.app', name = 'Faiz') => {
     await window.kestrel?.setAuthSession(
       { accessToken: `dev-token-${Date.now()}` },
       { id: 'usr-faiz', email, name }

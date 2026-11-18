@@ -201,7 +201,7 @@ function SidebarNavItem({
 function DashboardApp(): JSX.Element {
   const { user, signOut } = useAuth()
   const userName = user?.name || user?.email?.split('@')[0] || 'Faiz'
-  const userEmail = user?.email || 'faiz@voiceos.com'
+  const userEmail = user?.email || 'faiz@voicedesk.app'
   const { isDarkMode, systemTheme } = useSystemTheme()
   const greeting = getGreeting(new Date().getHours())
   const [activeTab, setActiveTab] = useState<TabId>('dashboard')
@@ -330,7 +330,7 @@ function DashboardApp(): JSX.Element {
             >
               <img
                 src={isDarkMode ? voiceOsLogoWhite : voiceOsLogoBlack}
-                alt="VoiceOS Logo"
+                alt="VoiceDesk Logo"
                 className="w-10 h-10 object-contain"
               />
             </div>
@@ -348,7 +348,7 @@ function DashboardApp(): JSX.Element {
             >
               <img
                 src={isDarkMode ? voiceOsWordmarkWhite : voiceOsWordmarkBlack}
-                alt="VoiceOS"
+                alt="VoiceDesk"
                 className="h-[22px] object-contain"
               />
               <div
