@@ -8,7 +8,7 @@ export interface AppUsageCardProps {
 }
 
 const DEFAULT_APPS: AppUsageItem[] = [
-  { name: 'VoiceOS', sessions: 3, share: 0.5, icon: 'voiceos' },
+  { name: 'VoiceDesk', sessions: 3, share: 0.5, icon: 'voiceos' },
   { name: 'explorer', sessions: 1, share: 0.17, icon: 'explorer' },
   { name: 'Antigravity IDE', sessions: 1, share: 0.17, icon: 'antigravity' },
   { name: 'msedge', sessions: 1, share: 0.17, icon: 'edge' }
@@ -98,7 +98,10 @@ export function AppUsageCard({ apps = DEFAULT_APPS, className = '' }: AppUsageCa
         {/* App rows */}
         <div className="flex flex-col gap-2.5">
           {items.map((app, index) => {
-            const isVoiceOS = app.name.toLowerCase().includes('voiceos') || app.icon === 'voiceos'
+            const isVoiceOS =
+              app.name.toLowerCase().includes('voicedesk') ||
+              app.name.toLowerCase().includes('voiceos') ||
+              app.icon === 'voiceos'
             const percentage = Math.round(app.share * 100)
 
             return (

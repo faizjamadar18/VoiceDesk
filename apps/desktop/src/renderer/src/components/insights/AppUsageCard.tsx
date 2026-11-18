@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { motion } from 'framer-motion'
 import { Card } from '../../features/profile/Card'
 import voiceosAppIcon from '../../assets/voiceos-app-icon.png'
+import { displayAppName } from '../../../../shared/app-name'
 import type { InsightsData } from './types'
 
 export interface AppUsageCardProps {
@@ -44,7 +45,7 @@ function EdgeIcon(): JSX.Element {
 
 function AppIcon({ name }: { name: string }): JSX.Element {
   const lower = name.toLowerCase()
-  if (lower.includes('voiceos')) {
+  if (lower.includes('voicedesk') || lower.includes('voiceos')) {
     return (
       <img
         src={voiceosAppIcon}
@@ -95,13 +96,14 @@ export function AppUsageCard({ data, isDarkMode = true }: AppUsageCardProps): JS
 
       <div className="space-y-2.5">
         {data.topApps.map((app, index) => {
+          const appName = displayAppName(app.appName)
           const percent = Math.round(app.share * 100)
           const color = barColor(index)
           const isLabelInside = percent >= 25
 
           return (
             <div key={app.appName} className="flex items-center gap-2.5">
-              <AppIcon name={app.appName} />
+              <AppIcon name={appName} />
 
               <div className="flex-1 min-w-0 relative h-[22px]">
                 <div
@@ -145,14 +147,14 @@ export function AppUsageCard({ data, isDarkMode = true }: AppUsageCardProps): JS
                 className={`text-[11px] w-[124px] flex-shrink-0 truncate ${
                   isDarkMode ? 'text-gray-400' : 'text-gray-500'
                 }`}
-                title={app.appName}
+                title={appName}
               >
                 <span
                   className={`font-semibold tabular-nums ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}
                 >
                   {app.sessions.toLocaleString()}
                 </span>{' '}
-                {app.appName}
+                {appName}
               </span>
             </div>
           )
