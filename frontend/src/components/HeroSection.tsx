@@ -116,7 +116,7 @@ function HeroTrailLayer() {
   return <div className="hero-trail-layer" ref={layerRef} aria-hidden="true" />;
 }
 
-// Sound wave equalizer / VoiceOS Orb component in the MacBook notch
+// Sound wave equalizer / VoiceDesk Orb component in the MacBook notch
 interface NotchOrbProps {
   mode: "waveform" | "loading" | "orb";
   size?: number;
@@ -381,13 +381,6 @@ const CARDS_DATA: CardData[] = [
 ];
 
 export default function HeroSection() {
-  const [isMac] = useState(() => {
-    if (typeof window !== "undefined") {
-      return !window.navigator.userAgent.toLowerCase().includes("win");
-    }
-    return true;
-  });
-
   // Timeline States:
   // 0: waveform listening (notch collapsed, sound waves oscillating, 620ms)
   // 1: loading processing (notch collapsed, loading pulse, 400ms)
@@ -642,12 +635,7 @@ export default function HeroSection() {
               <div className="relative z-[4] flex items-center justify-center">
                 <div className="glassmorphic-button-wrap w-full md:w-auto">
                   <a
-                    href={
-                      isMac
-                        ? "https://api.voiceos.com/delivery/releases/primary/VoiceOS-Installer.dmg"
-                        : "#download"
-                    }
-                    title="Download VoiceOS"
+                    aria-disabled="true"
                     className="glassmorphic-button w-full md:w-auto"
                   >
                     <span
@@ -660,33 +648,20 @@ export default function HeroSection() {
                         zIndex: 4,
                       }}
                     >
-                      {isMac ? (
-                        <svg
-                          className="w-6 h-6"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-5 h-5"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
-                        </svg>
-                      )}
-                      {isMac ? "Download for Mac" : "Download for Windows"}
+                      <svg
+                        className="w-5 h-5"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+                      </svg>
+                      Coming soon
                     </span>
                   </a>
                   <div className="glassmorphic-button-shadow" />
                 </div>
               </div>
-
-              <p className="mt-4 text-sm text-gray-500">7-day free trial · Cancel anytime</p>
             </div>
 
             {/* Desktop Screen Mock */}
@@ -700,7 +675,7 @@ export default function HeroSection() {
                   />
                   <img
                     src="/skyCloudsHero.webp"
-                    alt="Blue sky and clouds behind the VoiceOS desktop preview"
+                    alt="Blue sky and clouds behind the VoiceDesk desktop preview"
                     fetchPriority="high"
                     loading="eager"
                     width={3344}
@@ -762,7 +737,7 @@ export default function HeroSection() {
                     className="jsx-1861366530 lns-shade"
                   />
 
-                  {/* Notch Band: Equalizer audio bars oscillating / VoiceOS Orb */}
+                  {/* Notch Band: Equalizer audio bars oscillating / VoiceDesk Orb */}
                   <div className="lns-band ph-no-capture">
                     <NotchOrb mode={currentMode} size={18} />
                   </div>
