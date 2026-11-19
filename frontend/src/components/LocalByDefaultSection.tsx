@@ -69,8 +69,8 @@ export default function LocalByDefaultSection() {
             Local by default. Your own keys for the rest.
           </h2>
           <p className="t-subtitle l-head__sub">
-            Parakeet, Nemotron and Whisper run on your Mac or PC with no network at all. Cloud speech and AI only run when you add your own key, and the request goes straight to that provider.{" "}
-            <strong className="l-priv__strong">There is no VoiceOS cloud in between.</strong>
+            Parakeet, Nemotron and Whisper run on your PC with no network at all. Cloud speech and AI only run when you add your own key, and the request goes straight to that provider.{" "}
+            <strong className="l-priv__strong">There is no VoiceDesk cloud in between.</strong>
           </p>
         </header>
 

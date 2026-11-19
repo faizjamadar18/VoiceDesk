@@ -65,7 +65,7 @@ export default function PrivacySection() {
               What you say<br />stays yours
             </h2>
             <p className="pv-copy-lede text-center text-base md:text-lg leading-relaxed max-w-xl font-medium">
-              Your audio is never stored on our servers and never used to train models. You decide what leaves your Mac.
+              Your audio is never stored on our servers and never used to train models. You decide what leaves your PC.
             </p>
           </div>
 
