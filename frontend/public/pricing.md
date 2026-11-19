@@ -1,6 +1,6 @@
-# VoiceOS pricing
+# VoiceDesk pricing
 
-VoiceOS offers paid Pro and custom Enterprise plans for Mac and Windows. There is no free sign-up plan.
+VoiceDesk offers paid Pro and custom Enterprise plans for Windows. There is no free sign-up plan.
 
 Updated: October 2, 2026.
 
@@ -16,7 +16,7 @@ Includes unlimited Dictation and Agent Mode usage, selected-text editing, custom
 
 ## Enterprise
 
-Custom pricing. Contact VoiceOS to confirm seats, administration, retention terms, and identity-provider requirements, including SSO/SAML. Available contractual terms must be confirmed for the deployment.
+Custom pricing. Contact VoiceDesk to confirm seats, administration, retention terms, and identity-provider requirements, including SSO/SAML. Available contractual terms must be confirmed for the deployment.
 
 ## Existing accounts after cancellation
 
@@ -24,6 +24,6 @@ When paid Pro access ends after cancellation, existing accounts have limited acc
 
 ## Privacy
 
-Cloud processing and retention are separate. Help Improve VoiceOS changes collection and training permissions. See the [Privacy Policy](https://www.voiceos.com/privacy) for the full rules.
+Cloud processing and retention are separate. Help Improve VoiceDesk changes collection and training permissions. See the [Privacy Policy](https://www.voicedesk.app/privacy) for the full rules.
 
-[Current pricing and checkout information](https://www.voiceos.com/pricing). Contact: support@voiceos.com.
+[Current pricing and checkout information](https://www.voicedesk.app/pricing). Contact: support@voicedesk.app.
