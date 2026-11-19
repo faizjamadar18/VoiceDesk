@@ -124,13 +124,13 @@ export default function ProductivityGraphSection() {
           <div className="jsx-ca39cb8ef7861e9f pg-copy">
             <h2 className="jsx-ca39cb8ef7861e9f section-title pg-title">Not just another dictation app</h2>
             <p className="jsx-ca39cb8ef7861e9f pg-sub">
-              Dictation only speeds up your typing. VoiceOS multiplies your productivity.
+              Dictation only speeds up your typing. VoiceDesk multiplies your productivity.
             </p>
           </div>
 
           <div
             role="img"
-            aria-label="Relative productivity of typing, dictation, and VoiceOS"
+            aria-label="Relative productivity of typing, dictation, and VoiceDesk"
             className="jsx-ca39cb8ef7861e9f pg-chart"
           >
             <div className="jsx-ca39cb8ef7861e9f pg-cols">
@@ -183,7 +183,7 @@ export default function ProductivityGraphSection() {
                 >
                   <span className="jsx-ca39cb8ef7861e9f pg-sky" />
                   <Image
-                    alt="VoiceOS logo"
+                    alt="VoiceDesk logo"
                     width={240}
                     height={80}
                     className="pg-marklogo"
@@ -208,7 +208,7 @@ export default function ProductivityGraphSection() {
                 style={{ "--pg-d": "0.85s" } as React.CSSProperties}
                 className="jsx-ca39cb8ef7861e9f pg-name"
               >
-                VoiceOS
+                VoiceDesk
               </span>
             </div>
           </div>
