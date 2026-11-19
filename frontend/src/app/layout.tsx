@@ -9,26 +9,26 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.voiceos.com"),
-  title: "VoiceOS - AI Voice Agent and Dictation for Mac and Windows",
+  metadataBase: new URL("https://www.voicedesk.app"),
+  title: "VoiceDesk - AI Voice Agent and Dictation for Windows",
   description:
-    "VoiceOS is a voice operating system and AI voice assistant for Mac and Windows that turns voice to action: dictate, send messages, search the web, and automate tasks across apps with your voice.",
+    "VoiceDesk is a voice operating system and AI voice assistant for Windows that turns voice to action: dictate, send messages, search the web, and automate tasks across apps with your voice.",
   icons: {
     icon: "/favicon.png",
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    title: "VoiceOS - AI Voice Agent and Dictation for Mac and Windows",
+    title: "VoiceDesk - AI Voice Agent and Dictation for Windows",
     description:
-      "VoiceOS is a voice operating system that turns voice to action. The AI voice assistant for Mac and Windows turns speech into polished writing and real actions across apps.",
-    url: "https://www.voiceos.com",
-    siteName: "VoiceOS",
+      "VoiceDesk is a voice operating system that turns voice to action. The AI voice assistant for Windows turns speech into polished writing and real actions across apps.",
+    url: "https://www.voicedesk.app",
+    siteName: "VoiceDesk",
     images: [
       {
         url: "/voiceOsOpenGraph.png",
         width: 1200,
         height: 630,
-        alt: "VoiceOS",
+        alt: "VoiceDesk",
       },
     ],
     locale: "en_US",
@@ -36,9 +36,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "VoiceOS - AI Voice Agent and Dictation for Mac and Windows",
+    title: "VoiceDesk - AI Voice Agent and Dictation for Windows",
     description:
-      "VoiceOS is a voice operating system that turns voice to action. The AI voice assistant for Mac and Windows turns speech into polished writing and real actions across apps.",
+      "VoiceDesk is a voice operating system that turns voice to action. The AI voice assistant for Windows turns speech into polished writing and real actions across apps.",
     images: ["/voiceOsTwitter.png"],
   },
 };
