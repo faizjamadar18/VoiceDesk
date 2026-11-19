@@ -1,7 +1,7 @@
 {
-  "name": "VoiceOS - AI Voice Productivity for Mac & Windows",
-  "short_name": "VoiceOS",
-  "description": "An agentic voice app that lets you talk to your computer instead of typing. Voice-powered productivity for macOS and Windows.",
+  "name": "VoiceDesk - AI Voice Productivity for Windows",
+  "short_name": "VoiceDesk",
+  "description": "An agentic voice app that lets you talk to your computer instead of typing. Voice-powered productivity for Windows.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F9F9F9",

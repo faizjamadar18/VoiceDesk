@@ -1,22 +1,22 @@
 {
-  "name": "VoiceOS",
-  "description": "VoiceOS is a cloud-connected voice assistant and dictation app for Mac and Windows. It provides text input, selected-text editing, and supported actions in connected apps.",
-  "url": "https://www.voiceos.com",
+  "name": "VoiceDesk",
+  "description": "VoiceDesk is a cloud-connected voice assistant and dictation app for Windows. It provides text input, selected-text editing, and supported actions in connected apps.",
+  "url": "https://www.voicedesk.app",
   "provider": {
     "name": "WakoAI Inc.",
-    "url": "https://www.voiceos.com/about"
+    "url": "https://www.voicedesk.app/about"
   },
   "contact": {
-    "email": "support@voiceos.com"
+    "email": "support@voicedesk.app"
   },
   "documentation": {
-    "llms": "https://www.voiceos.com/llms.txt",
-    "llmsFull": "https://www.voiceos.com/llms-full.txt",
-    "agents": "https://www.voiceos.com/agents.md",
-    "pricing": "https://www.voiceos.com/pricing.md",
-    "markdown": "https://www.voiceos.com/index.md",
-    "docs": "https://docs.voiceos.com/",
-    "security": "https://www.voiceos.com/security"
+    "llms": "https://www.voicedesk.app/llms.txt",
+    "llmsFull": "https://www.voicedesk.app/llms-full.txt",
+    "agents": "https://www.voicedesk.app/agents.md",
+    "pricing": "https://www.voicedesk.app/pricing.md",
+    "markdown": "https://www.voicedesk.app/index.md",
+    "docs": "https://docs.voicedesk.app/",
+    "security": "https://www.voicedesk.app/security"
   },
   "capabilities": [
     "system-wide AI dictation",
@@ -28,7 +28,6 @@
     "desktop app voice control"
   ],
   "platforms": [
-    "macOS",
     "Windows"
   ],
   "languages": [
@@ -41,12 +40,12 @@
     "enterprise": "Contact sales"
   },
   "integrations": [
-    "See https://www.voiceos.com/app-store for supported actions, platforms, and permissions. Text entry into an app does not imply a dedicated action integration."
+    "See https://www.voicedesk.app/app-store for supported actions, platforms, and permissions. Text entry into an app does not imply a dedicated action integration."
   ],
   "safety": {
     "actionConfirmation": "Varies by tool; the integration catalog marks actions that ask first.",
     "processing": "Cloud processing is required.",
-    "retention": "With Help Improve VoiceOS off, raw audio and transcripts are deleted after processing and are not used for VoiceOS model training. Opting in changes retention and training permissions.",
-    "policy": "https://www.voiceos.com/privacy"
+    "retention": "With Help Improve VoiceDesk off, raw audio and transcripts are deleted after processing and are not used for VoiceDesk model training. Opting in changes retention and training permissions.",
+    "policy": "https://www.voicedesk.app/privacy"
   }
 }
