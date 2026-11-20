@@ -503,7 +503,7 @@ export default function HeroSection() {
   const cursorStyle = useMemo((): React.CSSProperties => {
     if (cursorTarget === "send" || cursorTarget === "click") {
       return {
-        top: "calc(18px + 233px - 34px)",
+        top: "calc(233px - 34px)",
         left: "calc(50% + min(23%, 215px) - 52px)",
         zIndex: 60,
         transform: cursorTarget === "click" ? "scale(0.85)" : "scale(1)",
@@ -611,7 +611,7 @@ export default function HeroSection() {
             <div className="relative text-center max-w-4xl" style={{ zIndex: 3 }}>
               {/* Title */}
               <h1
-                className="section-title mb-6 leading-tight"
+                className="section-title mb-4 leading-[1.12]"
                 style={{
                   fontSize: "clamp(2.1rem, 10.2vw, 4.75rem)",
                   fontWeight: 600,
@@ -630,6 +630,12 @@ export default function HeroSection() {
                   Speak once.{"\n"}Watch it happen.
                 </span>
               </h1>
+
+              {/* Subheading */}
+              <p className="mx-auto mb-4 max-w-2xl text-base leading-relaxed text-gray-500 md:text-lg">
+                Hold a key and speak into any app. VoiceDesk types, searches and acts
+                for you, on speech models that run on your own machine.
+              </p>
 
               {/* CTA Button */}
               <div className="relative z-[4] flex items-center justify-center">
@@ -663,25 +669,26 @@ export default function HeroSection() {
                 </div>
               </div>
 
-              <p className="mt-4 text-sm text-gray-500">Try it out for free</p>
+              {/* Microcopy */}
+              <p className="mt-2 text-xs text-gray-500">Free to use. Private by default.</p>
             </div>
 
             {/* Desktop Screen Mock */}
-            <div className="flex justify-center w-full mt-8 md:mt-10" style={{ zIndex: 3 }}>
+            <div className="flex justify-center w-full mt-6 mb-12 md:mb-16" style={{ zIndex: 3 }}>
               <div aria-hidden="true" className="jsx-1573246498 hero-screen">
                 <picture className="jsx-1573246498">
                   <source
                     media="(max-width: 767px)"
-                    srcSet="/skyCloudsHero-mobile.webp"
+                    srcSet="/wallpapers/option-3c-wispy-cirrus-mobile.webp"
                     className="jsx-1573246498"
                   />
                   <img
-                    src="/skyCloudsHero.webp"
-                    alt="Blue sky and clouds behind the VoiceDesk desktop preview"
+                    src="/wallpapers/option-3c-wispy-cirrus.webp"
+                    alt="Sunlit cirrus clouds behind the VoiceDesk desktop preview"
                     fetchPriority="high"
                     loading="eager"
-                    width={3344}
-                    height={1882}
+                    width={2752}
+                    height={1536}
                     className="jsx-1573246498 hero-screen-wallpaper"
                   />
                 </picture>
@@ -712,31 +719,19 @@ export default function HeroSection() {
                   <HeroSentPill appIcon={activeCard.app} sentText={activeCard.sent} />
                 )}
 
-                {/* macOS Menubar */}
-                <div className="jsx-1573246498 hero-screen-menubar" />
-
                 {/* MacBook Notch with Liquid Glass and Live Animated Card */}
                 <div
                   className={`jsx-1861366530 lns hero-screen-notch${isNotchOpen ? " is-open" : ""}`}
                 >
-                  <div aria-hidden="true" className="jsx-1861366530 lns-glass" />
                   <div
                     style={{
                       clipPath: isNotchOpen ? Y_CLIP : V_CLIP,
                       WebkitClipPath: isNotchOpen ? Y_CLIP : V_CLIP,
                       transition: "clip-path 300ms cubic-bezier(0.5, 0, 0.75, 0)",
+                      backgroundColor: "#03050a",
                     }}
                     aria-hidden="true"
                     className="jsx-1861366530 lns-tint"
-                  />
-                  <div
-                    style={{
-                      clipPath: isNotchOpen ? Y_CLIP : V_CLIP,
-                      WebkitClipPath: isNotchOpen ? Y_CLIP : V_CLIP,
-                      transition: "clip-path 300ms cubic-bezier(0.5, 0, 0.75, 0)",
-                    }}
-                    aria-hidden="true"
-                    className="jsx-1861366530 lns-shade"
                   />
 
                   {/* Notch Band: Equalizer audio bars oscillating / VoiceDesk Orb */}
