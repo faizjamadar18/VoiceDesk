@@ -627,7 +627,7 @@ export default function HeroSection() {
                       "linear-gradient(90deg, #0a0a0a 0%, #0a0a0a 33.33%, #1e3a8a 40%, #2563eb 45%, #c9a84c 50%, #dbeafe 55%, #0358f7 60%, #0a0a0a 66.67%, #0a0a0a)",
                   }}
                 >
-                  Voice assistant{"\n"}at your fingertips
+                  Speak once.{"\n"}Watch it happen.
                 </span>
               </h1>
 
@@ -662,6 +662,8 @@ export default function HeroSection() {
                   <div className="glassmorphic-button-shadow" />
                 </div>
               </div>
+
+              <p className="mt-4 text-sm text-gray-500">Try it out for free</p>
             </div>
 
             {/* Desktop Screen Mock */}
