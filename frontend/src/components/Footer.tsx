@@ -2,14 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const LETTERS = [
-  { char: "v", triangle: true, anchor: true, collapsed: 520, final: 170, appearAt: 0 },
-  { char: "o", collapsed: 648, final: 320, appearAt: 0.1 },
-  { char: "i", collapsed: 656, final: 445, appearAt: 0.2 },
-  { char: "c", collapsed: 662, final: 565, appearAt: 0.3 },
-  { char: "e", collapsed: 670, final: 712, appearAt: 0.4 },
-  { char: "o", filled: true, anchor: true, collapsed: 665, final: 868, appearAt: 0 },
-  { char: "s", collapsed: 685, final: 1015, appearAt: 0.5 },
+interface LetterItem {
+  char: string;
+  triangle?: boolean;
+  collapsed: number;
+  final: number;
+  appearAt: number;
+}
+
+const LETTERS: LetterItem[] = [
+  { char: "v", triangle: true, collapsed: 560, final: 110, appearAt: 0 },
+  { char: "o", collapsed: 650, final: 270, appearAt: 0.08 },
+  { char: "i", collapsed: 675, final: 378, appearAt: 0.16 },
+  { char: "c", collapsed: 690, final: 487, appearAt: 0.24 },
+  { char: "e", collapsed: 700, final: 649, appearAt: 0.32 },
+  { char: "d", collapsed: 710, final: 810, appearAt: 0.40 },
+  { char: "e", collapsed: 720, final: 969, appearAt: 0.48 },
+  { char: "s", collapsed: 730, final: 1128, appearAt: 0.56 },
+  { char: "k", collapsed: 750, final: 1278, appearAt: 0.64 },
 ];
 
 const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
@@ -80,22 +90,19 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6">
         {/* Big animated VoiceDesk gooey SVG logo */}
         <div ref={containerRef} className="w-full select-none pointer-events-none text-neutral-300 my-8" aria-hidden="true">
-          <svg viewBox="90 48 1000 240" fill="none" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", width: "100%", height: "auto", aspectRatio: "1000 / 240" }}>
+          <svg viewBox="0 48 1400 240" fill="none" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", width: "100%", height: "auto", aspectRatio: "1400 / 240" }}>
             <defs>
-              <filter id="voiceos-goo" x="-30%" y="-30%" width="160%" height="160%">
+              <filter id="voicedesk-goo" x="-30%" y="-30%" width="160%" height="160%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation={stdDev} result="blur" />
                 <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
               </filter>
             </defs>
-            <g filter="url(#voiceos-goo)" fill="currentColor">
+            <g filter="url(#voicedesk-goo)" fill="currentColor">
               {LETTERS.map((item, idx) => {
                 const currentX = item.collapsed + (item.final - item.collapsed) * ease;
                 const opacity = item.appearAt === 0 ? 1 : clamp((progress - item.appearAt) / 0.22, 0, 1);
                 if (item.triangle) {
                   return <path key={idx} d={getTrianglePath(currentX)} opacity={opacity} />;
-                }
-                if (item.filled) {
-                  return <circle key={idx} cx={currentX} cy={191} r={71} opacity={opacity} />;
                 }
                 return (
                   <text
