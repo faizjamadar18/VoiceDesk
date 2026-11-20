@@ -1,32 +1,124 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useState } from "react";
 
-const FAQ_HTML = `<section id="faq" class="jsx-2ae46a08699e61e9 relative px-4 py-24 md:px-8 md:py-32 overflow-hidden bg-transparent"><div class="jsx-2ae46a08699e61e9 relative max-w-4xl mx-auto"><div class="jsx-2ae46a08699e61e9 text-center mb-16"><h2 class="jsx-2ae46a08699e61e9 section-title text-5xl md:text-6xl font-normal text-gray-900 mb-6 tracking-tight">Questions?</h2></div><div class="jsx-2ae46a08699e61e9 liquid-glass-card rounded-3xl overflow-hidden p-3"><div class="jsx-2ae46a08699e61e9"><button style="-webkit-tap-highlight-color:transparent;outline:none" aria-expanded="false" class="jsx-2ae46a08699e61e9 w-full text-left px-8 py-5 flex justify-between items-center outline-none focus:outline-none focus-visible:outline-none border-none focus:border-none transition-all duration-200 hover:bg-white/30 rounded-xl"><span class="jsx-2ae46a08699e61e9 text-base md:text-lg font-normal text-gray-900 pr-6">How is VoiceDesk different from traditional speech recognition?</span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="jsx-2ae46a08699e61e9 w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 "><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" class="jsx-2ae46a08699e61e9"></path></svg></button><div class="jsx-2ae46a08699e61e9 overflow-hidden transition-all duration-200 max-h-0"><div class="jsx-2ae46a08699e61e9 px-8 pb-5 text-gray-600 leading-relaxed font-light [&amp;_strong]:font-medium [&amp;_strong]:text-gray-800">VoiceDesk uses advanced AI to go beyond basic speech-to-text. While Windows Dictation transcribes exactly what you say (including 'um' and 'uh'), VoiceDesk <strong>automatically removes filler words</strong>, fixes grammar, and formats your text professionally. It's like having an <strong>editor built in</strong>, perfect for emails, documents, and messaging.</div></div><div class="jsx-2ae46a08699e61e9 border-b border-gray-100/50 mx-8"></div></div><div class="jsx-2ae46a08699e61e9"><button style="-webkit-tap-highlight-color:transparent;outline:none" aria-expanded="false" class="jsx-2ae46a08699e61e9 w-full text-left px-8 py-5 flex justify-between items-center outline-none focus:outline-none focus-visible:outline-none border-none focus:border-none transition-all duration-200 hover:bg-white/30 rounded-xl"><span class="jsx-2ae46a08699e61e9 text-base md:text-lg font-normal text-gray-900 pr-6">Is my data private and secure with VoiceDesk?</span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="jsx-2ae46a08699e61e9 w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 "><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" class="jsx-2ae46a08699e61e9"></path></svg></button><div class="jsx-2ae46a08699e61e9 overflow-hidden transition-all duration-200 max-h-0"><div class="jsx-2ae46a08699e61e9 px-8 pb-5 text-gray-600 leading-relaxed font-light [&amp;_strong]:font-medium [&amp;_strong]:text-gray-800">Absolutely. VoiceDesk processes your audio in real time and <strong>never stores it</strong> unless you give permission to help improve the product. Your transcripts are <strong>saved locally on your device</strong>, giving you full control over them. None of your data is used for training or shared with anyone. Privacy and security are built into everything we do.</div></div><div class="jsx-2ae46a08699e61e9 border-b border-gray-100/50 mx-8"></div></div><div class="jsx-2ae46a08699e61e9"><button style="-webkit-tap-highlight-color:transparent;outline:none" aria-expanded="false" class="jsx-2ae46a08699e61e9 w-full text-left px-8 py-5 flex justify-between items-center outline-none focus:outline-none focus-visible:outline-none border-none focus:border-none transition-all duration-200 hover:bg-white/30 rounded-xl"><span class="jsx-2ae46a08699e61e9 text-base md:text-lg font-normal text-gray-900 pr-6">What apps does VoiceDesk work with?</span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="jsx-2ae46a08699e61e9 w-5 h-5 text-gray-400 flex-shrink-0 transition-transform duration-200 "><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" class="jsx-2ae46a08699e61e9"></path></svg></button><div class="jsx-2ae46a08699e61e9 overflow-hidden transition-all duration-200 max-h-0"><div class="jsx-2ae46a08699e61e9 px-8 pb-5 text-gray-600 leading-relaxed font-light [&amp;_strong]:font-medium [&amp;_strong]:text-gray-800">VoiceDesk works seamlessly across <strong>your favorite apps</strong> like Gmail, Slack, Notion, Google Docs, iMessage, WhatsApp, and more. Whether you're writing code in Cursor, chatting in Messenger, or drafting in Obsidian, VoiceDesk is there to help you <strong>communicate faster</strong>.</div></div></div></div></div></section>`;
+interface FaqItem {
+  question: string;
+  answerHtml: string;
+  plainAnswer: string;
+}
+
+const FAQS: FaqItem[] = [
+  {
+    question: "Is my voice data private?",
+    answerHtml:
+      "Yes. VoiceDesk transcribes <strong>on your PC</strong>, and your audio stays in memory — it is <strong>never uploaded or stored</strong>. Transcripts are saved on your device, and nothing is used to train models. Cloud speech and AI only run if you <strong>add your own key</strong>, and the request goes straight to that provider. There is <strong>no VoiceDesk cloud in between</strong>.",
+    plainAnswer:
+      "Yes. VoiceDesk transcribes on your PC, and your audio stays in memory — it is never uploaded or stored. Transcripts are saved on your device, and nothing is used to train models. Cloud speech and AI only run if you add your own key, and the request goes straight to that provider. There is no VoiceDesk cloud in between.",
+  },
+  {
+    question: "Which apps does VoiceDesk work with?",
+    answerHtml:
+      "The ones you already use. Hold <strong>Ctrl+Space</strong> and speak while Gmail, Slack, Notion, Google Docs, Outlook, Cursor, VS Code, WhatsApp, Messages or any other app is in front of you — VoiceDesk types and acts right there, <strong>without pulling you out of it</strong>.",
+    plainAnswer:
+      "The ones you already use. Hold Ctrl+Space and speak while Gmail, Slack, Notion, Google Docs, Outlook, Cursor, VS Code, WhatsApp, Messages or any other app is in front of you — VoiceDesk types and acts right there, without pulling you out of it.",
+  },
+  {
+    question: "What do I need to run it?",
+    answerHtml:
+      "A <strong>Windows 10 or 11</strong> PC and a microphone. During setup you allow three things — your microphone, accessibility (so it can type for you) and screen recording (so it can answer questions about your screen). Speech runs <strong>on your machine</strong>, so it starts fast and stays private.",
+    plainAnswer:
+      "A Windows 10 or 11 PC and a microphone. During setup you allow three things — your microphone, accessibility (so it can type for you) and screen recording (so it can answer questions about your screen). Speech runs on your machine, so it starts fast and stays private.",
+  },
+];
+
+const FAQ_SCHEMA = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.plainAnswer,
+    },
+  })),
+};
 
 export default function FaqSection() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    const buttons = containerRef.current?.querySelectorAll("button");
-    if (!buttons) return;
+  const toggleFaq = (index: number) => {
+    setOpenIndex((prev) => (prev === index ? null : index));
+  };
 
-    buttons.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const answer = btn.nextElementSibling as HTMLElement | null;
-        if (answer) {
-          const isOpen = answer.style.maxHeight && answer.style.maxHeight !== "0px";
-          if (isOpen) {
-            answer.style.maxHeight = "0px";
-            answer.style.opacity = "0";
-          } else {
-            answer.style.maxHeight = answer.scrollHeight + "px";
-            answer.style.opacity = "1";
-          }
-        }
-      });
-    });
-  }, []);
-
-  return <div ref={containerRef} className="contents" dangerouslySetInnerHTML={{ __html: FAQ_HTML }} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }}
+      />
+      <section
+        id="faq"
+        className="jsx-2ae46a08699e61e9 relative px-4 py-24 md:px-8 md:py-32 overflow-hidden bg-transparent"
+      >
+        <div className="jsx-2ae46a08699e61e9 relative max-w-4xl mx-auto">
+          <div className="jsx-2ae46a08699e61e9 text-center mb-16">
+            <h2 className="jsx-2ae46a08699e61e9 section-title text-5xl md:text-6xl font-normal text-gray-900 mb-6 tracking-tight">
+              Questions?
+            </h2>
+          </div>
+          <div className="jsx-2ae46a08699e61e9 liquid-glass-card rounded-3xl overflow-hidden p-3">
+            {FAQS.map((item, index) => {
+              const isOpen = openIndex === index;
+              return (
+                <div key={item.question} className="jsx-2ae46a08699e61e9">
+                  <button
+                    type="button"
+                    onClick={() => toggleFaq(index)}
+                    style={{ WebkitTapHighlightColor: "transparent", outline: "none" }}
+                    aria-expanded={isOpen}
+                    className="jsx-2ae46a08699e61e9 w-full text-left px-8 py-5 flex justify-between items-center outline-none focus:outline-none focus-visible:outline-none border-none focus:border-none transition-all duration-200 hover:bg-white/30 rounded-xl cursor-pointer"
+                  >
+                    <span className="jsx-2ae46a08699e61e9 text-base md:text-lg font-normal text-gray-900 pr-6">
+                      {item.question}
+                    </span>
+                    <svg
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      className={`jsx-2ae46a08699e61e9 w-5 h-5 text-gray-400 shrink-0 transition-transform duration-200 ${
+                        isOpen ? "transform rotate-180" : ""
+                      }`}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                        className="jsx-2ae46a08699e61e9"
+                      />
+                    </svg>
+                  </button>
+                  <div
+                    className={`jsx-2ae46a08699e61e9 overflow-hidden transition-all duration-200 ${
+                      isOpen ? "max-h-96" : "max-h-0"
+                    }`}
+                  >
+                    <div
+                      dangerouslySetInnerHTML={{ __html: item.answerHtml }}
+                      className="jsx-2ae46a08699e61e9 px-8 pb-5 text-gray-600 leading-relaxed font-light [&_strong]:font-medium [&_strong]:text-gray-800"
+                    />
+                  </div>
+                  {index < FAQS.length - 1 && (
+                    <div className="jsx-2ae46a08699e61e9 border-b border-gray-100/50 mx-8" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    </>
+  );
 }
