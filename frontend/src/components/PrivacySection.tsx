@@ -62,10 +62,10 @@ export default function PrivacySection() {
             </div>
 
             <h2 className="text-center text-3xl md:text-[2.75rem] lg:text-5xl leading-[1.15] tracking-tight font-semibold mb-5">
-              What you say<br />stays yours
+              Nothing leaves<br />unless you choose
             </h2>
             <p className="pv-copy-lede text-center text-base md:text-lg leading-relaxed max-w-xl font-medium">
-              Your audio is never stored on our servers and never used to train models. You decide what leaves your PC.
+              Your audio never touches a VoiceDesk server and is never used to train models. Local by default, cloud only with your own key.
             </p>
           </div>
 
@@ -82,25 +82,25 @@ export default function PrivacySection() {
                 <div className="pv-rows">
                   <div className="pv-row">
                     <span className="pv-row-label">Save transcripts on this device</span>
-                    <span className="pv-sw" aria-hidden="true" />
+                    <span className="pv-val">Always local</span>
                   </div>
                   <div className="pv-row">
-                    <span className="pv-row-label">Don&apos;t save audio in the cloud</span>
-                    <span className="pv-sw" aria-hidden="true" />
+                    <span className="pv-row-label">Keep audio on this PC by default</span>
+                    <span className="pv-val">On this PC</span>
                   </div>
                   <div className="pv-row">
                     <span className="pv-row-label">Never use my dictation to train AI models</span>
-                    <span className="pv-sw" aria-hidden="true" />
+                    <span className="pv-val">No training</span>
                   </div>
                 </div>
-                <p className="pv-group">Optional sharing</p>
+                <p className="pv-group">Cloud, your key</p>
                 <div className="pv-rows">
                   <div className="pv-row">
-                    <span className="pv-row-label">Send anonymous diagnostics and crash reports</span>
-                    <span className="pv-sw pv-sw--off" aria-hidden="true" />
+                    <span className="pv-row-label">Send audio to the provider I choose</span>
+                    <span className="pv-val">Your key only</span>
                   </div>
                 </div>
-                <p className="pv-note">Never includes raw audio or full transcripts tied to you.</p>
+                <p className="pv-note">The request goes straight there. There is no VoiceDesk cloud in between.</p>
               </div>
             </div>
           </div>
