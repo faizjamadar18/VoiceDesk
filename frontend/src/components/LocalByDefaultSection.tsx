@@ -88,7 +88,7 @@ export default function LocalByDefaultSection() {
                       className="l-net__sw"
                       onClick={() => setIsNetOn((prev) => !prev)}
                     >
-                      <span className="l-net__wifi" aria-hidden="true">
+                      <span className="l-net__icon" aria-hidden="true">
                         <svg
                           viewBox="0 0 20 16"
                           width="16"
@@ -103,7 +103,7 @@ export default function LocalByDefaultSection() {
                           {!isNetOn && <path d="M3 1.5l14 13" />}
                         </svg>
                       </span>
-                      <span>Wi-Fi</span>
+                      <span>Internet</span>
                       <span className="l-net__track" aria-hidden="true">
                         <span className="l-net__knob" />
                       </span>
@@ -111,13 +111,13 @@ export default function LocalByDefaultSection() {
                     </button>
                     <p className="l-net__msg">
                       <span className="l-net__hint" aria-hidden="true">
-                        Try it: turn Wi-Fi off.
+                        Try it: turn Internet off.
                       </span>
                       <span className="l-net__note" aria-hidden="true">
                         Nothing changed. That is the point.
                       </span>
                       <span className="sr-only" aria-live="polite">
-                        {isNetOn ? "Try it: turn Wi-Fi off." : "Nothing changed. That is the point."}
+                        {isNetOn ? "Try it: turn Internet off." : "Nothing changed. That is the point."}
                       </span>
                     </p>
                   </div>
