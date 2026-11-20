@@ -804,7 +804,8 @@ button.jsx-2ae46a08699e61e9{-webkit-tap-highlight-color:transparent;border:none!
   background: var(--surface-2, #ededf2);
 }
 
-.l-net__wifi {
+.l-net__wifi,
+.l-net__icon {
   display: grid;
   place-items: center;
   color: var(--fg-2, #636368);
