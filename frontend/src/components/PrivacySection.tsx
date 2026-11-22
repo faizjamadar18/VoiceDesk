@@ -2,6 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 
+/**
+ * Interactive privacy guarantee section with live security toggle.
+ *
+ * Visualizes the zero-telemetry local boundary with day/night celestial lighting
+ * transitions, accessible switch semantics (`role="switch"`, `aria-checked`),
+ * and transparent local-first memory guarantees.
+ */
 export default function PrivacySection() {
   const [isLocked, setIsLocked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
