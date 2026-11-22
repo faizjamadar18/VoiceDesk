@@ -58,6 +58,12 @@ const GROUPS: ProviderGroup[] = [
   },
 ];
 
+/**
+ * Local-first architecture breakdown and provider ecosystem showcase.
+ *
+ * Illustrates the dual-engine paradigm: private zero-retention on-device transcription
+ * (NVIDIA Parakeet/Nemotron, Whisper) paired with optional BYOK cloud speech/LLM APIs.
+ */
 export default function LocalByDefaultSection() {
   const [isNetOn, setIsNetOn] = useState(true);
 
