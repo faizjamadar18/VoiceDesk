@@ -94,12 +94,6 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-/**
- * Interactive application dock simulating cross-platform desktop voice input.
- *
- * Features floating app tiles with real-time audio waveform/quote simulation,
- * active app state indicators, and keyboard navigation support across major desktop tools.
- */
 export default function WorksWhereverDock() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
