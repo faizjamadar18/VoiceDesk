@@ -45,13 +45,6 @@ const FAQ_SCHEMA = {
   })),
 };
 
-/**
- * Frequently Asked Questions (FAQ) accordion section with structured metadata.
- *
- * Renders localized security, app compatibility, and architecture answers while
- * injecting `schema.org/FAQPage` JSON-LD markup into the document tree for search
- * engine rich snippet optimization.
- */
 export default function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
