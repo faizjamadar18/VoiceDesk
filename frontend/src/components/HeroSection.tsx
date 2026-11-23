@@ -380,13 +380,6 @@ const CARDS_DATA: CardData[] = [
   },
 ];
 
-/**
- * Primary landing hero showcasing the macOS-inspired interactive liquid notch.
- *
- * Coordinates multi-state SVG clip-path morphing between collapsed listening
- * (`V_CLIP`) and expanded card (`Y_CLIP`) geometries, accompanied by hardware-accelerated
- * mouse-tracking sprite trail animations with strict reduced-motion accessibility fallbacks.
- */
 export default function HeroSection() {
   // Timeline States:
   // 0: waveform listening (notch collapsed, sound waves oscillating, 620ms)
