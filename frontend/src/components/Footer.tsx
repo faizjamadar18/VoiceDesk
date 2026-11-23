@@ -52,13 +52,6 @@ function getTrianglePath(cx: number) {
   return `${path} Z`;
 }
 
-/**
- * Interactive site footer featuring procedural geometric SVG brand typography.
- *
- * Computes rounded triangular glyph paths via trigonometry (`getTrianglePath`)
- * and drives letter-by-letter translation transitions synchronized with viewport
- * entry via an IntersectionObserver.
- */
 export default function Footer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(1); // Default to full expanded so it's always complete
