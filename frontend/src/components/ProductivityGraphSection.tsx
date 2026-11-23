@@ -74,12 +74,6 @@ function computeWavePath(w: number, h: number, config: { amp: number; crestY: nu
 }
 */
 
-/**
- * Desktop context and application workflow demonstration section.
- *
- * Highlights seamless cross-application transcription without window switching,
- * encapsulating the dynamic `WorksWhereverDock` interactive workstation preview.
- */
 export default function ProductivityGraphSection() {
   return (
     <section
