@@ -34,6 +34,13 @@ interface PostOptions {
   failureMessage: (status: number, detail: string) => string
 }
 
+/**
+ * Extracts a human-readable error detail message from an unexpected HTTP response,
+ * falling back to the HTTP status text if the response body does not supply one.
+ *
+ * @param response - The incoming HTTP response to inspect.
+ * @returns Formatted error detail message.
+ */
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { detail?: unknown }
