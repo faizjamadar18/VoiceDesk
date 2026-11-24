@@ -57,6 +57,13 @@ export const RISKY_FILE_EXTENSIONS = new Set([
   '.jar'
 ])
 
+/**
+ * Evaluates whether a file extension corresponds to an executable or script format
+ * that presents a security risk if executed directly, favoring reveal over open.
+ *
+ * @param path - File path or filename to evaluate.
+ * @returns True if the file has an executable or scripted extension.
+ */
 export function isRiskyFile(path: string): boolean {
   return RISKY_FILE_EXTENSIONS.has(extname(path).toLowerCase())
 }
