@@ -609,7 +609,7 @@ export default function HeroSection() {
           />
 
           <div
-            className="relative z-[5] flex flex-col items-center justify-center px-4 md:px-6 pt-24 pb-10"
+            className="relative z-5 flex flex-col items-center justify-center px-4 md:px-6 pt-24 pb-10"
             style={{ minHeight: "min(100vh, 1200px)" }}
           >
             <div className="relative text-center max-w-4xl" style={{ zIndex: 3 }}>
@@ -642,7 +642,7 @@ export default function HeroSection() {
               </p>
 
               {/* CTA Button */}
-              <div className="relative z-[4] flex items-center justify-center">
+              <div className="relative z-4 flex items-center justify-center">
                 <div className="glassmorphic-button-wrap w-full md:w-auto">
                   <a
                     aria-disabled="true"
