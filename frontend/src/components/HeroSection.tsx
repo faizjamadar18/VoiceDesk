@@ -47,6 +47,10 @@ const TRAIL_ICONS = [
   "/icons/finderApp.webp",
 ];
 
+/**
+ * Interactive cursor particle layer that renders trailing desktop app icons
+ * along mouse movements, with automatic pool recycling and reduced-motion detection.
+ */
 function HeroTrailLayer() {
   const layerRef = useRef<HTMLDivElement>(null);
 
