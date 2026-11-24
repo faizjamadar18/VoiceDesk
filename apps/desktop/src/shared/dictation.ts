@@ -9,6 +9,12 @@ export const POLISH_STYLE_IDS = ['none', 'light', 'polished'] as const
 export type PolishStyle = (typeof POLISH_STYLE_IDS)[number]
 export const DEFAULT_POLISH_STYLE: PolishStyle = 'light'
 
+/**
+ * Type guard verifying whether a value matches a supported transcript polishing style preset ('none', 'light', 'polished').
+ *
+ * @param value - The candidate value to validate.
+ * @returns True if value is a valid PolishStyle.
+ */
 export function isPolishStyle(value: unknown): value is PolishStyle {
   return typeof value === 'string' && (POLISH_STYLE_IDS as readonly string[]).includes(value)
 }
