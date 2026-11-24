@@ -375,6 +375,12 @@ const NOTCH_ARC_SAMPLES = 8;
 /**
  * buildNotchClipPath$2(shoulderX, shoulderY, bottomRadius) - 185697.
  * The pixel-precise "hardware notch" silhouette used for the fixed presets.
+ * Generates an SVG/CSS polygon clip-path string given shoulder dimensions and bottom corner radius.
+ *
+ * @param shoulderX - Horizontal shoulder curve extent in pixels.
+ * @param shoulderY - Vertical shoulder curve depth in pixels.
+ * @param bottomRadius - Curvature radius for rounding the bottom corners.
+ * @returns CSS polygon clip-path string.
  */
 function buildNotchPresetClipPath(
   shoulderX: number,
