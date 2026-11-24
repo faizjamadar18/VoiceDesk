@@ -2,6 +2,12 @@ import express, { Express, Request, Response } from 'express'
 import cors from 'cors'
 import { deleteUser, pool } from './db'
 
+/**
+ * Configures and mounts middleware and routing for the Express API server application,
+ * exposing health check, authentication user sync, and user profile deletion endpoints.
+ *
+ * @returns Configured Express application instance.
+ */
 export function createApp(): Express {
   const app = express()
   app.use(cors())
