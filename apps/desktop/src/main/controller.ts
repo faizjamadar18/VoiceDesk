@@ -22,6 +22,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Maps the internal dictation session state to the public UI-facing runtime status.
+ *
+ * @param state - The internal session state machine state.
+ * @returns The corresponding public dictation status.
+ */
 function statusForSession(state: DictationState): DictationStatus {
   switch (state) {
     case 'recording':
