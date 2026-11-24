@@ -69,6 +69,13 @@ const RUNNING_APPS = new Set([
 // Set of app indices for auto-rotation across responsive viewports
 const AUTO_ROTATE_INDICES = [0, 1, 2, 3, 5, 6]; // Slack, Gmail, Notion, Cursor, Claude, ChatGPT
 
+/**
+ * Detects the effective CSS zoom factor applied to an element or root document,
+ * supporting `currentCSSZoom` properties as well as custom `--page-zoom` CSS variables.
+ *
+ * @param el - The target HTMLElement to evaluate, or null to inspect document root.
+ * @returns Numeric zoom factor (defaults to 1).
+ */
 function getZoom(el: HTMLElement | null): number {
   if (typeof window === "undefined") return 1;
   const currentZoom = (el ?? document.documentElement) as HTMLElement & { currentCSSZoom?: number };
