@@ -16,6 +16,13 @@ export interface AppDataMigrationResult {
 const OWN_DATA_FILES = new Set(['voiceos.db', 'kestrel.db', 'config.json'])
 const OWN_DATA_FILE_PATTERN = /^kestrel-.*\.json$/
 
+/**
+ * Checks whether a directory already contains app-specific database or configuration files,
+ * indicating that existing user data is present and should not be overwritten.
+ *
+ * @param dir - Target directory path to inspect.
+ * @returns True if existing user data files are discovered.
+ */
 function hasOwnData(dir: string): boolean {
   if (!existsSync(dir)) {
     return false
