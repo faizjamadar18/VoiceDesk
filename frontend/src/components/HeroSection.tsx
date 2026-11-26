@@ -640,9 +640,9 @@ export default function HeroSection() {
               {/* CTA Button */}
               <div className="relative z-4 flex items-center justify-center">
                 <div className="glassmorphic-button-wrap w-full md:w-auto">
-                  <a
-                    aria-disabled="true"
-                    className="glassmorphic-button w-full md:w-auto"
+                  <div
+                    aria-label="Private beta for Windows"
+                    className="glassmorphic-button is-status w-full md:w-auto"
                   >
                     <span
                       style={{
@@ -652,19 +652,38 @@ export default function HeroSection() {
                         gap: "0.5rem",
                         position: "relative",
                         zIndex: 4,
+                        lineHeight: 1,
+                        whiteSpace: "nowrap",
                       }}
                     >
-                      <svg
-                        className="w-5 h-5"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        xmlns="http://www.w3.org/2000/svg"
+                      <span>Private beta</span>
+                      <span
+                        aria-hidden="true"
+                        style={{ opacity: 0.45, margin: "0 0.15em" }}
                       >
-                        <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
-                      </svg>
-                      Coming soon
+                        ·
+                      </span>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.35rem",
+                        }}
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          aria-hidden="true"
+                          style={{ width: "1em", height: "1em" }}
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.401H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+                        </svg>
+                        <span>Windows</span>
+                      </span>
                     </span>
-                  </a>
+                  </div>
                   <div className="glassmorphic-button-shadow" />
                 </div>
               </div>
