@@ -33,13 +33,6 @@ const MODIFIER_ALIASES: Record<string, keyof Pick<HotkeyChord, 'ctrl' | 'alt' | 
 const FUNCTION_KEY = /^F(?:[1-9]|1[0-2])$/
 const PLAIN_KEY = /^(?:[A-Z0-9]|Space|Shift)$/
 
-/**
- * Canonicalizes a key token into its normalized representation (e.g. 'Space', 'Shift', 'F1'-'F12', or single uppercase characters),
- * returning null if the token does not match a supported key pattern.
- *
- * @param value - Raw key token string.
- * @returns Normalized key string, or null if unrecognized.
- */
 function normalizeMainKey(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return null
