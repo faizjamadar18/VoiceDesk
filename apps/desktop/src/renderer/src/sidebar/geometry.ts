@@ -161,12 +161,6 @@ export function normalizeSliverPosition(value: number): number {
 
 /**
  * Clamps the sliver top coordinate so it does not collide with the top or bottom edges.
- *
- * @param top - Desired top vertical offset in pixels.
- * @param height - Rendered height of the sliver handle.
- * @param panelHeight - Total height of the sidebar panel viewport.
- * @param edgeInset - Safety padding buffer from top and bottom boundaries.
- * @returns Bounded top coordinate within the allowed safe range.
  */
 export function clampSliverTop(
   top: number,
