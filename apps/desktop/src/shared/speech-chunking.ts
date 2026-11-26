@@ -21,13 +21,6 @@ const DEFAULTS = {
 
 const TERMINATORS = new Set(['.', ',', ';', ':', '!', '?', '—', '–'])
 
-/**
- * Checks whether a word ends with a clause or sentence boundary terminator
- * (such as periods, commas, colons, or dashes) suitable for natural speech pauses.
- *
- * @param word - The word token to inspect.
- * @returns True if the trailing character is a recognized punctuation terminator.
- */
 function endsWithTerminator(word: string): boolean {
   if (!word) return false
   return TERMINATORS.has(word[word.length - 1])
