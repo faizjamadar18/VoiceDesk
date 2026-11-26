@@ -44,13 +44,6 @@ export const DEFAULT_VOICE = 'af_heart'
 export const DEFAULT_SPEED = 1.0
 export const DEFAULT_KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'
 
-/**
- * Sanitizes markdown syntax, URLs, emoji, and formatting artifacts from input text,
- * producing clean, natural phrasing optimized for TTS speech synthesis models.
- *
- * @param text - The raw input text containing potential markdown or formatting.
- * @returns Cleaned prose string ready for speech synthesis.
- */
 export function sanitizeSpeechText(text: string): string {
   if (!text) return ''
   return text
