@@ -689,7 +689,7 @@ export default function HeroSection() {
               </div>
 
               {/* Microcopy */}
-              <p className="mt-2 text-xs text-gray-500">Free to use. Private by default.</p>
+              <p className="mt-2 text-xs text-gray-500">Windows release shipping soon.</p>
             </div>
 
             {/* Desktop Screen Mock */}
