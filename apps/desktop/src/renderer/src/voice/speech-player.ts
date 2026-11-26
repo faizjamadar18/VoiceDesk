@@ -53,12 +53,6 @@ export class SpeechPlayer {
     return this.decodeFailureCount
   }
 
-  /**
-   * Queues an encoded audio chunk for sequential decoding and gapless playback.
-   * Promises are chained in arrival order to prevent slow decodes from reordering audio.
-   *
-   * @param bytes - Raw encoded WAV/audio chunk bytes.
-   */
   enqueue(bytes: Uint8Array): void {
     if (this.stopped) return
     this.pending += 1
