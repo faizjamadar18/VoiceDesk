@@ -13,9 +13,6 @@ export async function deleteUser(id: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0
 }
 
-/**
- * Ensures the PostgreSQL database schema is initialized by creating the users table if it does not already exist.
- */
 export async function initDb(): Promise<void> {
   const query = `
     CREATE TABLE IF NOT EXISTS users (
