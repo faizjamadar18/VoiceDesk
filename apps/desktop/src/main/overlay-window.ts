@@ -31,12 +31,6 @@ function errorText(value: unknown, fallback: string): string {
   return fallback
 }
 
-/**
- * Creates the transparent, click-through Electron BrowserWindow used for drawing
- * screen capture highlights and visual overlay elements without intercepting user focus.
- *
- * @returns Configured overlay BrowserWindow instance.
- */
 export function createOverlayWindow(): BrowserWindow {
   const win = new BrowserWindow({
     x: 0,
