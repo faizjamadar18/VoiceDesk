@@ -37,12 +37,6 @@ export class SettingsStore {
     return existsSync(this.filePath)
   }
 
-  /**
-   * Loads persisted settings from the JSON configuration file,
-   * falling back to default normalized settings if the file does not exist or fails to parse.
-   *
-   * @returns Loaded and normalized settings object.
-   */
   load(): KestrelSettings {
     if (!this.exists()) return this.normalize({})
 
