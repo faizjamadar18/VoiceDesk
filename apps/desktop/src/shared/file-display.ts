@@ -98,13 +98,6 @@ export function fileKindBadge(name: string): string {
   return BADGES[extension] ?? extension.toUpperCase().slice(0, 4)
 }
 
-/**
- * Resolves the categorized UI file type (e.g. 'pdf', 'sheet', 'image', 'code')
- * based on the file name's lowercase extension, defaulting to 'file'.
- *
- * @param name - The file name or path to evaluate.
- * @returns The resolved high-level file classification.
- */
 export function fileKind(name: string): FileKind {
   return KINDS[fileExtension(name)] ?? 'file'
 }
