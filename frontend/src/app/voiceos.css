@@ -1025,3 +1025,50 @@ button.jsx-2ae46a08699e61e9{-webkit-tap-highlight-color:transparent;border:none!
 .hero-screen-notch.is-open .lns-sheen {
   display: none !important;
 }
+
+/* Private beta status — non-interactive hero pill */
+.glassmorphic-button.is-status {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Fixed 236px (base) cannot hold the longer status label; size to content like voiceos.com's wrap */
+.glassmorphic-button-wrap:has(.glassmorphic-button.is-status),
+.glassmorphic-button.is-status {
+  width: fit-content;
+}
+
+.glassmorphic-button.is-status > span > span,
+.glassmorphic-button.is-status > span > span > span {
+  width: auto;
+  height: auto;
+  padding-inline: 0;
+  font-size: inherit;
+  display: inline;
+}
+
+.glassmorphic-button.is-status > span > span::after,
+.glassmorphic-button.is-status > span > span > span::after {
+  content: none;
+}
+
+.glassmorphic-button.is-status:hover {
+  --angle-1: -75deg;
+  --angle-2: -45deg;
+  transform: none;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  box-shadow:
+    inset 0 2px 2px #0000000d,
+    inset 0 -2px 2px #ffffff80,
+    0 4px 2px -2px #0003,
+    inset 0 0 1.6px 4px #d2ebff40;
+}
+
+.glassmorphic-button.is-status:hover::after {
+  --angle-1: -75deg;
+}
+
+.glassmorphic-button.is-status:hover span::after {
+  background-position: 0;
+}
